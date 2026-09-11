@@ -1,5 +1,7 @@
 # AI Exercise Assistant
 
+#초기 yolo detection FPS29.44
+
 ## Overview
 
 실시간 카메라 영상에서 사람을 검출하고 자세를 분류하기 위한 AI 운동 보조 시스템의 초기 실행 구조입니다. 이 단계는 기존 학습 모델을 재학습하지 않으며, 사람 검출과 이후 자세 분류 파이프라인의 기반만 제공합니다.
@@ -21,17 +23,17 @@ TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fa
 
 ## Supported Pose Classes
 
-| ID | Class |
-|---:|---|
-| 0 | squat |
-| 1 | run |
-| 2 | sit |
-| 3 | stretch |
-| 4 | walk |
-| 5 | jump |
-| 6 | bendover |
-| 7 | stand |
-| 8 | lying |
+|  ID | Class    |
+| --: | -------- |
+|   0 | squat    |
+|   1 | run      |
+|   2 | sit      |
+|   3 | stretch  |
+|   4 | walk     |
+|   5 | jump     |
+|   6 | bendover |
+|   7 | stand    |
+|   8 | lying    |
 
 ## Exercise Rules (Planned)
 
@@ -116,4 +118,3 @@ python src/main.py
 4. Burpee state machine
 5. Workout session timer
 6. CSV workout log
-
