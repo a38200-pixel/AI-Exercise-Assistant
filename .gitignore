@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.DS_Store
+.idea/
+.vscode/
+
+*.engine
+
+data/workout_logs/*.csv
+data/workout_logs/*.json
+!data/workout_logs/.gitkeep
+
