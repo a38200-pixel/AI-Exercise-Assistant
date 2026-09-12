@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 .env
+backend/.env
 .DS_Store
 .idea/
 .vscode/
@@ -12,4 +13,3 @@ venv/
 data/workout_logs/*.csv
 data/workout_logs/*.json
 !data/workout_logs/.gitkeep
-

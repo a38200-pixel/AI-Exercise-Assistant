@@ -159,6 +159,10 @@ python src/main.py --benchmark-seconds 30
 
 ## Next Steps
 
-1. Supabase PostgreSQL schema
-2. Authentication structure
-3. FastAPI backend skeleton
+1. Supabase Project 생성 및 SQL 적용
+2. `.env` 연결과 Auth test user 생성
+3. FastAPI와 Supabase 실제 integration test
+
+## Backend
+
+Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAPI API scaffold는 [backend/README.md](backend/README.md)를 참고하세요. 실제 Cloud 연결 전에도 schema와 service unit test를 실행할 수 있습니다.
