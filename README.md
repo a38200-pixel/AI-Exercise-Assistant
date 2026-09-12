@@ -4,7 +4,7 @@
 
 ## Overview
 
-실시간 카메라 영상에서 사람을 검출하고 자세를 분류하기 위한 AI 운동 보조 시스템의 초기 실행 구조입니다. 이 단계는 기존 학습 모델을 재학습하지 않으며, 사람 검출과 이후 자세 분류 파이프라인의 기반만 제공합니다.
+실시간 카메라 영상에서 사람을 검출하고 자세를 분류하는 AI 운동 보조 시스템입니다. 기존 학습 모델을 재학습하지 않고 YOLO26n, MediaPipe Tasks와 XGBoost를 연결합니다.
 
 ## Current AI Pipeline
 
@@ -15,8 +15,11 @@ Camera
   -> MediaPipe Pose (33 Landmarks)
   -> 132 Features (x, y, z, visibility)
   -> XGBoost (9-Class Pose Classification)
-  -> [Planned] Exercise State Machine
-  -> [Planned] Squat / Stretch / Burpee
+  -> Raw pose prediction
+  -> Consecutive-frame prediction smoothing
+  -> Stable pose + confidence 표시
+  -> Exercise State Machine
+  -> Squat / Stretch
 ```
 
 TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fallback합니다.
@@ -35,13 +38,12 @@ TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fa
 |   7 | stand    |
 |   8 | lying    |
 
-## Exercise Rules (Planned)
+## Exercise Rules
 
 - Squat: `stand -> squat -> stand` 완료 시 1회
 - Stretch: `stretch` 자세 유지 시간 측정
-- Burpee: `stand -> bendover -> lying -> bendover -> jump -> stand` 완료 시 1회
 
-운동 카운터, 타이머, 상태 머신과 로그 기능은 아직 구현되지 않았습니다.
+운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout session과 CSV 로그는 아직 구현되지 않았습니다.
 
 ## Setup
 
@@ -108,13 +110,37 @@ python tests/test_person_detection.py
 python src/main.py
 ```
 
-현재 main은 Camera와 YOLO 사람 검출을 연결하고 사용 중인 TensorRT/PyTorch backend를 표시하는 integration test입니다. `Esc` 또는 `Q`로 종료합니다.
+현재 main은 각 YOLO 사람 bbox에 30% padding을 적용한 crop에서 33개 landmark를 추출하고, 132개 feature로 XGBoost 자세 분류를 수행합니다. 원본 bbox, landmark point, 자세 label과 confidence를 화면에 표시하며 `Esc` 또는 `Q`로 종료합니다.
+
+Prediction smoothing은 일반 자세를 3프레임, 짧은 `jump`를 2프레임 연속 확인한 뒤 stable 자세로 확정합니다. 일시적인 pose 미검출은 3프레임까지 기존 stable 자세를 유지합니다. Tracking은 아직 사용하지 않으므로 화면에서 가장 큰 사람을 주 사용자로 선택합니다.
+
+운동 판단에는 raw prediction이 아닌 stable pose만 사용합니다.
+
+- `1`: Squat — `stand -> squat -> stand` 완료 시 1회
+- `2`: Stretch — `stretch` 자세의 실제 경과 시간 누적
+- `0`: Idle
+- `R`: 현재 선택된 운동 기록만 초기화
+- `Q` 또는 `Esc`: 종료
+
+Smoothing 로직만 검증하려면 다음 명령을 사용합니다.
+
+```bash
+python tests/test_prediction_smoothing.py
+```
+
+운동 상태 머신만 검증하려면 다음 명령을 사용합니다.
+
+```bash
+python tests/test_exercise_counter.py
+```
+
+30-frame warmup 후 30초 동안 전체 파이프라인의 단계별 성능을 측정하려면 다음 명령을 사용합니다.
+
+```bash
+python src/main.py --benchmark-seconds 30
+```
 
 ## Next Steps
 
-1. Prediction smoothing
-2. Squat counter
-3. Stretch timer
-4. Burpee state machine
-5. Workout session timer
-6. CSV workout log
+1. Workout session timer
+2. CSV workout log

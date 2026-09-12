@@ -8,8 +8,63 @@ import numpy as np
 from config.settings import CLASSES_PATH, XGBOOST_MODEL_PATH
 
 
+LANDMARK_NAMES = (
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index",
+)
+LANDMARK_VALUE_NAMES = ("x", "y", "z", "visibility")
+EXPECTED_CLASSES = (
+    "squat",
+    "run",
+    "sit",
+    "stretch",
+    "walk",
+    "jump",
+    "bendover",
+    "stand",
+    "lying",
+)
+EXPECTED_FEATURE_NAMES = tuple(
+    f"{landmark_name}_{value_name}"
+    for landmark_name in LANDMARK_NAMES
+    for value_name in LANDMARK_VALUE_NAMES
+)
+
+
 class PoseClassifier:
-    FEATURE_COUNT = 33 * 4
+    LANDMARK_COUNT = len(LANDMARK_NAMES)
+    FEATURE_COUNT = LANDMARK_COUNT * len(LANDMARK_VALUE_NAMES)
 
     def __init__(self) -> None:
         missing = [
@@ -37,9 +92,31 @@ class PoseClassifier:
             isinstance(label, str) for label in self.classes
         ):
             raise ValueError("classes.json must contain a JSON list of labels.")
+        if tuple(self.classes) != EXPECTED_CLASSES:
+            raise ValueError(
+                "classes.json does not match the expected 9-class training order:\n"
+                + ", ".join(EXPECTED_CLASSES)
+            )
 
         self.model = XGBClassifier()
         self.model.load_model(str(XGBOOST_MODEL_PATH))
+
+        model_feature_count = int(self.model.get_booster().num_features())
+        if model_feature_count != self.FEATURE_COUNT:
+            raise ValueError(
+                f"Expected features: {self.FEATURE_COUNT}\n"
+                f"Model features: {model_feature_count}"
+            )
+
+        model_feature_names = self.model.get_booster().feature_names
+        if (
+            model_feature_names is not None
+            and tuple(model_feature_names) != EXPECTED_FEATURE_NAMES
+        ):
+            raise ValueError(
+                "The XGBoost model feature order does not match the expected "
+                "MediaPipe x, y, z, visibility order."
+            )
 
     @staticmethod
     def _landmark_values(landmark: Any) -> tuple[float, float, float, float]:
@@ -57,15 +134,34 @@ class PoseClassifier:
             raise ValueError("Each landmark must provide x, y, z, and visibility.")
         return values[:4]
 
+    def create_features(self, landmarks: Sequence[Any]) -> np.ndarray:
+        """MediaPipe 순서를 유지해 각 점의 x, y, z, visibility를 펼친다."""
+        if len(landmarks) != self.LANDMARK_COUNT:
+            raise ValueError(
+                f"Expected {self.LANDMARK_COUNT} landmarks, received {len(landmarks)}."
+            )
+
+        feature_values: list[float] = []
+        for landmark in landmarks:
+            landmark_values = self._landmark_values(landmark)
+            feature_values.extend(landmark_values)
+
+        if len(feature_values) != self.FEATURE_COUNT:
+            raise ValueError(
+                f"Expected features: {self.FEATURE_COUNT}\n"
+                f"Created features: {len(feature_values)}"
+            )
+
+        features = np.asarray(feature_values, dtype=np.float32).reshape(1, -1)
+        if not np.isfinite(features).all():
+            raise ValueError("Pose features contain NaN or infinite values.")
+
+        return features
+
     def classify(self, landmarks: Sequence[Any]) -> dict[str, Any]:
-        if len(landmarks) != 33:
-            raise ValueError(f"Expected 33 landmarks, received {len(landmarks)}.")
+        features = self.create_features(landmarks)
 
-        features = np.asarray(
-            [value for landmark in landmarks for value in self._landmark_values(landmark)],
-            dtype=np.float32,
-        ).reshape(1, self.FEATURE_COUNT)
-
+        # predict()를 중복 호출하지 않고 확률 1회로 class와 confidence를 구한다.
         probabilities = np.asarray(self.model.predict_proba(features))[0]
         probability_index = int(np.argmax(probabilities))
         model_classes = getattr(self.model, "classes_", None)
@@ -82,4 +178,3 @@ class PoseClassifier:
             "label": self.classes[class_id],
             "confidence": float(probabilities[probability_index]),
         }
-
