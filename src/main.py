@@ -24,6 +24,7 @@ from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.workout_session import WorkoutSession
 
 
 WINDOW_NAME = "AI Exercise Assistant"
@@ -208,12 +209,53 @@ def draw_smoothing_status(
             f"{raw_prediction['confidence'] * 100:.1f}%"
         )
 
+    stable_label = smoothing_state["stable_label"]
+    if stable_label is None:
+        stable_text = "Stable : -"
+    else:
+        stable_text = (
+            f"Stable : {stable_label} "
+            f"{smoothing_state['stable_confidence'] * 100:.1f}%"
+        )
+
+    candidate_label = smoothing_state["candidate_label"]
+    if candidate_label is None:
+        candidate_text = "Next   : -"
+    else:
+        candidate_text = (
+            f"Next   : {candidate_label} "
+            f"{smoothing_state['candidate_count']}/{smoothing_state['required_count']}"
+        )
+
+    status_lines = (raw_text, stable_text, candidate_text)
+    for line_index, status_text in enumerate(status_lines):
+        cv2.putText(
+            frame,
+            status_text,
+            (16, 62 + line_index * 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
 
 def format_duration(duration_seconds: float) -> str:
     """누적 초를 화면용 MM:SS.s 문자열로 변환한다."""
     minutes = int(duration_seconds // 60)
     remaining_seconds = duration_seconds - minutes * 60
     return f"{minutes:02d}:{remaining_seconds:04.1f}"
+
+
+def format_session_duration(duration_seconds: float) -> str:
+    """세션 시간을 MM:SS 또는 한 시간 이상이면 HH:MM:SS로 표시한다."""
+    total_seconds = int(max(0.0, duration_seconds))
+    hours, remaining_seconds = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remaining_seconds, 60)
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> None:
@@ -250,8 +292,8 @@ def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> 
     image_height = frame.shape[0]
     cv2.putText(
         frame,
-        "[1] Squat  [2] Stretch  [0] Idle",
-        (16, max(28, image_height - 42)),
+        "[S] Start Session  [E] End Session",
+        (16, max(28, image_height - 68)),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
         (230, 230, 230),
@@ -260,8 +302,18 @@ def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> 
     )
     cv2.putText(
         frame,
-        "[R] Reset current exercise  [Q/ESC] Quit",
-        (16, max(52, image_height - 16)),
+        "[1] Squat  [2] Stretch  [0] Idle",
+        (16, max(52, image_height - 42)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (230, 230, 230),
+        1,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        "[R] Reset Current Exercise  [Q/ESC] Quit",
+        (16, max(76, image_height - 16)),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
         (230, 230, 230),
@@ -270,14 +322,61 @@ def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> 
     )
 
 
+def draw_session_status(frame: np.ndarray, session_status: dict[str, Any]) -> None:
+    """운동 모드와 독립적인 Workout Session 상태와 전체 시간을 표시한다."""
+    session_lines = (
+        f"Session: {session_status['status']}",
+        f"Time   : {format_session_duration(session_status['elapsed_seconds'])}",
+    )
+    for line_index, status_text in enumerate(session_lines):
+        cv2.putText(
+            frame,
+            status_text,
+            (16, 284 + line_index * 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (120, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+
+def print_workout_summary(summary: dict[str, Any]) -> None:
+    """숫자형 summary는 유지하고 terminal 표시만 읽기 쉽게 변환한다."""
+    print("\n========================================")
+    print("Workout Session Summary")
+    print("========================================")
+    print(f"Date:          {summary['workout_date']}")
+    print(f"Started:       {summary['started_at']}")
+    print(f"Ended:         {summary['ended_at']}")
+    print(f"Workout Time:  {format_session_duration(summary['workout_seconds'])}")
+    print(f"Squat Count:   {summary['squat_count']}")
+    print(f"Stretch Time:  {format_session_duration(summary['stretch_seconds'])}")
+
+
 def handle_keyboard_input(
     pressed_key: int,
     exercise_counter: ExerciseCounter,
+    workout_session: WorkoutSession,
     current_time: float,
 ) -> bool:
-    """운동 모드와 reset 키를 처리하고 종료 여부를 반환한다."""
+    """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다."""
     if pressed_key in (27, ord("q"), ord("Q")):
+        if workout_session.is_active:
+            summary = workout_session.end(exercise_counter, current_time)
+            if summary is not None:
+                print_workout_summary(summary)
         return True
+
+    if pressed_key in (ord("s"), ord("S")):
+        workout_session.start(exercise_counter, current_time)
+        return False
+
+    if pressed_key in (ord("e"), ord("E")):
+        summary = workout_session.end(exercise_counter, current_time)
+        if summary is not None:
+            print_workout_summary(summary)
+        return False
 
     mode_by_key = {
         ord("0"): IDLE_MODE,
@@ -290,37 +389,6 @@ def handle_keyboard_input(
         exercise_counter.reset_current_exercise(current_time)
 
     return False
-
-    stable_label = smoothing_state["stable_label"]
-    if stable_label is None:
-        stable_text = "Stable : -"
-    else:
-        stable_text = (
-            f"Stable : {stable_label} "
-            f"{smoothing_state['stable_confidence'] * 100:.1f}%"
-        )
-
-    candidate_label = smoothing_state["candidate_label"]
-    if candidate_label is None:
-        candidate_text = "Next   : -"
-    else:
-        candidate_text = (
-            f"Next   : {candidate_label} "
-            f"{smoothing_state['candidate_count']}/{smoothing_state['required_count']}"
-        )
-
-    status_lines = (raw_text, stable_text, candidate_text)
-    for line_index, status_text in enumerate(status_lines):
-        cv2.putText(
-            frame,
-            status_text,
-            (16, 62 + line_index * 28),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
 
 
 def print_startup_information(
@@ -406,6 +474,7 @@ def main() -> None:
     pose_estimator = PoseEstimator()
     prediction_smoother = PredictionSmoother()
     exercise_counter = ExerciseCounter()
+    workout_session = WorkoutSession()
     print_startup_information(detector, pose_classifier)
 
     frame_count = 0
@@ -451,6 +520,8 @@ def main() -> None:
             stable_pose = smoothing_state["stable_label"]
             exercise_counter.update(stable_pose, current_time)
             exercise_status = exercise_counter.get_status(current_time)
+            workout_session.update(current_time)
+            session_status = workout_session.get_status(current_time)
             exercise_seconds = time.perf_counter() - exercise_started
 
             draw_started = time.perf_counter()
@@ -458,6 +529,7 @@ def main() -> None:
             if SHOW_SMOOTHING_DEBUG:
                 draw_smoothing_status(frame, primary_person, smoothing_state)
             draw_exercise_status(frame, exercise_status)
+            draw_session_status(frame, session_status)
 
             cv2.putText(
                 frame,
@@ -489,6 +561,7 @@ def main() -> None:
             should_quit = handle_keyboard_input(
                 pressed_key,
                 exercise_counter,
+                workout_session,
                 time.perf_counter(),
             )
             if should_quit:
@@ -503,6 +576,10 @@ def main() -> None:
     finally:
         if measurement_started is not None:
             benchmark["elapsed"] = time.perf_counter() - measurement_started
+        if workout_session.is_active:
+            summary = workout_session.end(exercise_counter, time.perf_counter())
+            if summary is not None:
+                print_workout_summary(summary)
         pose_estimator.close()
         camera.release()
         cv2.destroyAllWindows()

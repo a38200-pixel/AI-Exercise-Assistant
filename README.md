@@ -20,6 +20,8 @@ Camera
   -> Stable pose + confidence 표시
   -> Exercise State Machine
   -> Squat / Stretch
+  -> Workout Session Timer
+  -> Session Summary (Python dict)
 ```
 
 TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fallback합니다.
@@ -43,7 +45,7 @@ TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fa
 - Squat: `stand -> squat -> stand` 완료 시 1회
 - Stretch: `stretch` 자세 유지 시간 측정
 
-운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout session과 CSV 로그는 아직 구현되지 않았습니다.
+운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout Session은 전체 경과시간과 세션 내 Squat 횟수 및 Stretch 시간을 관리합니다. DB와 CSV 저장은 아직 구현되지 않았습니다.
 
 ## Setup
 
@@ -120,7 +122,16 @@ Prediction smoothing은 일반 자세를 3프레임, 짧은 `jump`를 2프레임
 - `2`: Stretch — `stretch` 자세의 실제 경과 시간 누적
 - `0`: Idle
 - `R`: 현재 선택된 운동 기록만 초기화
+- `S`: 새 Workout Session 시작 및 운동 기록 전체 초기화
+- `E`: 진행 중인 Session 종료 및 terminal summary 출력
 - `Q` 또는 `Esc`: 종료
+
+세션 시간은 운동 모드와 독립적이므로 Idle과 휴식 시간도 포함합니다. 세션이 진행 중일 때 `Q` 또는 `Esc`로 종료하면 현재 시각까지 자동으로 마감합니다. Summary는 향후 API 전송을 위해 다음 필드를 유지합니다.
+
+```text
+workout_date, started_at, ended_at, workout_seconds,
+squat_count, stretch_seconds
+```
 
 Smoothing 로직만 검증하려면 다음 명령을 사용합니다.
 
@@ -134,6 +145,12 @@ python tests/test_prediction_smoothing.py
 python tests/test_exercise_counter.py
 ```
 
+Workout Session을 검증하려면 다음 명령을 사용합니다.
+
+```bash
+python tests/test_workout_session.py
+```
+
 30-frame warmup 후 30초 동안 전체 파이프라인의 단계별 성능을 측정하려면 다음 명령을 사용합니다.
 
 ```bash
@@ -142,5 +159,6 @@ python src/main.py --benchmark-seconds 30
 
 ## Next Steps
 
-1. Workout session timer
-2. CSV workout log
+1. Supabase PostgreSQL schema
+2. Authentication structure
+3. FastAPI backend skeleton

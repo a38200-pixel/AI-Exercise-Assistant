@@ -59,6 +59,17 @@ class ExerciseCounter:
             else:
                 self.stretch_start_time = None
 
+    def reset_all_exercises(self) -> None:
+        """새 Workout Session을 위해 Squat과 Stretch 기록을 모두 초기화한다."""
+        self.squat_count = 0
+        self.squat_state = SQUAT_WAITING_STAND
+        self.total_stretch_seconds = 0.0
+        self.stretch_start_time = None
+
+    def finish_active_exercise(self, current_time: float) -> None:
+        """진행 중인 Stretch 구간을 현재 시각까지 한 번만 누적한다."""
+        self._finish_stretch(current_time)
+
     def get_status(self, current_time: float) -> dict[str, Any]:
         """화면 표시에 필요한 현재 운동 상태를 반환한다."""
         stretch_seconds = self.total_stretch_seconds
