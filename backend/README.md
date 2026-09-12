@@ -41,7 +41,7 @@ Service role key는 일반 사용자 요청에 사용하지 않습니다. 사용
 | GET | `/health` | Process health check |
 | POST | `/api/workouts` | Atomic workout session 저장 |
 | GET | `/api/workouts/today` | 오늘 합계, 기록이 없으면 0 |
-| GET | `/api/workouts/daily` | `start_date`~`end_date` 날짜별 합계 |
+| GET | `/api/workouts/daily` | 날짜별 합계. 범위 생략 시 한국 기준 최근 31일 |
 | GET | `/api/workouts/daily/{workout_date}` | 특정 날짜 합계 |
 | GET | `/api/workouts/sessions/{workout_date}` | 특정 날짜 원본 세션 |
 
@@ -70,11 +70,73 @@ FRONTEND_ORIGIN=http://localhost:5173
 uvicorn backend.app.main:app --reload
 ```
 
-테스트:
+단위 테스트:
 
 ```bash
 pytest backend/tests -v
 ```
 
-실제 Supabase 연결, SQL 자동 실행, 사용자 생성, DB insert와 배포는 이 scaffold에 포함되지 않습니다.
+## Supabase 실제 연동 테스트
 
+### 1. 테스트 사용자 생성
+
+Supabase Dashboard에서 **Authentication → Users → Add user**를 선택합니다. 실제로 받을 수 있는 테스트 이메일과 별도의 강한 비밀번호를 사용하고, 비밀번호를 코드·문서·`.env`에 기록하지 마세요. 사용자를 만든 후 SQL Editor에서 profile trigger 결과를 확인합니다.
+
+```sql
+select id, nickname, timezone, created_at
+from public.profiles
+order by created_at desc;
+```
+
+생성된 `auth.users.id`와 `profiles.id`가 같고, 메타데이터에 nickname을 넣지 않았다면 `nickname`이 `NULL`인 것이 정상입니다.
+
+### 2. FastAPI 실행 및 상태 확인
+
+프로젝트 root에서 실행합니다.
+
+```powershell
+uvicorn backend.app.main:app --reload
+```
+
+브라우저에서 `http://127.0.0.1:8000/health`가 `{"status":"ok"}`를 반환하는지 확인합니다. Swagger는 `http://127.0.0.1:8000/docs`입니다.
+
+### 3. Access Token 발급
+
+새 터미널을 열고 프로젝트 root에서 실행합니다.
+
+```powershell
+python backend/scripts/get_test_token.py
+```
+
+이메일과 숨김 처리되는 비밀번호를 입력하면 User ID, Email, Access Token이 출력됩니다. 이 도구는 개발 테스트용으로만 토큰을 출력하며 refresh token은 출력하지 않습니다. Access Token도 비밀번호처럼 취급하고 터미널 기록, 화면 공유, Git에 남기지 마세요.
+
+### 4. Workout API 실제 테스트
+
+FastAPI가 실행 중인 상태에서 다음 명령을 실행하고, 앞 단계의 Access Token을 숨김 프롬프트에 붙여 넣습니다.
+
+```powershell
+python backend/scripts/test_workout_api.py
+```
+
+프롬프트에는 `Bearer ` 문구나 publishable/anon key가 아니라 `get_test_token.py`가 출력한 사용자 Access Token만 입력합니다. 스크립트는 `Bearer `가 실수로 포함된 경우 제거하며, JWT 형식·만료·사용자 role·Supabase 프로젝트 일치 여부를 API 요청 전에 검사합니다.
+
+스크립트는 오늘 날짜(Asia/Seoul)에 샘플 세션 두 개를 순서대로 저장하고 다음을 확인합니다.
+
+- 첫 세션: squat 20, stretch 120초, workout 600초
+- 둘째 세션: squat 15, stretch 90초, workout 240초
+- 실행 전후 합계 차이: squat 35, stretch 210초, workout 840초, session 2개
+- `today`, `daily`, 날짜 상세, 원본 session 목록 조회
+
+기존 기록이 있어도 절대 합계가 아닌 실행 전후 차이를 검증하므로 재실행할 수 있습니다. 첫 세션 하나만 저장하려면 다음처럼 실행합니다.
+
+```powershell
+python backend/scripts/test_workout_api.py --one-session
+```
+
+다른 날짜를 지정하려면 `--date 2026-09-12`를 추가합니다. 지정일이 오늘이 아니면 `/today` 비교는 생략합니다.
+
+Table Editor에서도 확인할 수 있습니다. `workout_sessions`에는 실행한 각 세션이 별도 row로 추가되고, `daily_workout_summary`에는 사용자·날짜별 row 하나가 유지되면서 수치와 `session_count`가 더해집니다. POST는 `record_workout_session` RPC 한 번으로 두 작업을 같은 transaction에서 수행합니다.
+
+모든 Workout 요청은 `Authorization: Bearer <access_token>`이 필요합니다. 토큰이 없거나 잘못되었거나 만료되면 `401`이며, 음수 운동값·시간 역전·timezone 없는 datetime은 `422`입니다. API는 `user_id`를 body/query로 받지 않고 JWT의 `auth.uid()`와 RLS로 사용자 범위를 제한합니다. 일반 요청에 service role key를 사용하지 않습니다.
+
+실제 로그인과 데이터 저장은 테스트 사용자의 이메일·비밀번호가 필요한 단계이므로 사용자가 위 명령을 직접 실행해야 합니다. SQL 자동 적용, 테스트 사용자 자동 생성, 데이터 자동 삭제 및 배포는 이 테스트 도구의 범위에 포함되지 않습니다.

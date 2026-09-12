@@ -1,7 +1,8 @@
 """인증된 사용자의 Workout REST endpoints."""
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -17,6 +18,11 @@ from backend.app.services import workout_service
 
 router = APIRouter(prefix="/api/workouts", tags=["workouts"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
+KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
+
+
+def _today_in_korea() -> date:
+    return datetime.now(KOREA_TIMEZONE).date()
 
 
 @router.post("", response_model=WorkoutSessionCreatedResponse, status_code=201)
@@ -36,7 +42,7 @@ def read_today_summary(current_user: AuthenticatedUser) -> dict:
         return workout_service.get_today_summary(
             current_user.supabase,
             current_user.id,
-            date.today(),
+            _today_in_korea(),
         )
     except Exception as exc:
         raise _database_error() from exc
@@ -45,20 +51,23 @@ def read_today_summary(current_user: AuthenticatedUser) -> dict:
 @router.get("/daily", response_model=list[DailyWorkoutSummaryResponse])
 def read_daily_summaries(
     current_user: AuthenticatedUser,
-    start_date: Annotated[date, Query()],
-    end_date: Annotated[date, Query()],
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
 ) -> list[dict]:
-    if end_date < start_date:
+    # A query without a range returns the most recent 31 calendar days in Korea.
+    range_end = end_date or _today_in_korea()
+    range_start = start_date or (range_end - timedelta(days=30))
+    if range_end < range_start:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="end_date must be greater than or equal to start_date.",
         )
     try:
         return workout_service.get_daily_summaries(
             current_user.supabase,
             current_user.id,
-            start_date,
-            end_date,
+            range_start,
+            range_end,
         )
     except Exception as exc:
         raise _database_error() from exc
@@ -107,4 +116,3 @@ def _database_error() -> HTTPException:
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Workout database operation failed.",
     )
-
