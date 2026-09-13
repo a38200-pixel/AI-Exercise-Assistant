@@ -22,6 +22,9 @@ Camera
   -> Squat / Stretch
   -> Workout Session Timer
   -> Session Summary (Python dict)
+  -> FastAPI POST /api/workouts (session end only)
+  -> Supabase workout_sessions + daily_workout_summary
+  -> React Dashboard / History / Statistics
 ```
 
 TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fallback합니다.
@@ -45,7 +48,7 @@ TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fa
 - Squat: `stand -> squat -> stand` 완료 시 1회
 - Stretch: `stretch` 자세 유지 시간 측정
 
-운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout Session은 전체 경과시간과 세션 내 Squat 횟수 및 Stretch 시간을 관리합니다. DB와 CSV 저장은 아직 구현되지 않았습니다.
+운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout Session은 전체 경과시간과 세션 내 Squat 횟수 및 Stretch 시간을 관리합니다. 세션 종료 시 선택적으로 FastAPI를 통해 Supabase에 저장합니다.
 
 ## Setup
 
@@ -124,6 +127,7 @@ Prediction smoothing은 일반 자세를 3프레임, 짧은 `jump`를 2프레임
 - `R`: 현재 선택된 운동 기록만 초기화
 - `S`: 새 Workout Session 시작 및 운동 기록 전체 초기화
 - `E`: 진행 중인 Session 종료 및 terminal summary 출력
+- `P`: 직전 저장 실패 Session의 API 업로드 재시도
 - `Q` 또는 `Esc`: 종료
 
 세션 시간은 운동 모드와 독립적이므로 Idle과 휴식 시간도 포함합니다. 세션이 진행 중일 때 `Q` 또는 `Esc`로 종료하면 현재 시각까지 자동으로 마감합니다. Summary는 향후 API 전송을 위해 다음 필드를 유지합니다.
@@ -131,6 +135,46 @@ Prediction smoothing은 일반 자세를 3프레임, 짧은 `jump`를 2프레임
 ```text
 workout_date, started_at, ended_at, workout_seconds,
 squat_count, stretch_seconds
+```
+
+## AI Client → FastAPI 자동 저장
+
+AI 프로그램은 `FITROUTE_ACCESS_TOKEN`이 설정된 경우 `E`, `Q`, `Esc`로 세션을 종료하는 순간 summary를 `POST /api/workouts`에 한 번 전송합니다. 토큰과 비밀번호는 파일에 저장하지 않습니다.
+
+8000 포트를 `vmnat`가 사용 중인 현재 개발 환경에서는 Backend를 8001로 실행합니다.
+
+```cmd
+uvicorn backend.app.main:app --reload --port 8001
+```
+
+새 터미널에서 로그인 토큰을 발급합니다.
+
+```cmd
+python backend/scripts/get_test_token.py
+```
+
+CMD:
+
+```cmd
+set FITROUTE_ACCESS_TOKEN=eyJ...
+set FITROUTE_API_BASE_URL=http://127.0.0.1:8001
+python src/main.py
+```
+
+PowerShell:
+
+```powershell
+$env:FITROUTE_ACCESS_TOKEN="eyJ..."
+$env:FITROUTE_API_BASE_URL="http://127.0.0.1:8001"
+python src/main.py
+```
+
+토큰이 없으면 `Cloud: DISABLED`로 표시되며 로컬 운동 인식은 그대로 동작합니다. 저장 성공 시 `Cloud: SAVED`와 Session ID를 표시합니다. 401, validation 오류, 서버 오류, timeout 또는 연결 실패 시 프로그램은 종료되지 않고 `Cloud: FAILED`와 함께 summary를 메모리에 유지합니다. Backend를 복구하거나 토큰을 갱신한 뒤 `P`를 누르면 같은 pending summary만 재시도합니다. 성공한 summary는 pending에서 제거되므로 `P`로 중복 저장되지 않습니다.
+
+API Client 단위 테스트:
+
+```cmd
+pytest tests/test_api_client.py -v
 ```
 
 Smoothing 로직만 검증하려면 다음 명령을 사용합니다.
@@ -159,10 +203,28 @@ python src/main.py --benchmark-seconds 30
 
 ## Next Steps
 
-1. Supabase Project 생성 및 SQL 적용
-2. `.env` 연결과 Auth test user 생성
-3. FastAPI와 Supabase 실제 integration test
+1. 실제 웹캠 Session 종료 → Supabase 저장 → React 재조회 검증
+2. Frontend/FastAPI production 배포 준비
+3. Production 환경변수와 CORS 분리
 
 ## Backend
 
 Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAPI API scaffold는 [backend/README.md](backend/README.md)를 참고하세요. 실제 Cloud 연결 전에도 schema와 service unit test를 실행할 수 있습니다.
+
+## Frontend
+
+React + Vite 기반 FitRoute 웹 대시보드는 [frontend/README.md](frontend/README.md)를 참고하세요.
+
+```powershell
+# Terminal 1 (8000 포트 충돌 시 8001 사용)
+uvicorn backend.app.main:app --reload --port 8001
+
+# Terminal 2
+cd frontend
+npm install
+npm run dev
+```
+
+`frontend/.env`의 `VITE_API_BASE_URL` 포트는 실제 Backend 포트와 같아야 합니다.
+
+Production 배포 준비와 실제 배포 순서는 [Production Deployment Checklist](docs/production_deployment_checklist.md)를 참고하세요.

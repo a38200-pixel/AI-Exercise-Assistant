@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from config.settings import BBOX_PADDING, SHOW_SMOOTHING_DEBUG
+from src.api_client import WorkoutUploader, create_api_client_from_environment
 from src.camera import Camera
 from src.exercise_counter import (
     IDLE_MODE,
@@ -312,7 +313,7 @@ def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> 
     )
     cv2.putText(
         frame,
-        "[R] Reset Current Exercise  [Q/ESC] Quit",
+        "[R] Reset  [P] Retry Save  [Q/ESC] Quit",
         (16, max(76, image_height - 16)),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -341,6 +342,28 @@ def draw_session_status(frame: np.ndarray, session_status: dict[str, Any]) -> No
         )
 
 
+def draw_cloud_status(frame: np.ndarray, cloud_status: str) -> None:
+    """Draw one unobtrusive cloud upload state without exposing credentials."""
+    colors = {
+        "READY": (190, 255, 120),
+        "SAVING": (120, 255, 255),
+        "SAVED": (80, 230, 80),
+        "FAILED": (80, 80, 255),
+        "DISABLED": (160, 160, 160),
+    }
+    image_width = frame.shape[1]
+    cv2.putText(
+        frame,
+        f"Cloud: {cloud_status}",
+        (max(16, image_width - 220), 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        colors.get(cloud_status, (230, 230, 230)),
+        2,
+        cv2.LINE_AA,
+    )
+
+
 def print_workout_summary(summary: dict[str, Any]) -> None:
     """숫자형 summary는 유지하고 terminal 표시만 읽기 쉽게 변환한다."""
     print("\n========================================")
@@ -354,28 +377,57 @@ def print_workout_summary(summary: dict[str, Any]) -> None:
     print(f"Stretch Time:  {format_session_duration(summary['stretch_seconds'])}")
 
 
+def complete_session(
+    exercise_counter: ExerciseCounter,
+    workout_session: WorkoutSession,
+    workout_uploader: WorkoutUploader,
+    current_time: float,
+) -> dict[str, Any] | None:
+    """Finalize, print, and upload a session through the shared safe path."""
+    summary = workout_session.end(exercise_counter, current_time)
+    if summary is None:
+        return None
+    print_workout_summary(summary)
+    workout_uploader.submit(summary)
+    return summary
+
+
 def handle_keyboard_input(
     pressed_key: int,
     exercise_counter: ExerciseCounter,
     workout_session: WorkoutSession,
+    workout_uploader: WorkoutUploader,
     current_time: float,
 ) -> bool:
     """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다."""
     if pressed_key in (27, ord("q"), ord("Q")):
         if workout_session.is_active:
-            summary = workout_session.end(exercise_counter, current_time)
-            if summary is not None:
-                print_workout_summary(summary)
+            complete_session(
+                exercise_counter,
+                workout_session,
+                workout_uploader,
+                current_time,
+            )
         return True
 
+    if pressed_key in (ord("p"), ord("P")):
+        workout_uploader.retry()
+        return False
+
     if pressed_key in (ord("s"), ord("S")):
+        if workout_uploader.pending_summary is not None:
+            print("[Cloud] Retry the pending workout with P before starting a new session.")
+            return False
         workout_session.start(exercise_counter, current_time)
         return False
 
     if pressed_key in (ord("e"), ord("E")):
-        summary = workout_session.end(exercise_counter, current_time)
-        if summary is not None:
-            print_workout_summary(summary)
+        complete_session(
+            exercise_counter,
+            workout_session,
+            workout_uploader,
+            current_time,
+        )
         return False
 
     mode_by_key = {
@@ -475,7 +527,13 @@ def main() -> None:
     prediction_smoother = PredictionSmoother()
     exercise_counter = ExerciseCounter()
     workout_session = WorkoutSession()
+    workout_uploader = WorkoutUploader(create_api_client_from_environment())
     print_startup_information(detector, pose_classifier)
+    if workout_uploader.api_client is None:
+        print("[Cloud] FitRoute API token not configured.")
+        print("[Cloud] Workout sessions will not be uploaded.")
+    else:
+        print("[Cloud] Workout upload is ready.")
 
     frame_count = 0
     measurement_started: float | None = None
@@ -530,6 +588,7 @@ def main() -> None:
                 draw_smoothing_status(frame, primary_person, smoothing_state)
             draw_exercise_status(frame, exercise_status)
             draw_session_status(frame, session_status)
+            draw_cloud_status(frame, workout_uploader.cloud_status)
 
             cv2.putText(
                 frame,
@@ -562,6 +621,7 @@ def main() -> None:
                 pressed_key,
                 exercise_counter,
                 workout_session,
+                workout_uploader,
                 time.perf_counter(),
             )
             if should_quit:
@@ -577,9 +637,12 @@ def main() -> None:
         if measurement_started is not None:
             benchmark["elapsed"] = time.perf_counter() - measurement_started
         if workout_session.is_active:
-            summary = workout_session.end(exercise_counter, time.perf_counter())
-            if summary is not None:
-                print_workout_summary(summary)
+            complete_session(
+                exercise_counter,
+                workout_session,
+                workout_uploader,
+                time.perf_counter(),
+            )
         pose_estimator.close()
         camera.release()
         cv2.destroyAllWindows()

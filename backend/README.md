@@ -51,24 +51,67 @@ Workout endpoint는 모두 Supabase Bearer access token이 필요합니다.
 
 프로젝트 root에서 실행합니다.
 
-```bash
+```powershell
 pip install -r backend/requirements.txt
 Copy-Item backend/.env.example backend/.env
 ```
 
+Windows 명령 프롬프트(`cmd`)에서는 두 번째 명령 대신 `copy backend\.env.example backend\.env`를 사용합니다.
+
 `backend/.env`에 Supabase Project URL과 anon/publishable key를 설정합니다.
 
 ```dotenv
+ENVIRONMENT=development
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
-FRONTEND_ORIGIN=http://localhost:5173
+FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+LOG_LEVEL=info
 ```
 
-서버 실행:
+`FRONTEND_ORIGINS`는 쉼표로 구분하며 URL path와 끝의 `/` 없이 정확한 Origin만 넣습니다. 기존 `FRONTEND_ORIGIN`도 호환되지만 신규 환경은 복수형을 사용합니다. `*` wildcard는 거부됩니다.
+
+개발 서버 실행:
 
 ```bash
 uvicorn backend.app.main:app --reload
 ```
+
+## Production 실행
+
+Production에서는 `--reload`를 사용하지 않습니다. Cloud가 제공하는 `PORT`를 사용하는 entry point가 준비되어 있습니다.
+
+```powershell
+$env:ENVIRONMENT="production"
+$env:PORT="8000"
+python -m backend.start
+```
+
+직접 실행 명령을 등록하는 Provider에서는 다음과 같이 사용할 수도 있습니다.
+
+```text
+uvicorn backend.app.main:app --host 0.0.0.0 --port <PORT>
+```
+
+운영 환경변수 템플릿은 `.env.production.example`을 참고합니다. `SUPABASE_ANON_KEY`에는 publishable/anon key만 사용하며 service role key는 일반 사용자 API에 필요하지 않습니다. 실제 값은 이미지나 Git이 아니라 Cloud Provider의 Runtime Environment Variables에 등록합니다.
+
+운영 CORS 예시는 다음과 같으며 trailing slash를 붙이지 않습니다.
+
+```dotenv
+FRONTEND_ORIGINS=https://fitroute.example.com
+```
+
+`GET /health`는 인증, Supabase query, DB write 없이 프로세스 상태만 빠르게 반환합니다.
+
+## Docker
+
+Repository root를 build context로 사용합니다.
+
+```powershell
+docker build -f backend/Dockerfile -t fitroute-backend .
+docker run --rm --env-file backend/.env -e PORT=8000 -p 8000:8000 fitroute-backend
+```
+
+`docker run`의 `--env-file`은 로컬 검증용이며 파일을 이미지에 COPY하지 않습니다. 운영에서는 Provider 환경변수를 사용합니다. Container 내부는 HTTP `0.0.0.0:$PORT`로 listen하고 외부 HTTPS 종료는 배포 Provider가 담당합니다. Dockerfile은 `python:3.12-slim`, 비-root 사용자, `backend/requirements.txt`만 사용하므로 AI 모델·CUDA·OpenCV 의존성을 포함하지 않습니다.
 
 단위 테스트:
 
