@@ -52,7 +52,7 @@ TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fa
 
 ## Setup
 
-기존 Conda 환경을 활성화한 뒤 필요한 최소 패키지를 설치합니다. 버전은 현재 환경과 기존 모델의 호환성을 유지하도록 의도적으로 고정하지 않았습니다.
+기존 Conda 환경을 활성화한 뒤 필요한 최소 패키지를 설치합니다. AI Client 의존성은 기존 모델 및 CUDA 환경과의 호환성을 유지하고, Docker에서 사용하는 Backend 의존성은 검증된 버전으로 고정합니다.
 
 ```bash
 pip install -r requirements.txt
@@ -201,11 +201,89 @@ python tests/test_workout_session.py
 python src/main.py --benchmark-seconds 30
 ```
 
+## Production 실행 및 Docker
+
+Production 준비는 완료되어 있으며 실제 Cloud 배포는 아직 수행하지 않았습니다. Backend는 `backend/start.py`를 통해 Provider가 전달하는 `PORT`를 읽고, `--reload` 없이 `0.0.0.0:$PORT`에서 실행됩니다.
+
+로컬 Docker 실행 구조는 다음과 같습니다.
+
+```text
+Windows Client
+http://127.0.0.1:8001
+        ↓
+Docker Port Mapping
+Windows 8001 → Container 8000
+        ↓
+Container FastAPI
+0.0.0.0:8000
+```
+
+`0.0.0.0`은 Container가 요청을 받기 위한 listen 주소이며 브라우저에 입력하는 주소가 아닙니다.
+
+Repository root에서 Backend 이미지를 빌드하고 실행합니다.
+
+```powershell
+docker build -f backend/Dockerfile -t fitroute-backend .
+docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backend
+```
+
+실행 후 다음 주소로 확인합니다.
+
+```text
+http://127.0.0.1:8001/health
+http://127.0.0.1:8001/docs
+```
+
+이 구성에서는 Frontend와 Python AI Client가 모두 Windows의 공개 포트 `8001`을 사용합니다.
+
+```dotenv
+# frontend/.env
+VITE_API_BASE_URL=http://127.0.0.1:8001
+```
+
+```cmd
+set FITROUTE_API_BASE_URL=http://127.0.0.1:8001
+```
+
+Docker를 사용하지 않고 FastAPI를 직접 실행할 때는 포트 매핑이 없습니다.
+
+```powershell
+uvicorn backend.app.main:app --reload --port 8001
+```
+
+Cloud Runtime에는 실제 `.env` 파일을 업로드하지 않고 다음 환경변수를 Provider 설정에 등록합니다.
+
+```dotenv
+ENVIRONMENT=production
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
+FRONTEND_ORIGINS=https://YOUR_FRONTEND_DOMAIN
+LOG_LEVEL=info
+```
+
+`PORT`는 Cloud Provider가 전달하는 값을 사용합니다. `FRONTEND_ORIGINS`에는 trailing slash 없는 정확한 HTTPS Frontend Origin만 넣고 wildcard `*`는 사용하지 않습니다. Service role key, DB password, 사용자 Access Token은 Production 환경변수나 Frontend에 넣지 않습니다.
+
+Frontend Production build는 다음과 같이 검증합니다.
+
+```powershell
+cd frontend
+npm install
+npm run lint
+npm run build
+npm run preview -- --host 127.0.0.1
+```
+
+Hosting Provider에는 `frontend/dist`를 배포하고, React Router 직접 접근이 `/index.html`로 fallback되도록 SPA rewrite를 설정해야 합니다. 실제 Frontend URL이 확정되면 Supabase Authentication의 Site URL과 Redirect URLs도 해당 HTTPS 주소로 변경합니다.
+
+현재 환경에서는 Docker 실행 파일이 설치되어 있지 않아 실제 image build/container 실행은 아직 검증하지 않았습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, health check, Frontend production build와 SPA 직접 접근은 검증했습니다.
+
 ## Next Steps
 
-1. 실제 웹캠 Session 종료 → Supabase 저장 → React 재조회 검증
-2. Frontend/FastAPI production 배포 준비
-3. Production 환경변수와 CORS 분리
+1. Docker가 설치된 환경에서 Backend image build와 `/health` 확인
+2. Backend Provider에 배포하고 HTTPS API URL 확보
+3. Frontend Provider에 배포하고 SPA rewrite 설정
+4. Supabase Site URL 및 Redirect URLs 갱신
+5. Production 로그인 → Session 저장 → Dashboard 반영 smoke test
 
 ## Backend
 
