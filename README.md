@@ -240,6 +240,18 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 
 5단계 검증에서 Launcher/Auth/auto-start/path/runtime diagnostic 관련 테스트 39개와 전체 root suite 85개가 통과했습니다. 재빌드한 onefile Launcher(63,476,752 bytes)는 `--help`와 `--dry-run`이 모두 exit 0이었고, 상대 경로가 실제 Frozen AI Client를 찾는 것도 확인했습니다. AI Client의 `--diagnose-runtime`도 PASS였으며 이 자동 검증에서는 Webcam을 실행하지 않았습니다. Protocol 등록/제거, Desktop 인증과 실제 E2E 절차는 [Desktop Launcher 개발 문서](docs/desktop_client_launcher.md)를 참고하세요.
 
+### Windows AI Client bundle 최적화 현황
+
+기존 성공 bundle을 보존하고 최적화 항목을 한 번에 하나씩 제외한 별도 candidate로 검증했습니다.
+
+| 단계 | Bundle 크기 | 이전 단계 대비 | Original 대비 |
+|---|---:|---:|---:|
+| Original | 6.794548 GiB | - | - |
+| TensorRT Builder resource 8개 제거 | 5.020208 GiB | -1.774341 GiB | 약 -26.1% |
+| Polars runtime 제거 | 4.849181 GiB | -0.171026 GiB | 약 -28.6% |
+
+Original 대비 누적 절감량은 약 **1.945 GiB**, 총 감소율은 약 **28.6%**입니다. TensorRT Builder 제거 bundle은 Camera, YOLO TensorRT inference, Launcher, Desktop Auth, Render/Supabase 저장과 Web Dashboard 반영까지 검증했습니다. Polars 제거 bundle은 build, `--help`, 제한 PATH `--diagnose-runtime`, XGBoost NumPy prediction과 핵심 DLL 검사를 통과했으며 실제 Camera 검증 전 candidate 상태입니다. 세부 분석과 정확한 bytes/MiB 수치는 [AI Client Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md)를 참고하세요.
+
 Launcher는 `launcher.log`에 token 값 없이 lifecycle만 기록합니다. Access Token과 API URL은 child environment에만 전달하며 argv는 다음과 같습니다.
 
 ```text
