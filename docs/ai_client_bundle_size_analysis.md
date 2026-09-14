@@ -353,4 +353,13 @@ python packaging/ai_client/analyze_bundle_size.py dist/FitRouteAIClient
 - Reference EXE와 모델 4개 SHA-256은 build 전후 동일
 - Reference와 candidate PyInstaller warning 파일은 SHA-256까지 동일하며 TensorRT 관련 warning은 둘 다 0개
 
-`--diagnose-runtime`은 engine deserialize/inference를 수행하지 않는다. 따라서 이 candidate는 promotion 완료 상태가 아니라 **사용자 Camera inference 시험 준비 상태**다. 다음 수동 시험은 `dist_candidate\FitRouteAIClient\FitRouteAIClient.exe --exercise squat`이며, 성공한 뒤에만 Launcher/Protocol E2E candidate 시험으로 진행한다.
+`--diagnose-runtime`은 engine deserialize/inference를 수행하지 않으므로 최초 결과는 사용자 Camera inference 시험 준비 상태였다. 이후 사용자가 candidate Camera benchmark를 완료했다.
+
+- Processed frames: 561
+- Elapsed: 35.41 s
+- End-to-end: 15.84 FPS (기존 15.89 FPS)
+- Inference: 21.20 FPS
+- 평균 YOLO / MediaPipe / XGBoost: 15.64 / 28.99 / 1.18 ms
+- 평균 inference time: 47.18 ms
+
+Camera, TensorRT engine inference와 전체 pose pipeline은 **PASS**이며 기존 대비 유의미한 성능 저하는 확인되지 않았다. 6-B-1.5에서는 production 기본값이나 Registry를 변경하지 않고, 로컬 Launcher dist의 ignored config만 `dist_candidate/FitRouteAIClient/FitRouteAIClient.exe`로 전환했다. Reference용 `config.reference.json`과 candidate용 `config.candidate.json`을 함께 보관하며 현재 active `config.json`은 candidate와 동일하다. Launcher/Protocol/Auth/Auto Start/Render/Supabase/Dashboard 실제 E2E는 사용자 확인 전까지 **PENDING**이다.
