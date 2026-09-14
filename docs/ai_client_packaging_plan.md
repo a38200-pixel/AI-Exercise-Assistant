@@ -475,3 +475,130 @@ Binary/data 후보:
 - exe 옆 외부 `models/` 네 resource
 
 OpenCV metadata 차이는 validator로 관리되는 알려진 예외이며 실제 runtime blocker로 취급하지 않는다. 남은 핵심 위험은 clean VM의 NVIDIA driver 및 Toolkit 없는 CUDA/TensorRT 검증, TensorRT engine GPU 호환성, PyInstaller native DLL 최소 집합 선별이다. 이번 단계에서는 spec, EXE, dist, model copy, Launcher, Registry, deploy와 Release를 변경하지 않았다.
+
+## 3단계: PyInstaller onedir 첫 독립 빌드
+
+검증일: 2026-09-14. `fitroute_build`의 Python 3.12.12와 PyInstaller 6.22.3만 사용했다. Launcher, protocol, installer, deploy, Registry와 `vision_ai`는 변경하지 않았다.
+
+### Spec과 build entry
+
+- Spec: `packaging/ai_client/FitRouteAIClient.spec`
+- Entry: `src/main.py`
+- Mode: onedir, `console=True`, `_internal`, UPX 비활성화
+- Build wrapper: `packaging/ai_client/build_ai_client.ps1`
+- Wrapper는 활성 환경 이름이 `fitroute_build`인지 확인하고 `validate_build_env.py`를 먼저 실행한다. Ultralytics 분석이 선택 package를 설치하지 못하도록 `YOLO_AUTOINSTALL=false`도 설정한다.
+
+반복 build 명령:
+
+```powershell
+conda activate fitroute_build
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging/ai_client/build_ai_client.ps1
+```
+
+Wrapper 내부 PyInstaller 명령:
+
+```powershell
+python -m PyInstaller --noconfirm --clean packaging/ai_client/FitRouteAIClient.spec
+```
+
+### Spec 수집 정책
+
+명시적 datas:
+
+- `models/detector/yolo26n.engine` → `models/detector`
+- `models/pose/pose_landmarker_full.task` → `models/pose`
+- `models/classifier/model_weights.xgb` → `models/classifier`
+- `models/classifier/classes.json` → `models/classifier`
+- MediaPipe non-binary package data
+- XGBoost `VERSION`, `py.typed`
+- Ultralytics, MediaPipe, XGBoost, HTTPX distribution metadata
+
+PyInstaller 6은 Analysis datas를 `_internal`에 놓으므로 spec의 COLLECT 이후 검증된 model tree만 EXE 옆 `models/`로 이동한다. Python/native runtime은 `_internal`에 유지한다.
+
+명시적 hidden imports:
+
+- MediaPipe Tasks/Core/Vision/PoseLandmarker 계층
+- `tensorrt`, `tensorrt_bindings`, `tensorrt_libs`
+- `ultralytics.nn.backends.tensorrt`
+- `xgboost`, `xgboost.sklearn`
+- `certifi`
+
+Native 처리:
+
+- OpenCV, Torch/TorchVision, scikit-learn은 PyInstaller/contrib 공식 hook을 사용한다.
+- MediaPipe `libmediapipe.dll`은 `collect_dynamic_libs("mediapipe")`로 package-relative 위치를 보존한다.
+- XGBoost `xgboost.dll`은 `collect_dynamic_libs("xgboost")`로 `xgboost/lib`에 둔다.
+- TensorRT contrib hook이 wheel의 `tensorrt_libs`를 수집한다. 첫 안정성 build에서는 builder resource DLL도 유지한다.
+- Binary analysis가 개발 PC의 `C:\TensorRT-11.0.0.114\bin`에서 추가로 찾은 최상위 DLL 3개는 wheel-owned DLL과 중복이다. 최상위 복사본을 임시 제외하고 제한된 PATH에서 frozen 진단이 통과한 뒤, spec에서 이 3개만 필터링했다.
+- CUDA Toolkit 전체나 Launcher DLL 목록은 수동으로 복사하지 않았다. Torch hook이 wheel 내부 CUDA/cuDNN runtime을 수집했다.
+- Matplotlib는 MediaPipe dependency이므로 유지하되 backend는 GUI toolkit이 필요 없는 `Agg`로 고정했다.
+
+Excludes는 `PyQt5`, `PyQt6`, `pygame`, `IPython`, `jupyter`, `black`, `pytest`, `tkinter`, `_tkinter`다. Tkinter는 AI Client runtime graph에 없고 Desktop Login은 Launcher 책임이다.
+
+### 첫 build 문제와 수정
+
+첫 build 자체는 성공했지만 frozen diagnostic에서 XGBoost가 `_internal/xgboost/VERSION`을 찾지 못했다. `collect_data_files("xgboost")` 결과 중 non-binary data를 추가해 `VERSION`과 `py.typed`을 포함한 뒤 model load가 성공했다.
+
+첫 분석 과정에서는 optional tracker import가 `lap` AutoInstall을 실행했다. `lap`은 `fitroute_build`에서 제거했고 build wrapper에 `YOLO_AUTOINSTALL=false`를 넣었다. 이후 clean build에서 다시 설치되지 않았으며 dist에도 포함되지 않았다.
+
+### 최종 산출물
+
+```text
+dist/FitRouteAIClient/
+├─ FitRouteAIClient.exe
+├─ _internal/
+└─ models/
+   ├─ detector/yolo26n.engine
+   ├─ pose/pose_landmarker_full.task
+   └─ classifier/
+      ├─ model_weights.xgb
+      └─ classes.json
+```
+
+- EXE: 50,751,244 bytes / 48.40 MiB
+- dist: 7,295,590,444 bytes / 6,957.62 MiB / 6.79 GiB
+- 파일 수: 3,664
+- 네 model resource 모두 EXE 옆에 존재하고 `_internal/models`는 없다.
+
+크기가 큰 주된 이유는 Torch/CUDA/cuDNN과 TensorRT builder resource다. 첫 독립 실행 안정성 검증을 우선했으므로 이번 단계에서는 더 줄이지 않는다.
+
+### Frozen runtime diagnostic
+
+`src/main.py`에 `--diagnose-runtime`을 추가했다. Camera, inference와 network 요청 없이 frozen status, app root, 네 model, OpenCV GUI/MSMF, CUDA/GPU, TensorRT, MediaPipe Tasks, Ultralytics, HTTPX 및 XGBoost 실제 model load를 검사한다. Access Token이나 credential은 출력하지 않는다.
+
+최종 EXE는 개발 Conda/TensorRT 경로를 제외한 Windows system PATH만 둔 상태에서도 다음을 통과했다.
+
+```text
+FitRouteAIClient.exe --help                  exit 0
+FitRouteAIClient.exe --diagnose-runtime      exit 0
+Frozen: YES
+CUDA: OK (12.8, NVIDIA GeForce RTX 3080)
+TensorRT: OK (11.0.0.114)
+MediaPipe: OK (0.10.35)
+OpenCV: OK (5.0.0, GUI=True, MSMF=True)
+XGBoost: OK (9 classes, 132 features)
+RUNTIME DIAGNOSTIC PASS
+```
+
+XGBoost의 기존 `.xgb` 확장자를 UBJSON으로 추정하는 warning과 sandbox 임시 폴더의 Matplotlib font cache 쓰기 warning은 비치명적이며 진단 결과에는 영향을 주지 않았다.
+
+### Warning과 native dependency 분석
+
+`build/FitRouteAIClient/warn-FitRouteAIClient.txt`는 885줄이다. TensorRT, MediaPipe, XGBoost, OpenCV, HTTPX, certifi 등 직접 필요한 module 자체의 missing warning은 없다. 주요 warning은 Torch의 선택 기능인 Triton/TensorBoard, export용 ONNX, XGBoost optional pandas/CuPy, HTTP 압축 extras, Ultralytics tracker용 `lap` 등이다. 현재 AI detector/upload 경로에는 필요하지 않고 frozen 진단도 통과했으므로 추가하지 않았다.
+
+PE import table을 EXE, `cv2.pyd`, `libmediapipe.dll`, `xgboost.dll`, TensorRT binding, `torch_cuda.dll`에 대해 검사했다. Bundle 전체와 Windows System32를 기준으로 누락된 direct dependency는 0개다. 포함 확인:
+
+- `cv2.pyd`, `opencv_videoio_ffmpeg500_64.dll`
+- `mediapipe/tasks/c/libmediapipe.dll`
+- `xgboost/lib/xgboost.dll`, `VCOMP140.DLL`
+- Torch/CUDA/cuDNN DLL
+- `tensorrt_bindings` pyd와 wheel-owned `tensorrt_libs` DLL
+- `python3.dll`, `python312.dll`
+
+PyQt5, PyQt6, pygame, IPython, Jupyter, black, pytest와 lap은 dist에 없다.
+
+### 독립성과 다음 검증
+
+Spec과 build script는 Repository 상대 위치와 PyInstaller가 제공하는 `SPECPATH`, `DISTPATH`를 사용하며 사용자명, Conda 환경 절대경로를 runtime config로 저장하지 않는다. Analysis TOC와 debug metadata에는 build source 절대경로가 기록될 수 있지만 실행 시 참조하는 경로는 아니다. 제한된 PATH frozen diagnostic 성공으로 Python/Conda 및 외부 TensorRT 설치 경로가 startup/import dependency가 아님을 확인했다.
+
+아직 검증하지 않은 항목은 실제 Webcam, YOLO TensorRT engine inference, MediaPipe image inference, HUD, Workout API HTTPS POST 및 clean VM 실행이다. 다음 단계에서는 사용자가 `dist\FitRouteAIClient\FitRouteAIClient.exe --exercise squat`을 직접 실행해 Camera pipeline을 검증해야 한다. 이 수동 검증 전에는 Launcher를 새 EXE로 전환하지 않는다.

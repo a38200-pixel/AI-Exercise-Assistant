@@ -338,7 +338,7 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 4. Python runtime·AI 모델·CUDA/TensorRT를 포함하는 일반 사용자 배포 전략 확정
 5. HTTPX/Rich의 선택 의존성으로 커진 Launcher bundle을 별도 최소 빌드 환경에서 최적화
 
-독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` clean 환경 검증 결과와 향후 onedir spec 계획은 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. OpenCV distribution metadata 차이는 엄격한 validator로 관리하며 build environment 검증을 통과했습니다. 아직 AI Client spec이나 EXE는 만들지 않았습니다.
+독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경과 PyInstaller onedir 빌드 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. OpenCV distribution metadata 차이는 엄격한 validator로 관리합니다. 첫 `FitRouteAIClient.exe`는 Camera 없는 frozen 진단까지 통과했으며, 실제 Camera/inference는 다음 수동 검증 단계로 남아 있습니다.
 
 ## Backend
 

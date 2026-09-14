@@ -26,6 +26,7 @@ from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.runtime_diagnostic import run_runtime_diagnostic
 from src.workout_session import WorkoutSession
 
 
@@ -566,14 +567,22 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="첫 inference frame 준비 후 Workout Session을 자동 시작합니다.",
     )
+    parser.add_argument(
+        "--diagnose-runtime",
+        action="store_true",
+        help="Camera와 network 없이 frozen runtime과 모델 파일을 검증합니다.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.benchmark_seconds is not None and arguments.benchmark_seconds <= 0:
         parser.error("--benchmark-seconds must be greater than 0")
     return arguments
 
 
-def main() -> None:
+def main() -> int:
     arguments = parse_arguments()
+    if arguments.diagnose_runtime:
+        return run_runtime_diagnostic()
+
     camera = Camera()
     detector = PersonDetector()
     pose_classifier = PoseClassifier()
@@ -712,7 +721,8 @@ def main() -> None:
         cv2.destroyAllWindows()
 
     print_benchmark(benchmark)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
