@@ -20,6 +20,8 @@ frontend/dist/
 /dist_candidate_polars/
 /build_candidate_protoc/
 /dist_candidate_protoc/
+/build_candidate_testing/
+/dist_candidate_testing/
 desktop_launcher/build/
 desktop_launcher/dist/
 desktop_launcher/*.spec
@@ -33,3 +35,5 @@ desktop_launcher/config.json
 data/workout_logs/*.csv
 data/workout_logs/*.json
 !data/workout_logs/.gitkeep
+packaging/ai_client/build_ai_client_candidate_testing.ps1
+packaging/ai_client/FitRouteAIClient.optimized_testing.spec

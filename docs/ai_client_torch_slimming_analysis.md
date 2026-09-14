@@ -388,3 +388,106 @@ dist_candidate_protoc\FitRouteAIClient\FitRouteAIClient.exe --exercise squat
 Camera에서 TensorRT detection, MediaPipe pose, XGBoost classification, Squat count와 FPS가 정상인지 확인한다. 이 검증이 통과한 뒤에만 Launcher active config를 candidate EXE로 임시 변경하고 `fitroute://start?exercise=squat`, Desktop Auth, auto session, workout 종료, Render 201, Supabase 저장, Dashboard 증가를 확인한다. E2E 성공 전에는 Launcher가 현재 성공 baseline을 계속 가리키도록 유지한다.
 
 현재 상태는 **CANDIDATE READY FOR USER CAMERA TEST**다. Camera와 Launcher E2E까지 성공하면 다음 candidate는 `torch.testing` 하나만 제외하는 실험이며 여러 Torch subtree를 동시에 제외하지 않는다.
+
+## 17. 6-B-3B-2 — torch.testing candidate
+
+### 결론
+
+`torch.testing` 제외 candidate는 build와 `--help`에는 성공했지만 `--diagnose-runtime`에서 실패했다. PyTorch 2.11.0의 최상위 `torch/__init__.py`가 다음과 같이 `torch.testing`을 무조건 import하기 때문이다.
+
+```python
+from torch import (
+    # ...
+    testing as testing,
+    # ...
+)
+```
+
+FitRoute와 Ultralytics가 testing API를 직접 사용하지 않더라도 `import torch` 자체의 필수 dependency다. 따라서 stub 또는 Torch package patch 없이 subtree 전체를 제거하는 방식은 안전하지 않다. 이번 실험에서는 그러한 우회를 만들지 않았고 최종 상태는 **FAIL**이다.
+
+### Baseline과 조사 결과
+
+검증 완료 baseline은 `dist_candidate_protoc/FitRouteAIClient/`이다.
+
+| 항목 | 값 |
+|---|---:|
+| Baseline bytes | 5,203,968,114 |
+| Baseline MiB | 4,962.890734 |
+| Baseline GiB | 4.846573 |
+| `_internal/torch/testing` 파일 | 106 |
+| `_internal/torch/testing` bytes | 5,113,291 |
+| `_internal/torch/testing` MiB | 4.876414 |
+| testing 관련 경로 전체 | 172 files / 5,406,600 bytes / 5.156136 MiB |
+
+Repository와 Ultralytics 8.4.70 source에는 runtime `torch.testing` 직접 import가 없다. xref상 유입 원인은 다음 두 종류다.
+
+- `hook-torch.py`의 `collect_submodules("torch")`가 testing 106개를 hidden import로 전부 수집한다.
+- PyTorch 내부의 최상위 import와 `autograd.gradcheck`, JIT trace, sparse Triton metadata, Dynamo/test helper 등이 `torch.testing`을 참조한다.
+
+즉 FitRoute 직접 사용은 없고 대부분 optional/test helper지만, `torch/__init__.py`의 최상위 import 때문에 package 전체 제거는 runtime-safe하지 않다.
+
+### Candidate 구현과 build
+
+- Spec: `packaging/ai_client/FitRouteAIClient.optimized_testing.spec`
+- Script: `packaging/ai_client/build_ai_client_candidate_testing.ps1`
+- Workpath: `build_candidate_testing/`
+- Distpath: `dist_candidate_testing/`
+- Baseline, 기존 protoc spec 및 기존 candidate는 수정하지 않음
+- TensorRT builder 8개, Polars, `protoc.exe` 제외 유지
+- 그 외 Torch subtree, TorchVision, native/CUDA DLL은 제외하지 않음
+
+첫 build는 `Analysis(excludes=["torch.testing"])`만으로는 hook의 hidden imports를 이기지 못해 fail-closed guard에서 중단됐다. 이때 `a.pure`와 Analysis TOC에 `torch.testing.*` 106개가 남았다. 두 번째 build는 정확한 module prefix만 `a.pure`에서 후처리하고, `torch/testing` data path만 제거하도록 변경했다. 예상 inventory를 106 modules, 106 source files, 5,113,291 bytes, native binary 0개로 고정했으며 다르면 build를 중단한다.
+
+두 번째 PyInstaller build는 성공했고 최종 output의 `_internal/torch/testing` directory가 없음을 확인했다. PyInstaller가 `Analysis-00.toc`를 spec의 후처리보다 먼저 기록하기 때문에 디스크 TOC에는 최초 분석 결과 106개가 남지만, 후처리된 in-memory `a.pure`, PYZ와 최종 output에서는 모두 제거됐다. 이 TOC 잔존은 조사됐으며 추가 package가 최종 산출물에 들어간 것은 아니다.
+
+### 크기와 보호 검증
+
+| 항목 | Baseline | testing candidate | 차이 |
+|---|---:|---:|---:|
+| 파일 수 | 3,653 | 3,547 | -106 |
+| Bytes | 5,203,968,114 | 5,197,262,619 | -6,705,495 |
+| MiB | 4,962.890734 | 4,956.495875 | -6.394858 |
+| GiB | 4.846573 | 4.840328 | -0.006245 |
+| 감소율 | - | - | 0.128853% |
+
+원본 tree 4.876414 MiB보다 실제 절감량이 큰 이유는 Torch hook의 `module_collection_mode="pyz+py"`가 원본 `.py`와 PYZ 압축본을 모두 포함하기 때문이다. 물리적 파일 집합 차이는 testing 파일 106개뿐이며, 공통 파일 중 크기가 달라진 것은 PYZ를 내장한 `FitRouteAIClient.exe` 하나로 1,592,204 bytes 감소했다.
+
+- `torch.testing` directory: 0
+- TensorRT builder: 0
+- Polars: 0
+- `protoc.exe`: 0
+- `torch/lib`: 37 files / 4,231,593,696 bytes, baseline과 모든 DLL SHA256 일치
+- 모델 4개: baseline과 모든 SHA256 일치
+- PyInstaller missing-library warning: 0
+- Baseline/candidate warning: 각각 843줄, 차이 없음
+
+### Runtime 결과
+
+| 검사 | 결과 |
+|---|---|
+| Build | PASS |
+| `--help` | PASS, exit 0 |
+| `--diagnose-runtime` | **FAIL**, exit 1 |
+| Models | 4개 모두 OK |
+| OpenCV | PASS |
+| MediaPipe | PASS |
+| XGBoost | PASS |
+| TensorRT package | PASS |
+| HTTPX | PASS |
+| `import torch` | **FAIL: `No module named 'torch.testing'`** |
+| `torch.cuda` | torch 초기화 실패로 사용 불가 |
+| Ultralytics/YOLO | **FAIL: partially initialized `torch`에서 `nn` import 불가** |
+| TensorRT backend import | Ultralytics 초기화 실패로 검증 불가 |
+| TorchVision import | Torch 초기화 실패 때문에 runtime 후보로 인정 불가 |
+
+`--help`가 통과한 이유는 argparse help가 runtime diagnostic import보다 먼저 종료되기 때문이다. 이는 Torch 정상 동작의 증거가 아니다.
+
+Codex는 Webcam, Camera inference, `--exercise squat`, `fitroute://`, Launcher 변경, Render POST 또는 Supabase 변경을 실행하지 않았다. 이 candidate는 runtime 필수 검사를 통과하지 못했으므로 사용자 Camera 테스트나 Launcher E2E로 진행하면 안 된다. Launcher는 검증 완료 baseline을 계속 가리켜야 한다.
+
+### 판정과 다음 단계
+
+최종 판정은 **FAIL**이다. `torch.testing`은 단순 test-only subtree가 아니라 현재 PyTorch wheel의 최상위 import 계약 일부다. 6-B-3B-2 결과를 성공 baseline에 합치지 않으며 다음 `torch.profiler` candidate도 자동으로 진행하지 않는다. 후속 선택지는 다음 중 하나를 별도 단계에서 검토해야 한다.
+
+1. `torch.testing._internal`만 제한적으로 제외하고 public `torch.testing`은 유지하는 더 작은 실험
+2. Torch package patch/stub의 유지보수 위험을 명시적으로 수용하는 별도 실험
+3. 현재 baseline 유지 후 native dynamic tracing 또는 direct TensorRT 아키텍처 분석으로 이동
