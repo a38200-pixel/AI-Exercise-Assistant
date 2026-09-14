@@ -14,6 +14,8 @@ frontend/node_modules/
 frontend/dist/
 /build/
 /dist/
+/build_candidate/
+/dist_candidate/
 desktop_launcher/build/
 desktop_launcher/dist/
 desktop_launcher/*.spec
