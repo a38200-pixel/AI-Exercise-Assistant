@@ -1,11 +1,11 @@
 """Project paths and the small set of runtime inference settings."""
 
-from pathlib import Path
+from src.paths import get_app_root, get_model_path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = get_app_root()
 
-MODEL_DIR = PROJECT_ROOT / "models"
+MODEL_DIR = get_model_path()
 DETECTOR_MODEL_DIR = MODEL_DIR / "detector"
 POSE_MODEL_DIR = MODEL_DIR / "pose"
 CLASSIFIER_MODEL_DIR = MODEL_DIR / "classifier"

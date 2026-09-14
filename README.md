@@ -338,6 +338,8 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 4. Python runtime·AI 모델·CUDA/TensorRT를 포함하는 일반 사용자 배포 전략 확정
 5. HTTPX/Rich의 선택 의존성으로 커진 Launcher bundle을 별도 최소 빌드 환경에서 최적화
 
+독립 실행형 Windows AI Client의 runtime dependency, frozen resource path와 향후 onedir spec 계획은 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. 현재 단계에서는 path helper와 테스트만 준비했으며 AI Client EXE나 새 build environment는 만들지 않았습니다.
+
 ## Backend
 
 Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAPI API scaffold는 [backend/README.md](backend/README.md)를 참고하세요. 실제 Cloud 연결 전에도 schema와 service unit test를 실행할 수 있습니다.

@@ -1,0 +1,323 @@
+# FitRoute AI Client Packaging Plan
+
+## 범위와 현재 상태
+
+이 문서는 개발 PC의 `vision_ai` Conda 환경과 Repository source에 의존하는 Python AI Client를 향후 독립적인 Windows `FitRouteAIClient.exe`로 패키징하기 위한 1단계 조사 결과다.
+
+이번 단계에서 완료한 것은 runtime dependency 조사, 절대경로/CWD 의존성 조사, frozen-aware model path 정리와 테스트다. 새 Conda 환경, `FitRouteAIClient.spec`, PyInstaller AI Client build, ONNX fallback, installer와 Release는 만들지 않았다.
+
+현재 성공한 개발 환경 E2E는 다음과 같다.
+
+```text
+Vercel Web
+  → fitroute://start?exercise=squat
+  → FitRouteLauncher.exe
+  → Desktop Supabase Auth
+  → vision_ai Python + src/main.py
+  → Camera Workout
+  → Render API
+  → Supabase
+  → Web Dashboard
+```
+
+목표 구조는 다음과 같다.
+
+```text
+FitRouteLauncher.exe
+  → FitRouteAIClient.exe
+  → exe 옆 models/와 _internal/ runtime 사용
+```
+
+## 현재 AI runtime 구조와 import graph
+
+`src/main.py`가 실행 시 사용하는 코드 경로는 다음과 같다.
+
+```text
+src/main.py
+├─ cv2, numpy
+├─ config.settings → src.paths
+├─ src.camera → cv2
+├─ src.person_detector → ultralytics.YOLO (동적 import)
+│  └─ TensorRT engine → ultralytics.nn.backends.tensorrt
+│     ├─ tensorrt (동적 import)
+│     ├─ torch CUDA tensors
+│     └─ numpy buffers
+├─ src.pose_estimator → cv2, numpy, mediapipe (동적 import)
+├─ src.pose_classifier → numpy, xgboost.XGBClassifier (동적 import)
+├─ src.prediction_smoother
+├─ src.exercise_counter
+├─ src.workout_session
+└─ src.api_client → httpx
+```
+
+Python 표준 라이브러리는 `argparse`, `datetime`, `functools`, `json`, `os`, `pathlib`, `sys`, `time`, `typing`을 직접 사용한다. `subprocess`와 Desktop Supabase Auth는 Launcher 책임이며 AI Client runtime graph에는 없다.
+
+## Dependency 분류
+
+| 분류 | Package/모듈 | 판단 근거 |
+|---|---|---|
+| A: 직접 필수 | `numpy` | frame, landmark feature, TensorRT binding buffer |
+| A: 직접 필수 | `opencv-contrib-python`의 `cv2` | Camera, MSMF capture, 색상 변환, HUD/GUI |
+| A: 직접 필수 | `ultralytics` | `YOLO(engine, task="detect")`와 inference orchestration |
+| A: 직접 필수 | `torch`, `torchvision` | Ultralytics runtime 및 TensorRT CUDA input/output tensor |
+| A: 직접 필수 | `tensorrt` | serialized `.engine` deserialize 및 execution context |
+| A: 직접 필수 | `mediapipe` | PoseLandmarker Tasks API |
+| A: 직접 필수 | `xgboost` | 기존 `XGBClassifier` model load와 `predict_proba` |
+| A: 직접 필수 | `httpx` | 완료된 Workout Session의 Render API upload |
+| A: 보수적 유지 | `scikit-learn` | 현재 코드가 XGBoost sklearn wrapper인 `XGBClassifier`를 사용하므로 첫 독립 build에서는 현행 동작 보존 |
+| A: transitive | `scipy`, `Pillow`, `PyYAML`, `requests`, `psutil`, `polars`, `nvidia-ml-py`, `ultralytics-thop` | Ultralytics/XGBoost declared runtime dependency |
+| A: transitive | `absl-py`, `flatbuffers`, `sounddevice`, `certifi` | MediaPipe declared runtime dependency |
+| B: build-only | `PyInstaller` | onedir Analysis/EXE/COLLECT 생성에만 사용 |
+| B: test-only | `pytest` | unit test runner; 최종 runtime에서 제외 |
+| B: export-only | `onnx`, `onnxruntime`, export toolchain | 현재 TensorRT engine 실행에는 사용하지 않으며 ONNX fallback도 이번 범위 밖 |
+| B/C: 현재 runtime 미사용 | `pandas` | Repository AI runtime에서 import하지 않음; XGBoost optional extra |
+| C: 불필요 | `pygame` | AI Client source import 없음 |
+| C: 불필요 | `supabase` | Desktop Auth는 Launcher 책임이며 AI Client는 access token만 환경변수로 받음 |
+| C: 불필요 | `PyQt5`, `PyQt6` | OpenCV window와 tkinter Launcher를 사용하며 Qt UI를 사용하지 않음 |
+
+`opencv-python`, `opencv-python-headless`는 현재 환경에 설치되어 있지 않다. 실제 `cv2` provider는 `opencv-contrib-python`이다. 다음 환경에서도 OpenCV distribution을 여러 개 동시에 설치하지 않고 Camera/MediaPipe에 필요한 contrib build 하나를 우선 검증한다.
+
+## 현재 설치 버전 스냅샷
+
+조사일: 2026-09-14, `vision_ai` environment.
+
+| Component | Version |
+|---|---:|
+| Python | 3.12.12 |
+| PyTorch | 2.11.0+cu128 |
+| TorchVision | 0.26.0+cu128 |
+| PyTorch CUDA runtime | 12.8 |
+| cuDNN reported by PyTorch | 9.19.0 (`91900`) |
+| Ultralytics | 8.4.70 |
+| OpenCV distribution | opencv-contrib-python 5.0.0.93 |
+| NumPy | 2.4.4 |
+| SciPy | 1.17.1 |
+| MediaPipe | 0.10.35 |
+| XGBoost | 3.4.1 |
+| scikit-learn | 1.9.1 |
+| pandas | 3.0.2 (현재 runtime source 미사용) |
+| TensorRT / cu13 bindings / cu13 libs | 11.0.0.114 |
+| HTTPX | 0.28.1 |
+| Pillow | 12.2.0 |
+| PyYAML | 6.0.3 |
+| Requests | 2.32.5 |
+| psutil | 7.2.2 |
+| polars | 1.40.1 |
+| nvidia-ml-py | 13.610.43 |
+| ultralytics-thop | 2.0.19 |
+| absl-py | 2.4.0 |
+| flatbuffers | 25.12.19 |
+| sounddevice | 0.5.6 |
+| PyInstaller (build-only) | 6.22.3 |
+| ONNX Runtime distribution | 설치되지 않음 |
+
+`pip freeze` 전체를 새 requirements로 복사하지 않는다. 위 표는 현재 성공 환경의 비교 기준이며 다음 단계에서 최소 build environment를 실제 import/inference 테스트하며 줄인다.
+
+## Model resources와 runtime path
+
+| Resource | Repository path / 개발 runtime path | 크기 | Frozen runtime path |
+|---|---|---:|---|
+| YOLO TensorRT | `models/detector/yolo26n.engine` | 7,731,821 bytes / 7.3736 MiB | `<exe-dir>/models/detector/yolo26n.engine` |
+| MediaPipe Task | `models/pose/pose_landmarker_full.task` | 9,398,198 bytes / 8.9628 MiB | `<exe-dir>/models/pose/pose_landmarker_full.task` |
+| XGBoost model | `models/classifier/model_weights.xgb` | 3,378,634 bytes / 3.2221 MiB | `<exe-dir>/models/classifier/model_weights.xgb` |
+| Class labels | `models/classifier/classes.json` | 110 bytes / 0.0001 MiB | `<exe-dir>/models/classifier/classes.json` |
+
+`models/detector/yolo26n.pt`도 개발 Repository에 존재하지만 현재 우선 runtime resource는 `.engine`이다. `.pt` fallback을 최종 package에 포함할지는 용량과 TensorRT 실패 정책을 확정한 후 결정한다. 이번 단계에서는 fallback 동작이나 모델을 변경하지 않았다.
+
+### 공통 root 전략
+
+`src.paths.get_app_root()`의 규칙은 다음과 같다.
+
+- 개발 실행: `src/paths.py`의 부모 구조로 Repository root 반환
+- frozen 실행: `Path(sys.executable).resolve().parent` 반환
+- model path: 항상 `<app-root>/models/...`
+
+이 방식은 PyInstaller 6의 bundle 내부 `__file__` 위치와 무관하게 설치 폴더의 exe 옆 `models/`를 선택한다. 목표 onedir 구조는 다음과 같다.
+
+```text
+dist/FitRouteAIClient/
+├─ FitRouteAIClient.exe
+├─ _internal/
+└─ models/
+   ├─ detector/yolo26n.engine
+   ├─ pose/pose_landmarker_full.task
+   └─ classifier/
+      ├─ model_weights.xgb
+      └─ classes.json
+```
+
+PyInstaller 6의 기본 onedir `contents_directory="_internal"`은 data도 `_internal` 아래에 둘 수 있으므로, 다음 build에서는 models를 Analysis data로 무작정 넣지 않는다. 먼저 Python/native runtime을 onedir로 만들고 build staging 단계에서 검증된 models tree를 exe 옆으로 복사하는 방식을 우선한다.
+
+## 절대경로와 실행 위치 조사
+
+AI Client runtime인 `src/`와 `config/`에는 사용자명, `anaconda3`, `vision_ai`, `Documents\GitHub`를 hardcoding한 경로가 없다.
+
+- 기존 `config/settings.py`의 `Path(__file__).resolve().parents[1]`은 개발 실행에는 맞지만 frozen `_internal` 배치에서는 잘못된 model root가 될 수 있어 공통 helper로 교체했다.
+- `src/main.py`의 direct-script용 `sys.path` 보정은 `__file__` 기반이며 CWD에 의존하지 않는다. `python src/main.py` 호환을 위해 유지했다.
+- `src/`와 `config/`에는 `Path.cwd()`, `os.getcwd()`, `os.chdir()` 호출이 없다.
+- `scripts/export_yolo26n_tensorrt.py`의 `Path.cwd()`는 사용자에게 받은 상대 output 경로를 해석하는 개발/export 전용 동작이며 packaged runtime에 포함하지 않는다.
+- `desktop_launcher/config.json`의 Python/Project 절대경로는 현재 개발 Launcher의 의도된 의존성이다. 최종 Launcher가 `FitRouteAIClient.exe`를 직접 호출하도록 바꾸는 것은 다음 패키징 단계 이후 작업이다.
+- 문서와 테스트의 예시 경로는 runtime dependency가 아니다.
+
+## Native dependency 조사
+
+| Package | 확인한 native 구성 | 다음 build 주의사항 |
+|---|---|---|
+| NumPy | 다수의 `.pyd` 및 bundled runtime | PyInstaller NumPy hook 결과와 DLL 검색 경로 확인 |
+| OpenCV | `cv2/cv2.pyd` 약 107.7 MiB, `opencv_videoio_ffmpeg500_64.dll` 약 29.4 MiB | `cv2` binary/data 수집, HighGUI와 videoio backend smoke test 필요 |
+| PyTorch | `torch_python.dll`, `torch_cpu.dll`, `torch_cuda.dll`과 CUDA/cuDNN DLL 다수 | `collect_dynamic_libs("torch")`의 용량이 매우 크므로 실제 TensorRT inference 최소 집합을 분석 |
+| TorchVision | 11개 native file, 약 22.29 MiB | Ultralytics import 및 ops hidden import 확인 |
+| TensorRT | Python `.pyd`, `nvinfer_11.dll`, `nvinfer_plugin_11.dll`, `nvonnxparser_11.dll`; 설치 libs 전체 약 2,222.32 MiB | builder resource DLL 전체를 runtime에 복사하지 말고 deserialize/inference 최소 집합 검증 |
+| MediaPipe | `mediapipe/tasks/c/libmediapipe.dll` 약 27.4 MiB | `importlib.resources.files("mediapipe.tasks.c")`로 찾으므로 package-relative 위치 보존 |
+| XGBoost | `xgboost/lib/xgboost.dll` 약 54.3 MiB, `VCOMP140.DLL` 의존 | package-relative `xgboost/lib`와 MSVC/OpenMP runtime 수집 확인 |
+| SciPy | 109개 native file, 약 33.01 MiB | XGBoost/Ultralytics가 실제 사용하는 범위를 Analysis로 확인 |
+| scikit-learn | 71개 native file, 약 10.44 MiB | 첫 build에서는 XGBClassifier 호환을 위해 유지 후 제거 가능성 검증 |
+| Pillow | 8개 native file, 약 12.76 MiB | Ultralytics image utility import에 따른 plugin/data 확인 |
+| psutil | native `.pyd` 1개 | Ultralytics system utility 경로 |
+| MSVC runtime | System32의 `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll` 14.51.36247.0 | 지원 OS에 VC++ Redistributable prerequisite를 명시하거나 PyInstaller 수집 결과 검증 |
+
+## TensorRT와 CUDA 패키징 리스크
+
+`PersonDetector`는 `.engine`이 있으면 이를 우선 선택하고 `ultralytics.YOLO(str(path), task="detect")`에 전달한다. Ultralytics 8.4.70의 TensorRT backend는 다음을 수행한다.
+
+1. `tensorrt`를 동적 import한다.
+2. Ultralytics가 engine 앞에 저장한 JSON metadata 길이와 metadata를 읽는다.
+3. 나머지 payload를 `trt.Runtime.deserialize_cuda_engine()`으로 역직렬화한다.
+4. input/output buffer를 NumPy로 만들고 `torch.from_numpy(...).to(cuda)`로 GPU에 할당한다.
+
+현재 engine은 metadata를 제외한 payload로 TensorRT 11.0.0.114에서 역직렬화에 성공했다. Metadata는 Ultralytics 8.4.70, batch 1, static 640×640, FP16, end-to-end model을 기록한다. TensorRT `hardware_compatibility_level`은 `NONE`이므로 다른 GPU architecture에 대한 호환을 가정하면 안 된다.
+
+현재 GPU/CUDA 관계:
+
+- GPU: NVIDIA GeForce RTX 3080, compute capability 8.6, VRAM 10 GiB
+- NVIDIA driver: 595.95; driver가 보고하는 CUDA capability: 13.2
+- 설치된 CUDA Toolkit/nvcc: 13.2.51
+- PyTorch wheel runtime: CUDA 12.8
+- TensorRT wheel: cu13, TensorRT 11.0.0.114
+
+NVIDIA driver는 외부 prerequisite로 남겨야 한다. PyTorch wheel과 TensorRT wheel이 각 runtime DLL을 제공할 수 있으므로 CUDA Toolkit 전체를 installer에 넣는 것은 우선 요구사항이 아니다. 다만 Toolkit이 없는 clean VM에서 engine deserialize와 한 frame inference를 검증하기 전에는 독립 실행을 확정할 수 없다. TensorRT engine은 TensorRT serialization version, OS, GPU architecture와 plugin에 민감하므로 같은 RTX 3080에서 먼저 검증하고 지원 GPU 범위를 별도로 정해야 한다.
+
+## MediaPipe 패키징 리스크
+
+MediaPipe 0.10.35 Tasks API는 `ctypes`와 `importlib.resources`를 사용해 `mediapipe/tasks/c/libmediapipe.dll`을 package-relative path에서 로드한다. 외부 `pose_landmarker_full.task`만 복사해서는 충분하지 않다.
+
+다음 spec 단계에서 확인할 항목:
+
+- `collect_dynamic_libs("mediapipe")` 또는 명시적 `libmediapipe.dll` 수집
+- DLL을 `mediapipe/tasks/c/` 상대 위치에 보존
+- `mediapipe.tasks.python`, `core`, `vision`, `pose_landmarker`의 동적 import
+- 필요한 package data를 `collect_data_files("mediapipe")` 결과에서 선별
+- external task model을 exe 옆 `models/pose/`에서 정상 open하는지 확인
+
+## XGBoost 패키징 리스크
+
+`PoseClassifier`는 `XGBClassifier()`를 만든 뒤 `load_model(str(XGBOOST_MODEL_PATH))`을 호출하고 `predict_proba()`를 사용한다. XGBoost 3.4.1은 package 내부 `xgboost/lib/xgboost.dll`을 ctypes로 로드하며 이 DLL은 Windows의 `VCOMP140.DLL`에 의존한다.
+
+다음 spec 단계에서는 `collect_dynamic_libs("xgboost")` 또는 package-relative explicit binary 수집과 VC++/OpenMP runtime을 확인한다. 현재 `.xgb` 파일은 XGBoost가 UBJSON으로 추정해 읽는 경고가 있지만 정상 로드된다. 이번 단계에서는 모델 format을 변환하지 않았다.
+
+## OpenCV와 Camera 패키징 리스크
+
+현재 Camera는 Windows에서 먼저 `cv2.VideoCapture(index, cv2.CAP_MSMF)`를 시도하고 실패하면 backend를 지정하지 않은 `cv2.VideoCapture(index)`로 fallback한다. `CAP_DSHOW`는 사용하지 않는다.
+
+현재 `cv2.pyd`는 Windows Media Foundation의 `MFPlat.dll`, `MF.dll`, `MFReadWrite.dll`과 Direct3D 관련 system DLL에 의존한다. 따라서 Windows N/KN edition에서는 Media Feature Pack이 추가 prerequisite가 될 수 있다. `opencv-python-headless`는 HighGUI의 `imshow`, `waitKey`, `destroyAllWindows`와 Camera UI 요구사항을 만족하지 않으므로 사용하지 않는다.
+
+다음 build에서는 Webcam을 자동 실행하지 않는 import smoke test 후, 사용자가 승인한 별도 단계에서 Camera open/read, MSMF fallback, OpenCV window 표시를 검증한다.
+
+## API/Auth와 CLI 호환성
+
+AI Client의 보안 경계는 변경하지 않았다.
+
+- `FITROUTE_ACCESS_TOKEN`: Launcher가 child process environment로만 전달하고 `src/api_client.py`가 읽는다.
+- `FITROUTE_API_BASE_URL`: 같은 child environment에서 읽으며 없으면 개발 기본값 `http://127.0.0.1:8000`을 사용한다.
+- Password와 refresh token: AI Client가 받거나 저장하지 않는다.
+- Supabase Desktop Auth와 Credential Manager: Launcher 책임이다.
+
+다음 개발 CLI는 그대로 유지한다.
+
+```powershell
+python src/main.py --exercise squat
+python src/main.py --exercise squat --auto-start-session
+```
+
+## PyInstaller onedir 선택 이유
+
+AI runtime에는 수백 MiB 이상의 Torch/CUDA/TensorRT/OpenCV native binary와 외부 model이 있다. `--onefile`은 매 실행마다 임시 디렉터리로 대용량 압축 해제하고 DLL 탐색과 보안 제품 검사 비용을 증가시킨다. 첫 독립 AI Client는 다음 이유로 `--onedir`를 선택한다.
+
+- DLL과 package-relative resource 위치를 직접 검사하기 쉽다.
+- 누락 binary를 단계적으로 진단할 수 있다.
+- 실행 시 압축 해제 지연이 없다.
+- 모델을 exe 옆 `models/`로 독립 배치할 수 있다.
+- installer가 전체 폴더를 설치하도록 구성하기 쉽다.
+
+## 다음 build environment 후보
+
+첫 후보는 현재 성공 환경과 ABI를 맞춘 Python 3.12 전용 `fitroute_build` Conda environment다. 아래 목록은 초안이며 이번 단계에서 환경을 생성하거나 설치하지 않았다.
+
+Runtime 직접 후보:
+
+```text
+python=3.12
+numpy==2.4.4
+opencv-contrib-python==5.0.0.93
+ultralytics==8.4.70
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+tensorrt==11.0.0.114
+mediapipe==0.10.35
+xgboost==3.4.1
+scikit-learn==1.9.1
+httpx==0.28.1
+```
+
+Build/test 후보:
+
+```text
+pyinstaller==6.22.3
+pytest
+```
+
+Ultralytics와 MediaPipe의 declared dependencies가 서로 다른 OpenCV distribution을 설치하려 할 수 있으므로, 새 환경에서는 `cv2` provider가 `opencv-contrib-python` 하나인지 확인한다. PyTorch CUDA wheel은 공식 CUDA 12.8 index를 사용해야 할 수 있다. transitive package는 resolver 결과를 기록하되 `vision_ai`의 전체 freeze를 복사하지 않는다.
+
+## 다음 FitRouteAIClient.spec 개요
+
+아직 spec은 만들지 않았다. 다음 단계의 예상 구성은 다음과 같다.
+
+1. Entry: `src/main.py`
+2. Mode: `onedir`, 초기 진단 build는 `console=True`
+3. Contents directory: `_internal`
+4. `pathex`: Repository root
+5. Hidden imports: Ultralytics TensorRT backend, `tensorrt`, 필요한 MediaPipe Tasks 하위 모듈
+6. Binaries: Torch/CUDA runtime, TensorRT inference 최소 DLL, `libmediapipe.dll`, `xgboost.dll`, OpenCV/FFmpeg native binary
+7. Data: 필요한 package data만 선별; models는 build 후 exe 옆 `models/`로 staging
+8. Excludes: test/dev/export/UI package는 Analysis 결과와 import smoke test 후 확정
+9. Runtime hook: 필요할 경우 `_internal` native DLL directory만 `os.add_dll_directory()`로 등록
+10. Validation: import → model existence → TensorRT deserialize → MediaPipe create → XGBoost load/predict → Webcam 없는 CLI smoke 순서
+
+## 이번 단계 테스트
+
+추가한 `tests/test_paths.py`는 다음을 검증한다.
+
+- 개발 실행의 Repository root 계산
+- mocked frozen 실행의 `sys.executable.parent` 계산
+- 네 개 model resource의 frozen path
+- 개발 Repository의 실제 model file 존재와 config path 일치
+
+전체 관련 테스트는 Webcam을 열지 않고 실행한다.
+
+## 다음 단계 명령 초안
+
+다음 승인 단계에서만 실행한다.
+
+```powershell
+conda create -n fitroute_build python=3.12 -y
+conda activate fitroute_build
+
+# 실제 설치는 PyTorch CUDA 12.8 공식 wheel source와 OpenCV provider 충돌을
+# 먼저 확정한 뒤, 위 후보 버전을 사용한다.
+python -m pip install pyinstaller==6.22.3 pytest
+
+# 이후에만 FitRouteAIClient.spec 작성 및 onedir build
+python -m PyInstaller FitRouteAIClient.spec --noconfirm --clean
+```
+
+이 명령은 이번 단계에서 실행하지 않았다.
