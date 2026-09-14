@@ -1,9 +1,10 @@
-import { BarChart3, CalendarDays, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
+import { BarChart3, CalendarDays, Home, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Brand } from '../common/Brand'
 
 const links = [
+  { to: '/exercise', label: '홈', icon: Home },
   { to: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { to: '/history', label: '운동 기록', icon: CalendarDays },
   { to: '/statistics', label: '통계 분석', icon: BarChart3 },

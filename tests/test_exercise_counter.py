@@ -45,6 +45,16 @@ def test_squat_cannot_start_without_stand() -> None:
     assert counter.squat_count == 0
 
 
+def test_stretch_does_not_increment_squat_count() -> None:
+    counter = ExerciseCounter()
+    counter.set_mode(SQUAT_MODE, 0.0)
+    send_sequence(counter, ("stand", "stretch", "stretch"))
+    assert counter.squat_count == 0
+
+    send_sequence(counter, ("squat", "stand"), start_time=3.0)
+    assert counter.squat_count == 1
+
+
 def test_two_squats() -> None:
     counter = ExerciseCounter()
     counter.set_mode(SQUAT_MODE, 0.0)
@@ -90,6 +100,7 @@ def main() -> None:
         test_squat_complete_sequence,
         test_squat_held_down_counts_once,
         test_squat_cannot_start_without_stand,
+        test_stretch_does_not_increment_squat_count,
         test_two_squats,
         test_stretch_accumulates_real_time,
         test_mode_change_finishes_active_stretch,

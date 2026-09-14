@@ -1,8 +1,9 @@
-import { BarChart3, CalendarDays, Home, UserRound } from 'lucide-react'
+import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const items = [
-  { to: '/dashboard', label: '홈', icon: Home },
+  { to: '/exercise', label: '홈', icon: Dumbbell },
+  { to: '/dashboard', label: '대시', icon: LayoutDashboard },
   { to: '/history', label: '기록', icon: CalendarDays },
   { to: '/statistics', label: '통계', icon: BarChart3 },
   { to: '/profile', label: '프로필', icon: UserRound },

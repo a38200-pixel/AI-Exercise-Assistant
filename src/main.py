@@ -3,6 +3,7 @@
 import argparse
 import sys
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ if __package__ in (None, ""):
 import cv2
 import numpy as np
 
-from config.settings import BBOX_PADDING, SHOW_SMOOTHING_DEBUG
+from config.settings import BBOX_PADDING
 from src.api_client import WorkoutUploader, create_api_client_from_environment
 from src.camera import Camera
 from src.exercise_counter import (
@@ -32,6 +33,29 @@ WINDOW_NAME = "AI Exercise Assistant"
 WARMUP_FRAMES = 30
 YOLO_ONLY_BASELINE_FPS = 29.44
 PREVIOUS_END_TO_END_FPS = 15.89
+
+# 33개 landmark는 분류 입력에 그대로 사용하고, 화면에는 얼굴(0~10)을 제외한
+# 몸 관절만 표시한다.
+BODY_LANDMARK_INDICES = tuple(range(11, 33))
+BODY_CONNECTIONS = (
+    (11, 12),
+    (11, 13), (13, 15),
+    (12, 14), (14, 16),
+    (15, 17), (17, 19), (19, 15), (15, 21),
+    (16, 18), (18, 20), (20, 16), (16, 22),
+    (11, 23), (12, 24), (23, 24),
+    (23, 25), (25, 27), (27, 29), (29, 31), (27, 31),
+    (24, 26), (26, 28), (28, 30), (30, 32), (28, 32),
+)
+ALLOWED_DISPLAY_POSES = frozenset({"stand", "squat", "stretch"})
+
+INK = (14, 17, 11)
+SURFACE = (21, 26, 17)
+ELEVATED = (28, 35, 24)
+LIME = (99, 255, 183)
+MUTED_LIME = (86, 181, 126)
+WHITE = (245, 247, 246)
+MUTED_TEXT = (145, 154, 148)
 
 
 def add_bbox_padding(
@@ -96,61 +120,65 @@ def classify_detected_people(
     return person_results, mediapipe_seconds, xgboost_seconds
 
 
-def draw_landmark_points(
+def _landmark_frame_points(
     frame: np.ndarray,
     landmarks: list[Any],
     padded_bbox: tuple[int, int, int, int],
-) -> None:
-    """Crop 정규화 좌표를 원본 frame 좌표로 변환해 점으로 표시한다."""
+) -> dict[int, tuple[int, int]]:
+    """Body landmark만 crop 좌표에서 원본 frame 좌표로 변환한다."""
     padded_x1, padded_y1, padded_x2, padded_y2 = padded_bbox
     crop_width = padded_x2 - padded_x1
     crop_height = padded_y2 - padded_y1
     image_height, image_width = frame.shape[:2]
 
-    for landmark in landmarks:
+    points: dict[int, tuple[int, int]] = {}
+    for index in BODY_LANDMARK_INDICES:
+        landmark = landmarks[index]
         frame_x = padded_x1 + int(landmark.x * crop_width)
         frame_y = padded_y1 + int(landmark.y * crop_height)
         frame_x = min(max(frame_x, 0), image_width - 1)
         frame_y = min(max(frame_y, 0), image_height - 1)
-        cv2.circle(frame, (frame_x, frame_y), 3, (0, 215, 255), -1)
+        points[index] = (frame_x, frame_y)
+    return points
 
 
-def draw_person_results(frame: np.ndarray, person_results: list[dict[str, Any]]) -> None:
-    for person_result in person_results:
-        x1, y1, x2, y2 = person_result["bbox"]
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (40, 220, 40), 2)
+def draw_body_pose(
+    frame: np.ndarray,
+    landmarks: list[Any],
+    padded_bbox: tuple[int, int, int, int],
+) -> None:
+    """얼굴을 제외한 MediaPipe body skeleton을 FitRoute 색상으로 표시한다."""
+    if len(landmarks) < 33:
+        return
+    points = _landmark_frame_points(frame, landmarks, padded_bbox)
 
-        landmarks = person_result["landmarks"]
-        prediction = person_result["prediction"]
-        smoothing_state = person_result.get("smoothing_state")
-
-        # 주 사용자는 debug 표시 여부와 관계없이 stable 결과를 bbox에 표시한다.
-        if smoothing_state is not None and smoothing_state["stable_label"] is not None:
-            label_text = (
-                f"Stable {smoothing_state['stable_label']} "
-                f"{smoothing_state['stable_confidence'] * 100:.1f}%"
-            )
-            label_color = (40, 220, 40)
-        elif landmarks is None or prediction is None:
-            label_text = "Pose not detected"
-            label_color = (0, 165, 255)
-        else:
-            label_text = f"{prediction['label']} {prediction['confidence'] * 100:.1f}%"
-            label_color = (40, 220, 40)
-
-        if landmarks is not None:
-            draw_landmark_points(frame, landmarks, person_result["padded_bbox"])
-
-        cv2.putText(
+    # 선을 먼저 그리고 관절점을 위에 올려 관절 구조가 또렷하게 보이게 한다.
+    for start_index, end_index in BODY_CONNECTIONS:
+        cv2.line(
             frame,
-            label_text,
-            (x1, max(24, y1 - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            label_color,
+            points[start_index],
+            points[end_index],
+            MUTED_LIME,
             2,
             cv2.LINE_AA,
         )
+    for index in BODY_LANDMARK_INDICES:
+        cv2.circle(frame, points[index], 4, INK, -1, cv2.LINE_AA)
+        cv2.circle(frame, points[index], 2, LIME, -1, cv2.LINE_AA)
+
+
+def draw_person_results(
+    frame: np.ndarray,
+    primary_person: dict[str, Any] | None,
+) -> None:
+    """사용자-facing 화면에는 주 사용자의 body skeleton만 표시한다."""
+    if primary_person is None or primary_person["landmarks"] is None:
+        return
+    draw_body_pose(
+        frame,
+        primary_person["landmarks"],
+        primary_person["padded_bbox"],
+    )
 
 
 def find_primary_person_index(person_results: list[dict[str, Any]]) -> int | None:
@@ -195,58 +223,16 @@ def update_primary_person_smoothing(
     return primary_person, smoothing_state
 
 
-def draw_smoothing_status(
-    frame: np.ndarray,
-    primary_person: dict[str, Any] | None,
-    smoothing_state: dict[str, Any],
-) -> None:
-    """Raw, Stable, Candidate를 구분해 화면 왼쪽 위에 표시한다."""
-    raw_prediction = primary_person["prediction"] if primary_person is not None else None
-    if raw_prediction is None:
-        raw_text = "Raw    : Pose not detected"
-    else:
-        raw_text = (
-            f"Raw    : {raw_prediction['label']} "
-            f"{raw_prediction['confidence'] * 100:.1f}%"
-        )
-
-    stable_label = smoothing_state["stable_label"]
-    if stable_label is None:
-        stable_text = "Stable : -"
-    else:
-        stable_text = (
-            f"Stable : {stable_label} "
-            f"{smoothing_state['stable_confidence'] * 100:.1f}%"
-        )
-
-    candidate_label = smoothing_state["candidate_label"]
-    if candidate_label is None:
-        candidate_text = "Next   : -"
-    else:
-        candidate_text = (
-            f"Next   : {candidate_label} "
-            f"{smoothing_state['candidate_count']}/{smoothing_state['required_count']}"
-        )
-
-    status_lines = (raw_text, stable_text, candidate_text)
-    for line_index, status_text in enumerate(status_lines):
-        cv2.putText(
-            frame,
-            status_text,
-            (16, 62 + line_index * 28),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
-
-
-def format_duration(duration_seconds: float) -> str:
-    """누적 초를 화면용 MM:SS.s 문자열로 변환한다."""
-    minutes = int(duration_seconds // 60)
-    remaining_seconds = duration_seconds - minutes * 60
-    return f"{minutes:02d}:{remaining_seconds:04.1f}"
+def update_display_pose(
+    stable_pose: str | None,
+    stable_confidence: float,
+    previous_pose: str = "ANALYZING",
+    previous_confidence: float = 0.0,
+) -> tuple[str, float]:
+    """Squat UI에는 허용된 pose만 전달하고 나머지는 마지막 정상값을 유지한다."""
+    if stable_pose in ALLOWED_DISPLAY_POSES:
+        return stable_pose.upper(), float(stable_confidence)
+    return previous_pose, previous_confidence
 
 
 def format_session_duration(duration_seconds: float) -> str:
@@ -259,109 +245,150 @@ def format_session_duration(duration_seconds: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def draw_exercise_status(frame: np.ndarray, exercise_status: dict[str, Any]) -> None:
-    """현재 운동 모드, stable pose, 기록과 state를 화면에 표시한다."""
-    exercise_mode = exercise_status["mode"]
-    stable_pose = exercise_status["stable_pose"] or "-"
-
-    if exercise_mode == SQUAT_MODE:
-        record_text = f"Count  : {exercise_status['squat_count']}"
-    elif exercise_mode == STRETCH_MODE:
-        duration_text = format_duration(exercise_status["stretch_seconds"])
-        record_text = f"Time   : {duration_text}"
-    else:
-        record_text = "Record : -"
-
-    exercise_lines = (
-        f"Mode   : {exercise_mode.upper()}",
-        f"Pose   : {stable_pose}",
-        record_text,
-        f"Step   : {exercise_status['state']}",
-    )
-    for line_index, status_text in enumerate(exercise_lines):
-        cv2.putText(
-            frame,
-            status_text,
-            (16, 158 + line_index * 28),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (255, 230, 120),
-            2,
-            cv2.LINE_AA,
-        )
-
-    image_height = frame.shape[0]
+def _put_ui_text(
+    image: np.ndarray,
+    text: str,
+    origin: tuple[int, int],
+    scale: float,
+    color: tuple[int, int, int] = WHITE,
+    thickness: int = 1,
+) -> None:
     cv2.putText(
-        frame,
-        "[S] Start Session  [E] End Session",
-        (16, max(28, image_height - 68)),
+        image,
+        text,
+        origin,
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (230, 230, 230),
-        1,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        frame,
-        "[1] Squat  [2] Stretch  [0] Idle",
-        (16, max(52, image_height - 42)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (230, 230, 230),
-        1,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        frame,
-        "[R] Reset  [P] Retry Save  [Q/ESC] Quit",
-        (16, max(76, image_height - 16)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (230, 230, 230),
-        1,
+        scale,
+        color,
+        thickness,
         cv2.LINE_AA,
     )
 
 
-def draw_session_status(frame: np.ndarray, session_status: dict[str, Any]) -> None:
-    """운동 모드와 독립적인 Workout Session 상태와 전체 시간을 표시한다."""
-    session_lines = (
-        f"Session: {session_status['status']}",
-        f"Time   : {format_session_duration(session_status['elapsed_seconds'])}",
-    )
-    for line_index, status_text in enumerate(session_lines):
-        cv2.putText(
-            frame,
-            status_text,
-            (16, 284 + line_index * 28),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (120, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+def _workout_ui_status(session_status: str, cloud_status: str) -> tuple[str, tuple[int, int, int]]:
+    if session_status == "ACTIVE":
+        return "ACTIVE", LIME
+    if cloud_status == "SAVED":
+        return "SAVED", LIME
+    if cloud_status == "FAILED":
+        return "RETRY AVAILABLE", (94, 190, 255)
+    return "READY", MUTED_TEXT
 
 
-def draw_cloud_status(frame: np.ndarray, cloud_status: str) -> None:
-    """Draw one unobtrusive cloud upload state without exposing credentials."""
-    colors = {
-        "READY": (190, 255, 120),
-        "SAVING": (120, 255, 255),
-        "SAVED": (80, 230, 80),
-        "FAILED": (80, 80, 255),
-        "DISABLED": (160, 160, 160),
-    }
-    image_width = frame.shape[1]
-    cv2.putText(
-        frame,
-        f"Cloud: {cloud_status}",
-        (max(16, image_width - 220), 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        colors.get(cloud_status, (230, 230, 230)),
-        2,
-        cv2.LINE_AA,
+@lru_cache(maxsize=4)
+def _workout_ui_template(
+    frame_height: int,
+    frame_width: int,
+    panel_width: int,
+    header_height: int,
+    footer_height: int,
+) -> np.ndarray:
+    """해상도별 고정 HUD를 한 번만 그려 매 frame의 폰트 렌더링을 줄인다."""
+    canvas = np.full(
+        (frame_height + header_height + footer_height, frame_width + panel_width, 3),
+        INK,
+        dtype=np.uint8,
     )
+    panel_x = frame_width
+    cv2.rectangle(
+        canvas,
+        (panel_x, header_height),
+        (frame_width + panel_width - 1, header_height + frame_height),
+        SURFACE,
+        -1,
+    )
+    cv2.line(canvas, (panel_x, header_height), (panel_x, header_height + frame_height), ELEVATED, 1)
+    cv2.line(canvas, (0, header_height - 1), (canvas.shape[1], header_height - 1), ELEVATED, 1)
+    cv2.line(canvas, (0, header_height + frame_height), (canvas.shape[1], header_height + frame_height), ELEVATED, 1)
+
+    _put_ui_text(canvas, "FitRoute", (24, 42), 0.83, WHITE, 2)
+    _put_ui_text(canvas, ".", (135, 42), 0.83, LIME, 3)
+
+    left = panel_x + 26
+    right = frame_width + panel_width - 26
+    _put_ui_text(canvas, "SESSION", (left, header_height + 42), 0.42, MUTED_TEXT, 1)
+    cv2.line(canvas, (left, header_height + 88), (right, header_height + 88), ELEVATED, 1)
+
+    metric_y = header_height + 126
+    metric_gap = max(76, min(112, max(280, frame_height - 150) // 4))
+    for label in ("SESSION TIME", "SQUAT COUNT", "CURRENT POSE", "CONFIDENCE"):
+        _put_ui_text(canvas, label, (left, metric_y), 0.39, MUTED_TEXT, 1)
+        metric_y += metric_gap
+
+    footer_y = header_height + frame_height + 34
+    _put_ui_text(canvas, "S  START", (24, footer_y), 0.45, WHITE, 1)
+    _put_ui_text(canvas, "E  END WORKOUT", (132, footer_y), 0.45, WHITE, 1)
+    _put_ui_text(canvas, "R  RESET", (300, footer_y), 0.45, WHITE, 1)
+    _put_ui_text(canvas, "P  RETRY SAVE", (412, footer_y), 0.45, MUTED_TEXT, 1)
+    _put_ui_text(canvas, "Q / ESC  QUIT", (canvas.shape[1] - 145, footer_y), 0.42, MUTED_TEXT, 1)
+    return canvas
+
+
+def compose_workout_ui(
+    frame: np.ndarray,
+    exercise_status: dict[str, Any],
+    session_status: dict[str, Any],
+    cloud_status: str,
+    display_pose: str,
+    display_confidence: float,
+    tracking_active: bool,
+) -> np.ndarray:
+    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다."""
+    frame_height, frame_width = frame.shape[:2]
+    header_height = 64
+    footer_height = 54
+    panel_width = max(270, min(350, int(frame_width * 0.32)))
+    canvas = _workout_ui_template(
+        frame_height,
+        frame_width,
+        panel_width,
+        header_height,
+        footer_height,
+    ).copy()
+    canvas[header_height:header_height + frame_height, :frame_width] = frame
+
+    panel_x = frame_width
+
+    # Header
+    mode_text = exercise_status["mode"].upper()
+    mode_width = cv2.getTextSize(mode_text, cv2.FONT_HERSHEY_SIMPLEX, 0.66, 2)[0][0]
+    _put_ui_text(canvas, mode_text, ((canvas.shape[1] - mode_width) // 2, 41), 0.66, WHITE, 2)
+    ai_text = "AI ACTIVE" if tracking_active else "SEARCHING"
+    ai_color = LIME if tracking_active else MUTED_TEXT
+    ai_width = cv2.getTextSize(ai_text, cv2.FONT_HERSHEY_SIMPLEX, 0.54, 1)[0][0]
+    ai_x = canvas.shape[1] - ai_width - 25
+    cv2.circle(canvas, (ai_x - 12, 34), 4, ai_color, -1, cv2.LINE_AA)
+    _put_ui_text(canvas, ai_text, (ai_x, 39), 0.54, ai_color, 1)
+
+    # Right session panel
+    left = panel_x + 26
+    status_text, status_color = _workout_ui_status(session_status["status"], cloud_status)
+    _put_ui_text(canvas, status_text, (left, header_height + 68), 0.60, status_color, 2)
+
+    metric_y = header_height + 126
+    metrics = (
+        (format_session_duration(session_status["elapsed_seconds"]), 0.93),
+        (str(exercise_status["squat_count"]), 1.18),
+        (display_pose, 0.78),
+        (f"{display_confidence * 100:.1f}%" if display_confidence > 0 else "--", 0.78),
+    )
+    available_height = max(280, frame_height - 150)
+    metric_gap = max(76, min(112, available_height // len(metrics)))
+    for value, value_scale in metrics:
+        _put_ui_text(canvas, value, (left, metric_y + 33), value_scale, WHITE, 2)
+        metric_y += metric_gap
+
+    save_label = {
+        "READY": "SAVE READY",
+        "SAVING": "SAVING...",
+        "SAVED": "WORKOUT SAVED",
+        "FAILED": "SAVE FAILED - PRESS P",
+        "DISABLED": "LOCAL ONLY",
+    }.get(cloud_status, "SAVE READY")
+    save_color = (105, 105, 235) if cloud_status == "FAILED" else (LIME if cloud_status == "SAVED" else MUTED_TEXT)
+    _put_ui_text(canvas, save_label, (left, header_height + frame_height - 27), 0.40, save_color, 1)
+
+    return canvas
 
 
 def print_workout_summary(summary: dict[str, Any]) -> None:
@@ -507,6 +534,12 @@ def print_benchmark(benchmark: dict[str, Any]) -> None:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--exercise",
+        choices=(SQUAT_MODE, STRETCH_MODE, IDLE_MODE),
+        default=SQUAT_MODE,
+        help="시작할 운동 모드입니다. Web Exercise Home의 Squat 선택은 squat을 전달합니다.",
+    )
+    parser.add_argument(
         "--benchmark-seconds",
         type=float,
         default=None,
@@ -526,6 +559,7 @@ def main() -> None:
     pose_estimator = PoseEstimator()
     prediction_smoother = PredictionSmoother()
     exercise_counter = ExerciseCounter()
+    exercise_counter.set_mode(arguments.exercise, time.perf_counter())
     workout_session = WorkoutSession()
     workout_uploader = WorkoutUploader(create_api_client_from_environment())
     print_startup_information(detector, pose_classifier)
@@ -537,6 +571,8 @@ def main() -> None:
 
     frame_count = 0
     measurement_started: float | None = None
+    display_pose = "ANALYZING"
+    display_confidence = 0.0
     benchmark: dict[str, Any] = {
         "yolo": [],
         "mediapipe": [],
@@ -577,28 +613,27 @@ def main() -> None:
             current_time = time.perf_counter()
             stable_pose = smoothing_state["stable_label"]
             exercise_counter.update(stable_pose, current_time)
+            display_pose, display_confidence = update_display_pose(
+                stable_pose,
+                smoothing_state["stable_confidence"],
+                display_pose,
+                display_confidence,
+            )
             exercise_status = exercise_counter.get_status(current_time)
             workout_session.update(current_time)
             session_status = workout_session.get_status(current_time)
             exercise_seconds = time.perf_counter() - exercise_started
 
             draw_started = time.perf_counter()
-            draw_person_results(frame, person_results)
-            if SHOW_SMOOTHING_DEBUG:
-                draw_smoothing_status(frame, primary_person, smoothing_state)
-            draw_exercise_status(frame, exercise_status)
-            draw_session_status(frame, session_status)
-            draw_cloud_status(frame, workout_uploader.cloud_status)
-
-            cv2.putText(
+            draw_person_results(frame, primary_person)
+            display_frame = compose_workout_ui(
                 frame,
-                f"YOLO26n {detector.backend}",
-                (16, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.75,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
+                exercise_status,
+                session_status,
+                workout_uploader.cloud_status,
+                display_pose,
+                display_confidence,
+                primary_person is not None and primary_person["landmarks"] is not None,
             )
             draw_seconds = time.perf_counter() - draw_started
             total_seconds = time.perf_counter() - pipeline_started
@@ -615,7 +650,7 @@ def main() -> None:
                 benchmark["draw"].append(draw_seconds)
                 benchmark["total"].append(total_seconds)
 
-            cv2.imshow(WINDOW_NAME, frame)
+            cv2.imshow(WINDOW_NAME, display_frame)
             pressed_key = cv2.waitKey(1) & 0xFF
             should_quit = handle_keyboard_input(
                 pressed_key,

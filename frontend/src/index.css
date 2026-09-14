@@ -52,6 +52,37 @@
   .mobile-metric strong { @apply mt-2 text-2xl font-extrabold text-white; }
   .mobile-metric small { @apply text-xs; }
   .cta-banner { @apply mt-5 flex flex-col items-start justify-between gap-5 rounded-3xl border border-lime-strong/15 bg-[linear-gradient(105deg,#ecffd8,#f8fbf4)] p-6 sm:flex-row sm:items-center; }
+  .exercise-home-page { @apply min-h-screen bg-ink px-5 py-6 text-white sm:px-8 sm:py-8 lg:mx-5 lg:my-5 lg:min-h-[calc(100vh-2.5rem)] lg:rounded-[2rem] xl:px-10 xl:py-10; }
+  .exercise-home-page > header h1 { @apply text-white; }
+  .exercise-home-page > header p { @apply text-white/45; }
+  .exercise-home-page > header .icon-button { @apply border-white/10 bg-white/5 text-white hover:bg-white/10; }
+  .exercise-home-page > header .avatar { @apply border-lime/20 bg-lime text-forest; }
+  .exercise-intro { @apply relative flex flex-col items-start justify-between gap-6 overflow-hidden rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_90%_0%,rgba(183,255,99,.14),transparent_35%),#111a15] p-6 sm:flex-row sm:items-end sm:p-8; }
+  .exercise-intro::after { content:""; position:absolute; right:-3rem; bottom:-5rem; width:15rem; height:15rem; border:1px solid rgba(183,255,99,.08); border-radius:50%; box-shadow:0 0 0 2.5rem rgba(183,255,99,.025),0 0 0 5rem rgba(183,255,99,.015); pointer-events:none; }
+  .exercise-intro h2 { @apply mt-3 max-w-2xl text-2xl font-black tracking-[-0.035em] sm:text-3xl; }
+  .exercise-intro p:not(.eyebrow) { @apply mt-3 text-sm text-white/48 sm:text-base; }
+  .exercise-live-pill { @apply relative z-10 inline-flex shrink-0 items-center gap-2 rounded-full border border-lime/15 bg-lime/7 px-3 py-2 text-[10px] font-extrabold tracking-wide text-lime; }
+  .exercise-live-pill i { @apply h-1.5 w-1.5 rounded-full bg-lime; box-shadow:0 0 10px #b7ff63; }
+  .exercise-card-grid { @apply mt-5 grid gap-4 md:grid-cols-3; }
+  .exercise-card { @apply relative flex min-h-[19rem] flex-col overflow-hidden rounded-3xl border border-white/8 bg-surface p-5 shadow-xl sm:p-6; transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease,opacity .2s ease; }
+  .exercise-card:not(.exercise-card-disabled):hover { @apply -translate-y-1 border-lime/25; }
+  .exercise-card-selected { @apply border-lime/65 bg-[radial-gradient(circle_at_85%_8%,rgba(183,255,99,.13),transparent_32%),#111a15] shadow-[0_18px_60px_rgba(183,255,99,.09)]; }
+  .exercise-card-disabled { @apply bg-[#101713] opacity-55; }
+  .exercise-card-icon { @apply inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-lime/12 bg-lime/8 text-lime; }
+  .exercise-available, .exercise-coming { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[9px] font-extrabold; }
+  .exercise-available { @apply border border-lime/15 bg-lime/8 text-lime; }
+  .exercise-coming { @apply border border-white/8 bg-white/5 text-white/38; }
+  .exercise-card h3 { @apply mt-1 text-2xl font-black tracking-tight; }
+  .exercise-card-description { @apply mt-3 flex-1 text-sm leading-6 text-white/43; }
+  .exercise-select-button, .exercise-disabled-button { @apply mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold; }
+  .exercise-select-button { @apply border border-lime/25 bg-lime/8 text-lime hover:border-lime/50 hover:bg-lime/12; }
+  .exercise-card-selected .exercise-select-button { @apply border-lime bg-lime text-ink; }
+  .exercise-disabled-button { @apply border border-white/8 bg-white/[.025] text-white/30; }
+  .exercise-selection { @apply mt-5 flex flex-col items-stretch justify-between gap-5 rounded-3xl border border-white/8 bg-surface p-5 sm:flex-row sm:items-center sm:p-6; }
+  .exercise-selection-active { @apply border-lime/20; }
+  .exercise-selection h3 { @apply mt-2 text-xl font-black tracking-tight; }
+  .exercise-selection p:last-child { @apply mt-1.5 text-sm text-white/43; }
+  .exercise-selection .btn-primary:disabled { @apply bg-white/8 text-white/30 shadow-none; }
   .skeleton { background: linear-gradient(100deg,#f7f9f5 20%,#e9eee7 40%,#f7f9f5 60%); background-size: 300% 100%; animation: shimmer 1.4s infinite; }
   .calendar-arrow { @apply inline-flex h-9 w-9 items-center justify-center rounded-full border border-forest/10 text-forest hover:bg-mist; }
   .calendar-grid { @apply grid grid-cols-7 gap-1 sm:gap-2; }

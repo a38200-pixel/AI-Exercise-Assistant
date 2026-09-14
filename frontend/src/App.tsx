@@ -8,6 +8,7 @@ const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const ExerciseHomePage = lazy(() => import('./pages/ExerciseHomePage').then((module) => ({ default: module.ExerciseHomePage })))
 const HistoryPage = lazy(() => import('./pages/HistoryPage').then((module) => ({ default: module.HistoryPage })))
 const WorkoutDetailPage = lazy(() => import('./pages/WorkoutDetailPage').then((module) => ({ default: module.WorkoutDetailPage })))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage').then((module) => ({ default: module.StatisticsPage })))
@@ -20,6 +21,7 @@ export default function App() {
     <Route path="/signup" element={<SignupPage />} />
     <Route element={<ProtectedRoute />}>
       <Route element={<AppShell />}>
+        <Route path="/exercise" element={<ExerciseHomePage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:date" element={<WorkoutDetailPage />} />

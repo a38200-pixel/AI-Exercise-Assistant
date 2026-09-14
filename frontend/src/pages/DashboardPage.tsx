@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { WeeklyWorkoutChart } from '../components/charts/WeeklyWorkoutChart'
 import { CardSkeleton, EmptyState, ErrorState } from '../components/common/States'
-import { WorkoutInfoModal } from '../components/common/WorkoutInfoModal'
 import { RecentSessionList } from '../components/dashboard/RecentSessionList'
 import { SummaryCards } from '../components/dashboard/SummaryCards'
 import { WorkoutTimeRing } from '../components/dashboard/WorkoutTimeRing'
@@ -24,7 +23,6 @@ export function DashboardPage() {
   const [sessionDate, setSessionDate] = useState(today)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
   const { signOut } = useAuth()
   const navigate = useNavigate()
 
@@ -64,9 +62,8 @@ export function DashboardPage() {
           <section className="content-card"><div className="card-heading"><div><h2 className="section-title">주간 운동 현황</h2><p>최근 7일의 운동 시간(분)과 스쿼트 횟수</p></div><Link to="/statistics" className="text-link">통계 보기 <ArrowRight size={15} /></Link></div><WeeklyWorkoutChart data={weekly} /></section>
           <section className="content-card"><div className="card-heading"><div><h2 className="section-title">최근 운동 세션</h2><p>{sessionDate} 원본 기록</p></div><Link to="/history" className="text-link">더 보기 <ArrowRight size={15} /></Link></div><RecentSessionList sessions={sessions} date={sessionDate} /></section>
         </div>
-        <section className="cta-banner"><div><p className="eyebrow text-forest">DESKTOP AI WORKOUT</p><h2 className="mt-2 text-xl font-extrabold text-ink">꾸준함이 만드는 놀라운 변화</h2><p className="mt-1 text-sm text-muted">AI 프로그램의 운동 기록이 이곳에 안전하게 쌓입니다.</p></div><button className="btn-dark" onClick={() => setModalOpen(true)}><Play size={17} fill="currentColor" /> 운동 시작 안내</button></section>
+        <section className="cta-banner"><div><p className="eyebrow text-forest">DESKTOP AI WORKOUT</p><h2 className="mt-2 text-xl font-extrabold text-ink">꾸준함이 만드는 놀라운 변화</h2><p className="mt-1 text-sm text-muted">AI 프로그램의 운동 기록이 이곳에 안전하게 쌓입니다.</p></div><Link className="btn-dark" to="/exercise"><Play size={17} fill="currentColor" /> 운동 선택하기</Link></section>
       </>}
-      {modalOpen && <WorkoutInfoModal close={() => setModalOpen(false)} />}
     </div>
   )
 }
