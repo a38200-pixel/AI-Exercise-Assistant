@@ -242,15 +242,30 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 
 ### Windows AI Client bundle 최적화 현황
 
-기존 성공 bundle을 보존하고 최적화 항목을 한 번에 하나씩 제외한 별도 candidate로 검증했습니다.
+6-B 최적화는 완료되었습니다. 기존 성공 bundle을 보존하고 최적화 항목을 한 번에 하나씩 제외한 별도 candidate로 검증했으며, 최종 설치 대상 baseline은 `dist_candidate_protoc/FitRouteAIClient/`입니다.
 
 | 단계 | Bundle 크기 | 이전 단계 대비 | Original 대비 |
 |---|---:|---:|---:|
 | Original | 6.794548 GiB | - | - |
 | TensorRT Builder resource 8개 제거 | 5.020208 GiB | -1.774341 GiB | 약 -26.1% |
 | Polars runtime 제거 | 4.849181 GiB | -0.171026 GiB | 약 -28.6% |
+| `torch/bin/protoc.exe` 제거 (최종) | **4.846573 GiB** | -0.002608 GiB | **약 -28.67%** |
 
-Original 대비 누적 절감량은 약 **1.945 GiB**, 총 감소율은 약 **28.6%**입니다. TensorRT Builder 제거 bundle은 Camera, YOLO TensorRT inference, Launcher, Desktop Auth, Render/Supabase 저장과 Web Dashboard 반영까지 검증했습니다. Polars 제거 bundle은 build, `--help`, 제한 PATH `--diagnose-runtime`, XGBoost NumPy prediction과 핵심 DLL 검사를 통과했으며 실제 Camera 검증 전 candidate 상태입니다. 세부 분석과 정확한 bytes/MiB 수치는 [AI Client Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md)를 참고하세요.
+최종 크기는 **5,203,968,114 bytes / 4,962.890734 MiB / 4.846573 GiB**입니다. Original 대비 **2,091,622,330 bytes / 1.947975 GiB**를 절감했고 총 감소율은 **28.669679%**입니다. 최종 baseline에는 TensorRT inference runtime/plugin/parser와 Torch/CUDA runtime, OpenCV, MediaPipe, XGBoost 및 네 개 모델이 유지됩니다.
+
+최종 baseline은 다음 실제 흐름을 통과했습니다.
+
+- `--help`, 제한 PATH `--diagnose-runtime`
+- Camera와 YOLO26n TensorRT inference
+- MediaPipe pose, XGBoost classification, Squat count
+- Web → Protocol → Launcher → Desktop Auth → Frozen AI Client
+- Render API 저장, Supabase 반영, Web Dashboard 조회
+
+`torch.testing` 전체 제거 실험은 PyTorch 2.11의 최상위 `torch/__init__.py`가 이를 직접 import하여 `import torch` 자체가 실패했으므로 최종 baseline에 합치지 않았습니다. 따라서 `torch.testing`은 **KEEP**입니다.
+
+6-B-3C에서 75.609초 동안 실제 Camera/TensorRT inference 프로세스를 100ms 간격으로 추적해 전체 361개 모듈을 관찰했으며, Bundle native 331개 중 218개가 실제 로드되었습니다. 특히 CUDA 25/25, Torch native 12/12, TensorRT 4/4가 모두 로드되었고 MediaPipe 1/1, XGBoost 1/1과 `torch_cuda.dll`의 직접 PE dependency 11개도 전부 관찰되었습니다. `NOT_OBSERVED` 중 가장 큰 파일은 OpenCV FFmpeg DLL 약 29.446 MiB였으며, 우선 검토 기준인 50~100 MiB 이상의 대형 미관찰 native DLL은 없었습니다. 현재 Ultralytics + Torch 구조에서 추가 native 제거는 회귀 위험 대비 절감 효과가 작아 6-B 최적화를 여기서 종료합니다.
+
+세부 수치는 [AI Client Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md), [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md), [Runtime Module Trace](docs/runtime_module_trace.md)를 참고하세요. Direct TensorRT 전용 구조는 이번 최적화 범위가 아닌 별도 아키텍처 단계입니다.
 
 Launcher는 `launcher.log`에 token 값 없이 lifecycle만 기록합니다. Access Token과 API URL은 child environment에만 전달하며 argv는 다음과 같습니다.
 
@@ -349,13 +364,13 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. 사용자가 실제 `fitroute://` 상태에서 Web → Launcher → Desktop Login → Frozen Client → Camera → Render 저장 E2E 확인
-2. Inno Setup에서 Launcher와 `ai_client/` onedir bundle을 함께 설치하도록 installer 완성 및 설치/제거 검증
-3. 공개 Release asset, checksum, code signing 준비
-4. clean PC의 NVIDIA driver/GPU 호환성 및 TensorRT engine 호환성 검증
-5. HTTPX/Rich의 선택 의존성으로 커진 Launcher bundle을 별도 최소 빌드 환경에서 최적화
+1. Inno Setup에서 Launcher와 최종 `ai_client/` onedir baseline을 함께 설치하도록 installer 제작
+2. 설치/업그레이드/제거, `fitroute://` Protocol 등록과 설치 경로 기반 Launcher 실행 검증
+3. clean PC에서 NVIDIA Driver/GPU 및 TensorRT engine 호환성 검증
+4. 공개 Release asset, checksum과 code signing 준비
+5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
 
-독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드 및 실제 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. 실제 Camera에서 두 차례 Frozen EXE 실행이 성공했고, 5단계에서 Launcher가 이 EXE를 직접 실행하도록 전환했습니다.
+독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 다음 작업 기준점은 최종 4.846573 GiB baseline을 포함하는 Inno Setup Installer입니다.
 
 ## Backend
 
