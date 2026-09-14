@@ -203,7 +203,7 @@ python src/main.py --benchmark-seconds 30
 
 ## Web → Windows Desktop Launcher
 
-Vercel의 운동 선택 화면에서 `fitroute://start?exercise=squat` custom protocol을 호출해 Windows Desktop Launcher를 열고, 기존 `vision_ai` 환경의 AI Client를 실행할 수 있습니다.
+Vercel의 운동 선택 화면에서 `fitroute://start?exercise=squat` custom protocol을 호출해 Windows Desktop Launcher를 열고, 독립형 Frozen AI Client를 실행할 수 있습니다.
 
 ```text
 React /exercise
@@ -211,7 +211,7 @@ React /exercise
   → FitRouteLauncher.exe
   → Windows Credential Manager refresh 또는 Desktop Login
   → access token을 child environment로만 전달
-  → src/main.py --exercise squat --auto-start-session
+  → FitRouteAIClient.exe --exercise squat --auto-start-session
   → Camera 준비 완료 후 Workout Session 자동 시작
 ```
 
@@ -224,13 +224,12 @@ C:\path\to\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.
 C:\path\to\vision_ai\python.exe -m pip install pyinstaller
 powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
   -PythonExecutable "C:\path\to\vision_ai\python.exe" `
-  -ProjectRoot "C:\path\to\AI-Exercise-Assistant" `
   -ApiBaseUrl "https://fitroute-api.onrender.com" `
   -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
   -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
 ```
 
-생성물은 `desktop_launcher/dist/FitRouteLauncher.exe`와 같은 폴더의 `config.json`입니다. `config.json`에는 개발 PC의 절대 경로와 Supabase publishable key만 들어가며 Git에서 제외됩니다. Service role/secret key는 Launcher와 Frontend에 사용하면 안 됩니다.
+생성물은 `desktop_launcher/dist/FitRouteLauncher.exe`와 같은 폴더의 `config.json`입니다. 기본 개발 build는 AI Client를 `..\..\dist\FitRouteAIClient\FitRouteAIClient.exe` 상대 경로로 참조합니다. 최종 설치 구조에서는 Launcher 옆 `ai_client\FitRouteAIClient.exe`를 사용합니다. 런타임 config에는 Python executable, Conda 환경, repository root나 `src/main.py` 경로가 없습니다. Supabase publishable key는 들어가지만 service role/secret key는 Launcher와 Frontend에 사용하면 안 됩니다.
 
 Launcher 관련 테스트는 실제 Registry, Supabase Login, Credential 입력 또는 Webcam 실행 없이 수행합니다.
 
@@ -239,7 +238,13 @@ python -m pytest tests/test_desktop_auth.py -q -p no:cacheprovider
 python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py -q -p no:cacheprovider
 ```
 
-현재 검증 결과는 Auth 9개, Launcher/auto-start 20개 테스트 통과입니다. 생성된 onefile EXE는 `--help` startup/import smoke test를 통과했으며 Webcam은 실행하지 않았습니다. Protocol 등록/제거, Desktop 인증, installer와 실제 E2E 절차는 [Desktop Launcher 개발 문서](docs/desktop_client_launcher.md)를 참고하세요.
+5단계 검증에서 Launcher/Auth/auto-start/path/runtime diagnostic 관련 테스트 39개와 전체 root suite 85개가 통과했습니다. 재빌드한 onefile Launcher(63,476,752 bytes)는 `--help`와 `--dry-run`이 모두 exit 0이었고, 상대 경로가 실제 Frozen AI Client를 찾는 것도 확인했습니다. AI Client의 `--diagnose-runtime`도 PASS였으며 이 자동 검증에서는 Webcam을 실행하지 않았습니다. Protocol 등록/제거, Desktop 인증과 실제 E2E 절차는 [Desktop Launcher 개발 문서](docs/desktop_client_launcher.md)를 참고하세요.
+
+Launcher는 `launcher.log`에 token 값 없이 lifecycle만 기록합니다. Access Token과 API URL은 child environment에만 전달하며 argv는 다음과 같습니다.
+
+```text
+FitRouteAIClient.exe --exercise squat --auto-start-session
+```
 
 ### Launcher 개발 중 실패와 해결 기록
 
@@ -332,13 +337,13 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. 실제 `fitroute://` 등록 상태에서 Web → Launcher → Desktop Login → Camera → Render 저장 E2E 확인
-2. Inno Setup으로 개발 PC용 installer 생성 및 설치/제거 검증
+1. 사용자가 실제 `fitroute://` 상태에서 Web → Launcher → Desktop Login → Frozen Client → Camera → Render 저장 E2E 확인
+2. Inno Setup에서 Launcher와 `ai_client/` onedir bundle을 함께 설치하도록 installer 완성 및 설치/제거 검증
 3. 공개 Release asset, checksum, code signing 준비
-4. Python runtime·AI 모델·CUDA/TensorRT를 포함하는 일반 사용자 배포 전략 확정
+4. clean PC의 NVIDIA driver/GPU 호환성 및 TensorRT engine 호환성 검증
 5. HTTPX/Rich의 선택 의존성으로 커진 Launcher bundle을 별도 최소 빌드 환경에서 최적화
 
-독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경과 PyInstaller onedir 빌드 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. OpenCV distribution metadata 차이는 엄격한 validator로 관리합니다. 첫 `FitRouteAIClient.exe`는 Camera 없는 frozen 진단까지 통과했으며, 실제 Camera/inference는 다음 수동 검증 단계로 남아 있습니다.
+독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드 및 실제 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. 실제 Camera에서 두 차례 Frozen EXE 실행이 성공했고, 5단계에서 Launcher가 이 EXE를 직접 실행하도록 전환했습니다.
 
 ## Backend
 

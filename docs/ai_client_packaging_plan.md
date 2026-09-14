@@ -601,4 +601,31 @@ PyQt5, PyQt6, pygame, IPython, Jupyter, black, pytest와 lap은 dist에 없다.
 
 Spec과 build script는 Repository 상대 위치와 PyInstaller가 제공하는 `SPECPATH`, `DISTPATH`를 사용하며 사용자명, Conda 환경 절대경로를 runtime config로 저장하지 않는다. Analysis TOC와 debug metadata에는 build source 절대경로가 기록될 수 있지만 실행 시 참조하는 경로는 아니다. 제한된 PATH frozen diagnostic 성공으로 Python/Conda 및 외부 TensorRT 설치 경로가 startup/import dependency가 아님을 확인했다.
 
-아직 검증하지 않은 항목은 실제 Webcam, YOLO TensorRT engine inference, MediaPipe image inference, HUD, Workout API HTTPS POST 및 clean VM 실행이다. 다음 단계에서는 사용자가 `dist\FitRouteAIClient\FitRouteAIClient.exe --exercise squat`을 직접 실행해 Camera pipeline을 검증해야 한다. 이 수동 검증 전에는 Launcher를 새 EXE로 전환하지 않는다.
+## 4단계: 실제 Camera 수동 검증
+
+사용자가 `dist\FitRouteAIClient\FitRouteAIClient.exe --exercise squat`을 직접 두 차례 실행했다. 두 실행 모두 Camera, YOLO26n TensorRT, MediaPipe, XGBoost, Exercise Logic, HUD와 실제 Squat session이 정상 동작했다.
+
+| 실행 | Processed Frames | End-to-End FPS | Inference FPS |
+|---|---:|---:|---:|
+| 1차 | 1,765 | 16.88 | 20.28 |
+| 2차 | 691 | 15.87 | 21.04 |
+
+Launcher 없이 직접 실행한 2차 테스트의 `Save failed`는 `FITROUTE_ACCESS_TOKEN`이 없는 예상 결과였다. Camera pipeline 실패가 아니며, 5단계에서 Desktop Auth가 만든 token을 child environment로 전달해 해결하도록 했다.
+
+## 5단계: Launcher와 Frozen AI Client 연동
+
+검증일: 2026-09-14. Launcher runtime에서 `python_executable`, `project_root`, `entry_script`를 제거하고 `ai_client_executable` 하나로 교체했다. 상대 경로는 frozen Launcher의 `sys.executable` 부모를 기준으로 해석한다.
+
+```text
+fitroute://start?exercise=squat
+  -> FitRouteLauncher.exe
+  -> Desktop Supabase Auth / Credential Manager
+  -> child environment: FITROUTE_ACCESS_TOKEN, FITROUTE_API_BASE_URL
+  -> FitRouteAIClient.exe --exercise squat --auto-start-session
+```
+
+개발 build의 config는 `desktop_launcher/dist`에서 `..\..\dist\FitRouteAIClient\FitRouteAIClient.exe`를 참조한다. 최종 설치 구조의 기본 예시는 `ai_client\FitRouteAIClient.exe`다. EXE가 없으면 Python이나 source로 fallback하지 않는다. `shell=False`, protocol/command/exercise whitelist, named mutex, Desktop Auth, refresh token Credential Manager 저장과 child-only access token 전달은 유지했다.
+
+Launcher onefile 재빌드 결과는 63,476,752 bytes다. noconsole build에서 stdout/stderr가 없는 경우를 위한 최소 null stream을 추가해 `argparse --help`가 숨겨진 예외 창을 남기지 않게 했다. `--help`와 `--dry-run`은 exit 0이고 각 실행 후 잔류 Launcher process는 0개였으며, config의 상대 EXE 존재 검사도 성공했다. Frozen AI Client의 Camera 없는 `--diagnose-runtime`도 다시 PASS했다. Launcher/Auth/auto-start/path/runtime diagnostic 관련 테스트 39개와 전체 root suite 85개가 통과했다. 자동 검증에서는 Webcam, 실제 Supabase Login, Registry 수정과 network POST를 실행하지 않았다.
+
+다음 수동 E2E는 `start "" "fitroute://start?exercise=squat"`로 수행한다. Desktop Auth 복원 또는 Login, Frozen Client 실행, Camera/inference 후 `E`, Render의 `POST /api/workouts` 201과 Web Dashboard 반영을 사용자가 확인해야 한다. 성공 후 다음 단계는 Inno Setup에 Launcher와 전체 `ai_client/` onedir bundle을 함께 넣는 작업이다.

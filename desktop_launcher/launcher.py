@@ -12,9 +12,29 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
+
+
+class _NullStream:
+    """Minimal text stream for PyInstaller's noconsole mode."""
+
+    encoding = "utf-8"
+
+    def write(self, value: str) -> int:
+        return len(value)
+
+    def flush(self) -> None:
+        return None
+
+
+if sys.stdout is None:
+    sys.stdout = _NullStream()  # type: ignore[assignment]
+if sys.stderr is None:
+    sys.stderr = _NullStream()  # type: ignore[assignment]
+
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,6 +60,18 @@ class LauncherError(ValueError):
     """안전하게 사용자에게 설명할 수 있는 Launcher 오류."""
 
 
+def log_launcher_event(message: str) -> None:
+    """Write non-sensitive lifecycle events beside the launcher."""
+    line = f"{datetime.now().astimezone().isoformat(timespec='seconds')} {message}"
+    try:
+        with (launcher_root() / "launcher.log").open("a", encoding="utf-8") as log_file:
+            log_file.write(line + "\n")
+    except OSError:
+        pass
+    if sys.stdout is not None:
+        print(message)
+
+
 @dataclass(frozen=True)
 class LaunchRequest:
     command: str
@@ -48,9 +80,7 @@ class LaunchRequest:
 
 @dataclass(frozen=True)
 class LauncherConfig:
-    python_executable: Path
-    project_root: Path
-    entry_script: Path
+    ai_client_executable: Path
     api_base_url: str
     supabase_url: str
     supabase_anon_key: str
@@ -81,20 +111,26 @@ def parse_launch_url(url: str) -> LaunchRequest:
     return LaunchRequest(command=command, exercise=exercise)
 
 
+def launcher_root() -> Path:
+    """Return the directory that contains the frozen launcher or source launcher."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
 def default_config_path() -> Path:
-    base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    return base_dir / "config.json"
+    return launcher_root() / "config.json"
 
 
-def resolve_entry_script(project_root: Path, entry_value: Path) -> Path:
-    if entry_value.is_absolute():
-        raise LauncherError("entry_script must be relative to project_root.")
-    entry_script = (project_root / entry_value).resolve()
-    try:
-        entry_script.relative_to(project_root)
-    except ValueError as exc:
-        raise LauncherError("entry_script must stay inside project_root.") from exc
-    return entry_script
+def resolve_ai_client_executable(value: object, *, base_dir: Path | None = None) -> Path:
+    """Resolve an explicit path or an install-relative AI Client path."""
+    raw_path = str(value).strip()
+    if not raw_path:
+        raise LauncherError("ai_client_executable is missing.")
+    executable = Path(os.path.expandvars(raw_path)).expanduser()
+    if not executable.is_absolute():
+        executable = (base_dir or launcher_root()) / executable
+    return executable.resolve()
 
 
 def validate_service_url(value: object, field_name: str, *, https_only: bool = False) -> str:
@@ -140,25 +176,17 @@ def load_config(config_path: Path) -> LauncherConfig:
     """설치 시 생성된 trusted local config를 읽고 실행 경계를 검증한다."""
     try:
         raw: dict[str, Any] = json.loads(config_path.read_text(encoding="utf-8-sig"))
-        python_executable = Path(os.path.expandvars(str(raw["python_executable"]))).expanduser().resolve()
-        project_root = Path(os.path.expandvars(str(raw["project_root"]))).expanduser().resolve()
-        entry_value = Path(str(raw.get("entry_script", "src/main.py")))
+        ai_client_executable = resolve_ai_client_executable(raw["ai_client_executable"])
         api_base_url = validate_service_url(raw["api_base_url"], "api_base_url")
         supabase_url = validate_service_url(raw["supabase_url"], "supabase_url", https_only=True)
         supabase_anon_key = validate_supabase_anon_key(raw["supabase_anon_key"])
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         raise LauncherError("Launcher config is missing or invalid.") from exc
 
-    entry_script = resolve_entry_script(project_root, entry_value)
-
-    if not python_executable.is_file():
-        raise LauncherError("Configured Python executable was not found.")
-    if not project_root.is_dir() or not entry_script.is_file():
-        raise LauncherError("Configured FitRoute project was not found.")
+    if not ai_client_executable.is_file():
+        raise LauncherError("FitRoute AI Client executable was not found.")
     return LauncherConfig(
-        python_executable,
-        project_root,
-        entry_script,
+        ai_client_executable,
         api_base_url,
         supabase_url,
         supabase_anon_key,
@@ -175,8 +203,7 @@ def build_ai_command(
     if request.command != "start" or request.exercise not in ALLOWED_EXERCISES:
         raise LauncherError("Launch request was not accepted.")
     command = [
-        str(config.python_executable),
-        str(config.entry_script),
+        str(config.ai_client_executable),
         "--exercise",
         request.exercise,
     ]
@@ -242,15 +269,24 @@ def launch_ai_client(
         child_environment["FITROUTE_ACCESS_TOKEN"] = access_token
         child_environment["FITROUTE_API_BASE_URL"] = config.api_base_url
         process_factory = popen_factory or subprocess.Popen
-        print(f"AI Client starting in {request.exercise} mode.")
-        print("Workout auto-start enabled.")
+        log_launcher_event("Desktop auth success.")
+        log_launcher_event(f"AI Client executable resolved: {config.ai_client_executable}")
+        log_launcher_event("AI Client executable exists: YES")
+        log_launcher_event("Access token present: YES")
+        log_launcher_event("API base URL present: YES")
+        log_launcher_event("Launching frozen AI client.")
+        log_launcher_event("Auto start session: YES")
         process = process_factory(
             command,
-            cwd=str(config.project_root),
+            cwd=str(config.ai_client_executable.parent),
             env=child_environment,
             shell=False,
         )
-        return int(process.wait())
+        if getattr(process, "pid", None) is not None:
+            log_launcher_event(f"Child process PID: {process.pid}")
+        exit_code = int(process.wait())
+        log_launcher_event(f"Child exit code: {exit_code}")
+        return exit_code
     finally:
         active_mutex.release()
 
@@ -267,12 +303,14 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     arguments = parse_arguments(argv)
     try:
+        log_launcher_event("Launcher started.")
         if arguments.logout:
             logout_desktop(WindowsCredentialStore())
             return 0
         if not arguments.url:
             raise LauncherError("A fitroute:// URL is required.")
         request = parse_launch_url(arguments.url)
+        log_launcher_event("Protocol validated.")
         config = load_config((arguments.config or default_config_path()).resolve())
         if arguments.dry_run:
             print(json.dumps(build_ai_command(config, request, auto_start_session=True), ensure_ascii=False))

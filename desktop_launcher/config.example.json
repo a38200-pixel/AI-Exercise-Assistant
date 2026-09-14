@@ -1,7 +1,5 @@
 {
-  "python_executable": "C:\\path\\to\\vision_ai\\python.exe",
-  "project_root": "C:\\path\\to\\AI-Exercise-Assistant",
-  "entry_script": "src/main.py",
+  "ai_client_executable": "ai_client\\FitRouteAIClient.exe",
   "api_base_url": "https://fitroute-api.onrender.com",
   "supabase_url": "https://YOUR_PROJECT.supabase.co",
   "supabase_anon_key": "YOUR_PUBLISHABLE_KEY"

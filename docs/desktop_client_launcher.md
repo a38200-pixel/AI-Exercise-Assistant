@@ -1,8 +1,8 @@
-# FitRoute Desktop Launcher (개발용)
+# FitRoute Desktop Launcher
 
 ## 목적과 구조
 
-현재 버전은 Web의 Squat 선택을 기존 Windows/Python AI Client 실행으로 연결하는 개발 PC용 진입점이다.
+현재 버전은 Web의 Squat 선택을 독립형 Windows AI Client 실행으로 연결한다.
 
 ```text
 React /exercise
@@ -10,12 +10,12 @@ React /exercise
   -> HKCU custom protocol
   -> FitRouteLauncher.exe
   -> Windows Credential Manager refresh 또는 Desktop Login
-  -> config.json의 기존 vision_ai Python + 프로젝트
   -> access token은 child environment로만 전달
-  -> src/main.py --exercise squat --auto-start-session
+  -> FitRouteAIClient.exe --exercise squat --auto-start-session
+  -> Render POST /api/workouts
 ```
 
-Launcher는 AI 모델이나 Python runtime을 포함하지 않는다. 기존 Conda 환경, 모델 파일, 프로젝트 source가 설치된 현재 개발 PC를 대상으로 한다.
+Launcher 자체에는 AI 모델을 넣지 않는다. 별도 `FitRouteAIClient` onedir bundle이 Python runtime, native dependency와 모델을 포함하며 Launcher는 해당 EXE만 직접 실행한다.
 
 ## URL과 보안 경계
 
@@ -39,16 +39,14 @@ fitroute://start?exercise=squat
 
 ```json
 {
-  "python_executable": "C:\\path\\to\\vision_ai\\python.exe",
-  "project_root": "C:\\path\\to\\AI-Exercise-Assistant",
-  "entry_script": "src/main.py",
+  "ai_client_executable": "ai_client\\FitRouteAIClient.exe",
   "api_base_url": "https://fitroute-api.onrender.com",
   "supabase_url": "https://YOUR_PROJECT.supabase.co",
   "supabase_anon_key": "YOUR_PUBLISHABLE_KEY"
 }
 ```
 
-`entry_script`는 반드시 `project_root` 내부의 상대 경로여야 한다. 개발용 예시는 `desktop_launcher/config.example.json`에 있다.
+상대 `ai_client_executable`은 frozen 실행 시 `Path(sys.executable).resolve().parent`, source 실행 시 `launcher.py`의 디렉터리를 기준으로 해석한다. 설치 기본값은 `ai_client\FitRouteAIClient.exe`다. Repository에서 개발 검증할 때만 `desktop_launcher\dist` 기준의 `..\..\dist\FitRouteAIClient\FitRouteAIClient.exe` 또는 명시적인 EXE 경로를 사용할 수 있다. EXE가 없으면 Python fallback 없이 `FitRoute AI Client executable was not found.`로 실패한다.
 
 ## 테스트와 dry-run
 
@@ -56,7 +54,7 @@ Camera를 실행하지 않고 parsing과 최종 argument list를 확인할 수 �
 
 ```powershell
 Copy-Item desktop_launcher/config.example.json desktop_launcher/config.json
-# config.json의 경로와 Supabase publishable 설정을 현재 PC에 맞게 수정
+# config.json의 AI Client 경로와 Supabase publishable 설정 확인
 python desktop_launcher/launcher.py --config desktop_launcher/config.json --dry-run "fitroute://start?exercise=squat"
 python -m pytest tests/test_desktop_auth.py -q -p no:cacheprovider
 python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py -q -p no:cacheprovider
@@ -71,7 +69,6 @@ C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install -r desk
 C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install pyinstaller
 powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
   -PythonExecutable "C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe" `
-  -ProjectRoot "C:\Users\AISW_203_113\Documents\GitHub\AI-Exercise-Assistant" `
   -ApiBaseUrl "https://fitroute-api.onrender.com" `
   -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
   -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
@@ -84,7 +81,7 @@ desktop_launcher/dist/FitRouteLauncher.exe
 desktop_launcher/dist/config.json
 ```
 
-`config.json`에는 개발 PC의 절대 경로가 들어가므로 Git에 포함하지 않는다.
+기본 개발 build의 `config.json`은 `..\..\dist\FitRouteAIClient\FitRouteAIClient.exe` 상대 경로를 기록한다. `-AiClientExecutable`로 별도 개발 EXE 경로를 명시할 수도 있다. `-PythonExecutable`은 Launcher build 도구 선택에만 쓰이고 runtime config에는 저장되지 않는다.
 
 `build_launcher.ps1`은 `-PythonExecutable`의 부모를 Conda 환경 root로 계산한다. 범용 AI 환경에 함께 설치된 PyQt5/PyQt6와 Launcher가 사용하지 않는 matplotlib은 제외하며, Supabase Auth hidden import와 tkinter는 유지한다. `_ctypes`, `pyexpat`, tkinter 등 Conda extension이 직접 요구하는 `Library\bin` DLL은 실제 존재하는 파일만 onefile bundle에 추가한다.
 
@@ -164,8 +161,10 @@ FITROUTE_API_BASE_URL=<config의 Render URL>
 실행 argument list에는 민감정보 없이 다음만 포함된다.
 
 ```text
-python.exe src/main.py --exercise squat --auto-start-session
+FitRouteAIClient.exe --exercise squat --auto-start-session
 ```
+
+`subprocess.Popen`은 argument list와 `shell=False`를 사용하고 작업 디렉터리는 AI Client EXE의 부모다. Access Token은 argv, protocol URL, config와 log에 들어가지 않는다. Launcher 옆 `launcher.log`에는 시작, protocol 검증, auth 성공, EXE 해석/존재 여부, token/API URL 존재 여부, auto-start 여부, child PID와 exit code만 기록한다.
 
 AI Client는 모델 초기화, Camera open과 첫 inference frame 처리가 성공한 뒤 `WorkoutSession.start()`를 호출한다. 따라서 모델 로딩 시간은 운동 시간에 포함되지 않으며 초기화가 실패하면 빈 Session도 생성되지 않는다. 기존 `python src/main.py --exercise squat` 명령은 계속 manual `S` 시작 방식이다.
 
@@ -187,7 +186,7 @@ desktop_launcher/installer/FitRouteAIClient.iss
 desktop_launcher/dist/installer/FitRoute-AI-Client-Setup.exe
 ```
 
-Installer는 `%LOCALAPPDATA%\FitRoute`에 Launcher와 config만 설치하고 `fitroute://`를 HKCU에 등록한다. Uninstall은 해당 protocol과 설치 폴더만 제거하며 Conda 환경, 모델, 프로젝트 source는 건드리지 않는다.
+현재 Inno Setup source는 아직 Launcher와 config만 다루며 5단계에서는 변경하지 않았다. 다음 installer 단계에서 `%LOCALAPPDATA%\FitRoute\ai_client\` 아래에 전체 onedir bundle을 포함해야 한다. Protocol/Registry도 이번 단계에서는 다시 등록하거나 변경하지 않았다.
 
 ## Web fallback과 다운로드 URL
 
@@ -201,10 +200,11 @@ VITE_DESKTOP_CLIENT_DOWNLOAD_URL=<공개한-installer-asset-URL>
 
 현재 실제 public installer URL은 없으므로 가짜 값을 넣지 않았다. 값이 비어 있으면 Web 설치 버튼은 `다운로드 준비 중`으로 비활성화되며 CLI fallback을 보여준다. 이후 GitHub Release 같은 versioned asset에 사용자가 직접 업로드한 뒤 URL을 설정하고 Frontend를 다시 빌드한다.
 
-## 현재 개발용 제약
+## 현재 배포 제약
 
-- 현재 PC의 `vision_ai` Python, 프로젝트 source, 모델과 호환 GPU/TensorRT가 필요하다.
-- Launcher installer는 완전한 일반 사용자용 AI Client installer가 아니다.
+- Python, Conda와 repository source는 runtime에 필요하지 않다.
+- 현재 Launcher와 6.79 GiB AI Client bundle은 별도 산출물이며 installer로 아직 묶지 않았다.
+- 호환 NVIDIA GPU/driver와 현재 TensorRT engine이 필요하다.
 - Web 인증 token은 Desktop으로 전달하지 않는다. Web과 Desktop에서 같은 계정으로 각각 로그인해야 한다.
 - 기존 CMD의 `FITROUTE_ACCESS_TOKEN` 환경설정 방식은 manual/debug fallback으로 계속 사용할 수 있다.
 

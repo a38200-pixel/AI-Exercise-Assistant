@@ -13,11 +13,18 @@ from desktop_launcher.launcher import (
     LauncherError,
     build_ai_command,
     launch_ai_client,
+    load_config,
+    launcher_root,
     parse_launch_url,
-    resolve_entry_script,
+    resolve_ai_client_executable,
     validate_supabase_anon_key,
 )
 from desktop_launcher.register_protocol import protocol_command
+
+
+@pytest.fixture(autouse=True)
+def disable_launcher_file_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("desktop_launcher.launcher.log_launcher_event", lambda _message: None)
 
 
 def test_valid_squat_protocol_is_accepted() -> None:
@@ -42,11 +49,8 @@ def test_untrusted_protocol_inputs_are_rejected(url: str) -> None:
 
 
 def fake_config() -> LauncherConfig:
-    project_root = Path("C:/FitRoute/project")
     return LauncherConfig(
-        python_executable=Path("C:/FitRoute/vision_ai/python.exe"),
-        project_root=project_root,
-        entry_script=project_root / "src/main.py",
+        ai_client_executable=Path("C:/FitRoute/ai_client/FitRouteAIClient.exe"),
         api_base_url="https://fitroute-api.onrender.com",
         supabase_url="https://project.supabase.co",
         supabase_anon_key="publishable-key",
@@ -72,8 +76,7 @@ def test_command_is_an_argument_list_and_never_uses_shell() -> None:
     ) == 0
     command = build_ai_command(config, request, auto_start_session=True)
     assert command == [
-        str(config.python_executable),
-        str(config.entry_script),
+        str(config.ai_client_executable),
         "--exercise",
         "squat",
         "--auto-start-session",
@@ -83,7 +86,7 @@ def test_command_is_an_argument_list_and_never_uses_shell() -> None:
     assert child_environment["FITROUTE_ACCESS_TOKEN"] == "current-access-token"
     assert child_environment["FITROUTE_API_BASE_URL"] == config.api_base_url
     assert popen.call_args.args == (command,)
-    assert popen.call_args.kwargs["cwd"] == str(config.project_root)
+    assert popen.call_args.kwargs["cwd"] == str(config.ai_client_executable.parent)
     assert popen.call_args.kwargs["shell"] is False
     token_provider.assert_called_once_with()
     mutex.release.assert_called_once_with()
@@ -122,10 +125,64 @@ def test_canceled_login_does_not_launch_client() -> None:
     mutex.release.assert_called_once_with()
 
 
-def test_config_cannot_escape_project_root() -> None:
-    project_root = Path("C:/FitRoute/project").resolve()
-    with pytest.raises(LauncherError, match="inside project_root"):
-        resolve_entry_script(project_root, Path("../outside.py"))
+def test_relative_ai_client_path_uses_launcher_root() -> None:
+    launcher_dir = Path("C:/FitRoute")
+    assert resolve_ai_client_executable(
+        Path("ai_client/FitRouteAIClient.exe"),
+        base_dir=launcher_dir,
+    ) == (launcher_dir / "ai_client/FitRouteAIClient.exe").resolve()
+
+
+def test_explicit_ai_client_path_is_supported() -> None:
+    executable = Path("D:/FitRouteBuild/FitRouteAIClient.exe")
+    assert resolve_ai_client_executable(executable, base_dir=Path("C:/FitRoute")) == executable.resolve()
+
+
+def test_frozen_launcher_root_uses_executable_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("desktop_launcher.launcher.sys.frozen", True, raising=False)
+    monkeypatch.setattr("desktop_launcher.launcher.sys.executable", "C:/FitRoute/FitRouteLauncher.exe")
+    assert launcher_root() == Path("C:/FitRoute").resolve()
+
+
+def test_missing_ai_client_executable_fails_without_python_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_json = json.dumps(
+        {
+            "ai_client_executable": "ai_client/FitRouteAIClient.exe",
+            "api_base_url": "https://fitroute-api.onrender.com",
+            "supabase_url": "https://project.supabase.co",
+            "supabase_anon_key": "publishable-key",
+        }
+    )
+    monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: config_json)
+    monkeypatch.setattr(Path, "is_file", lambda _self: False)
+    monkeypatch.setattr("desktop_launcher.launcher.launcher_root", lambda: Path("C:/FitRoute"))
+    with pytest.raises(LauncherError, match="executable was not found"):
+        load_config(Path("C:/FitRoute/config.json"))
+
+
+def test_config_loads_existing_relative_ai_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launcher_dir = Path("C:/FitRoute")
+    ai_client = launcher_dir / "ai_client" / "FitRouteAIClient.exe"
+    config_json = json.dumps(
+        {
+            "ai_client_executable": "ai_client/FitRouteAIClient.exe",
+            "api_base_url": "https://fitroute-api.onrender.com/",
+            "supabase_url": "https://project.supabase.co",
+            "supabase_anon_key": "publishable-key",
+        }
+    )
+    monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: config_json)
+    monkeypatch.setattr(Path, "is_file", lambda _self: True)
+    monkeypatch.setattr("desktop_launcher.launcher.launcher_root", lambda: launcher_dir)
+
+    config = load_config(launcher_dir / "config.json")
+
+    assert config.ai_client_executable == ai_client.resolve()
+    assert config.api_base_url == "https://fitroute-api.onrender.com"
 
 
 def test_registry_command_quotes_executable_and_url_placeholder() -> None:

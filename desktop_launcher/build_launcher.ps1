@@ -1,6 +1,6 @@
 param(
     [string]$PythonExecutable = "",
-    [string]$ProjectRoot = "",
+    [string]$AiClientExecutable = "",
     [string]$ApiBaseUrl = "https://fitroute-api.onrender.com",
     [string]$SupabaseUrl = "",
     [string]$SupabaseAnonKey = ""
@@ -8,18 +8,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 $launcherRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $ProjectRoot) {
-    $ProjectRoot = (Resolve-Path (Join-Path $launcherRoot "..")).Path
-}
 if (-not $PythonExecutable) {
     $PythonExecutable = (Get-Command python -ErrorAction Stop).Source
 }
 
 $PythonExecutable = (Resolve-Path -LiteralPath $PythonExecutable -ErrorAction Stop).Path
-$ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
-$entryScript = Join-Path $ProjectRoot "src\main.py"
-if (-not (Test-Path -LiteralPath $entryScript -PathType Leaf)) {
-    throw "FitRoute AI entry script was not found: $entryScript"
+$launcherDist = Join-Path $launcherRoot "dist"
+if (-not $AiClientExecutable) {
+    $AiClientExecutable = "..\..\dist\FitRouteAIClient\FitRouteAIClient.exe"
+}
+$aiClientPath = $AiClientExecutable
+if (-not [System.IO.Path]::IsPathRooted($aiClientPath)) {
+    $aiClientPath = Join-Path $launcherDist $aiClientPath
+}
+$aiClientPath = [System.IO.Path]::GetFullPath($aiClientPath)
+if (-not (Test-Path -LiteralPath $aiClientPath -PathType Leaf)) {
+    throw "FitRoute AI Client executable was not found: $aiClientPath"
 }
 if (-not $SupabaseUrl -or -not $SupabaseAnonKey) {
     throw "SupabaseUrl and SupabaseAnonKey (publishable key only) are required for Desktop login."
@@ -83,9 +87,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $config = [ordered]@{
-    python_executable = $PythonExecutable
-    project_root = $ProjectRoot
-    entry_script = "src/main.py"
+    ai_client_executable = $AiClientExecutable
     api_base_url = $ApiBaseUrl.TrimEnd("/")
     supabase_url = $SupabaseUrl.TrimEnd("/")
     supabase_anon_key = $SupabaseAnonKey
