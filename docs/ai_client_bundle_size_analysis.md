@@ -362,4 +362,56 @@ python packaging/ai_client/analyze_bundle_size.py dist/FitRouteAIClient
 - 평균 YOLO / MediaPipe / XGBoost: 15.64 / 28.99 / 1.18 ms
 - 평균 inference time: 47.18 ms
 
-Camera, TensorRT engine inference와 전체 pose pipeline은 **PASS**이며 기존 대비 유의미한 성능 저하는 확인되지 않았다. 6-B-1.5에서는 production 기본값이나 Registry를 변경하지 않고, 로컬 Launcher dist의 ignored config만 `dist_candidate/FitRouteAIClient/FitRouteAIClient.exe`로 전환했다. Reference용 `config.reference.json`과 candidate용 `config.candidate.json`을 함께 보관하며 현재 active `config.json`은 candidate와 동일하다. Launcher/Protocol/Auth/Auto Start/Render/Supabase/Dashboard 실제 E2E는 사용자 확인 전까지 **PENDING**이다.
+Camera, TensorRT engine inference와 전체 pose pipeline은 **PASS**이며 기존 대비 유의미한 성능 저하는 확인되지 않았다. 6-B-1.5에서는 production 기본값이나 Registry를 변경하지 않고, 로컬 Launcher dist의 ignored config만 `dist_candidate/FitRouteAIClient/FitRouteAIClient.exe`로 전환했다. Reference용 `config.reference.json`과 candidate용 `config.candidate.json`을 함께 보관하며 현재 active `config.json`은 candidate와 동일하다. 이후 사용자 검증에서 Launcher/Protocol/Auth/Auto Start/Render 201/Supabase/Dashboard E2E까지 모두 **PASS**했다. 따라서 5.020208 GiB candidate를 6-B-2의 optimized baseline으로 사용한다.
+
+## 6-B-2 Polars Candidate
+
+`dist_candidate/FitRouteAIClient/`를 보존하고 `FitRouteAIClient.optimized_polars.spec`으로 별도 candidate를 만들었다. 기존 TensorRT builder resource 8개 제외를 유지하면서 Analysis `excludes`에 `polars` 하나만 추가했다.
+
+### 유입 원인과 runtime 판단
+
+Polars 전용 PyInstaller hook은 없었다. Analysis/xref에서는 다음 정적 import graph가 Polars를 수집했다.
+
+- XGBoost 3.4.1의 `xgboost.compat.import_polars()`는 Polars 입력 지원을 위해 함수 안에서 지연 import한다.
+- Ultralytics는 metadata상 `polars>=0.20.0`을 요구하며 trainer 결과, benchmark, plotting, callback과 DataFrame 변환 기능에서 함수 단위 지연 import한다.
+- Narwhals도 Polars adapter를 조건부로 제공한다.
+- PyInstaller가 위 import를 정적으로 발견하고 `polars.__init__`의 전체 import graph 및 `_polars_runtime_32`를 포함했다.
+
+FitRoute source는 Polars API를 직접 사용하지 않는다. Pose classifier는 33개 landmark를 `np.float32` `(1, 132)` ndarray로 만들고 `XGBClassifier.predict_proba()`에 전달한다. Polars import를 강제로 차단한 별도 smoke에서도 model load, 132 features, 9 classes와 dummy ndarray prediction이 성공했고 `polars_loaded=False`였다. 따라서 현재 inference 경로에서는 optional로 판정했다.
+
+Baseline dist에 별도 파일로 노출된 Polars 항목은 `_internal/_polars_runtime_32/_polars_runtime.pyd` 하나이며 **182,326,272 bytes / 173.879883 MiB**다. Polars Python 모듈은 EXE 내부 압축 PYZ에 있었고 metadata는 dist에 별도 복사되지 않았다. Installed wheel 기준 Python package는 8.018 MiB, runtime package는 173.881 MiB지만 `.pyc` 등 설치 환경 파일은 bundle 측정값이 아니다.
+
+### 크기와 bundle diff
+
+| 항목 | 6-B-1 baseline | 6-B-2 candidate | 차이 |
+|---|---:|---:|---:|
+| 전체 bytes | 5,390,406,828 | 5,206,768,754 | -183,638,074 |
+| 전체 MiB | 5,140.692547 | 4,965.561632 | -175.130915 |
+| 전체 GiB | 5.020208 | 4.849181 | -0.171026 |
+| 파일 수 | 3,656 | 3,654 | -2 |
+| EXE bytes | 50,751,244 | 49,487,386 | -1,263,858 |
+| Polars native bytes | 182,326,272 | 0 | -182,326,272 |
+
+Baseline 대비 절감률은 **3.406757%**다. 파일 목록에서 사라진 것은 Polars native runtime과 47,944-byte `_zoneinfo.pyd`뿐이다. `_zoneinfo.pyd`는 baseline graph에서 Polars가 유일하게 끌어오던 native timezone dependency이며, Polars 제외 후 orphan dependency로 함께 빠졌다. EXE 감소분은 주로 PYZ에서 제거된 Polars Python modules다. Candidate에만 추가되거나 제거된 다른 package 파일은 없다.
+
+Torch, TensorRT runtime/binding, OpenCV, MediaPipe, XGBoost, SciPy, sklearn과 모델의 bytes 및 file count는 baseline과 동일하다. TensorRT builder resource와 Polars runtime 검색 결과는 모두 0개다.
+
+### 검증 상태
+
+- Clean build: PASS (`fitroute_build`, PyInstaller 6.22.3)
+- `--help`: exit code 0
+- 제한 PATH `--diagnose-runtime`: `RUNTIME DIAGNOSTIC PASS`
+- CUDA 12.8 / NVIDIA GeForce RTX 3080
+- TensorRT 11.0.0.114
+- MediaPipe 0.10.35
+- OpenCV 5.0.0, GUI/MSMF OK
+- XGBoost model: 9 classes / 132 features
+- Polars 차단 + NumPy dummy `predict_proba`: PASS, Polars import 없음
+- Ultralytics 8.4.70 및 TensorRT backend를 Polars 차단 상태에서 import: PASS
+- TensorRT 핵심 binary missing direct dependency: 0
+- Warning의 새 Polars 항목은 `excluded module named polars`와 Narwhals/Ultralytics의 delayed/conditional optional imports다. TensorRT, MediaPipe, XGBoost, OpenCV의 새 critical warning은 없다.
+- Original/reference와 6-B-1 optimized baseline EXE 및 모델 hash는 build 전후 동일하다.
+- Launcher active config는 계속 6-B-1 baseline을 가리킨다.
+- Camera, inference, protocol, Network POST는 실행하지 않았다.
+
+상태: **CANDIDATE READY FOR USER CAMERA TEST**. 사용자 시험 명령은 `dist_candidate_polars\FitRouteAIClient\FitRouteAIClient.exe --exercise squat`이다. Camera 시험 성공 후에만 Launcher active config를 이 candidate로 임시 전환해 E2E를 검증한다.

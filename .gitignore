@@ -16,6 +16,8 @@ frontend/dist/
 /dist/
 /build_candidate/
 /dist_candidate/
+/build_candidate_polars/
+/dist_candidate_polars/
 desktop_launcher/build/
 desktop_launcher/dist/
 desktop_launcher/*.spec
