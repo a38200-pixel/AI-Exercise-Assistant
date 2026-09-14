@@ -22,9 +22,10 @@ Copy-Item .env.example .env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
 VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_DESKTOP_CLIENT_DOWNLOAD_URL=
 ```
 
-로컬에서 8000 포트를 `vmnat` 등이 사용 중이면 Backend를 8001로 실행하고 `VITE_API_BASE_URL=http://127.0.0.1:8001`로 설정합니다. Frontend에는 publishable/anon key만 사용하며 service role key는 절대 넣지 않습니다. `.env`는 Git에서 제외됩니다.
+로컬에서 8000 포트를 `vmnat` 등이 사용 중이면 Backend를 8001로 실행하고 `VITE_API_BASE_URL=http://127.0.0.1:8001`로 설정합니다. `VITE_DESKTOP_CLIENT_DOWNLOAD_URL`은 서명된 installer를 공개한 뒤 해당 URL로 설정하며, 비어 있으면 다운로드 버튼이 비활성화됩니다. Frontend에는 publishable/anon key만 사용하며 service role key는 절대 넣지 않습니다. `.env`는 Git에서 제외됩니다.
 
 ## Install / Run / Build
 
@@ -43,12 +44,13 @@ npm run lint
 
 ## Production Build와 Preview
 
-운영 템플릿 `.env.production.example`의 placeholder를 참고해 Hosting Provider의 환경변수에 다음 세 값만 등록합니다.
+운영 템플릿 `.env.production.example`의 placeholder를 참고해 Hosting Provider의 환경변수에 다음 값을 등록합니다.
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
 VITE_API_BASE_URL=https://fitroute-api.onrender.com
+VITE_DESKTOP_CLIENT_DOWNLOAD_URL=
 ```
 
 `VITE_` 변수는 Browser bundle에 포함됩니다. 따라서 Supabase publishable/anon key만 허용되며 service role key, DB password, access/refresh token 또는 Backend secret을 넣으면 안 됩니다.
@@ -92,6 +94,7 @@ Login / Sign Up → Supabase Auth → SDK Session → Access Token → FastAPI �
 | `/` | Landing | Public |
 | `/login` | Login | Public |
 | `/signup` | Sign Up | Public |
+| `/exercise` | 운동 선택 및 Windows Desktop Launcher 실행 | Required |
 | `/dashboard` | Today summary, weekly chart, recent sessions | Required |
 | `/history` | Monthly calendar and selected-date summary | Required |
 | `/history/:date` | Daily summary and original session timeline | Required |
@@ -115,4 +118,6 @@ Dashboard는 `/api/workouts/today`, 최근 7일 `/api/workouts/daily`, 최근 �
 - Mobile: 다크 운동 시간 ring, 2열 요약 카드, fixed bottom navigation과 safe-area padding
 - 모든 데이터 화면에 skeleton, empty, retry error state 제공
 
-브라우저의 운동 시작 버튼은 Python AI 프로그램 안내만 표시합니다. 목표값, AI confidence, 프로필 수정처럼 Backend 데이터가 없는 기능은 demo 또는 Coming Soon으로 명시합니다.
+브라우저의 운동 시작 버튼은 Squat 선택 후 `fitroute://start?exercise=squat`를 호출합니다. Windows protocol handler가 반응하지 않은 것으로 추정되면 Desktop Client 설치 안내 Modal을 표시합니다. 브라우저는 handler 설치 여부를 확정적으로 제공하지 않으므로 이 fallback은 시간 기반 추정이며, Chrome/Edge의 외부 앱 실행 확인창은 정상 동작입니다. Desktop 인증·빌드·등록 절차는 [Desktop Launcher 문서](../docs/desktop_client_launcher.md)를 참고하세요.
+
+목표값, AI confidence, 프로필 수정처럼 Backend 데이터가 없는 기능은 demo 또는 Coming Soon으로 명시합니다.

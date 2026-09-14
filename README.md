@@ -201,9 +201,62 @@ python tests/test_workout_session.py
 python src/main.py --benchmark-seconds 30
 ```
 
+## Web → Windows Desktop Launcher
+
+Vercel의 운동 선택 화면에서 `fitroute://start?exercise=squat` custom protocol을 호출해 Windows Desktop Launcher를 열고, 기존 `vision_ai` 환경의 AI Client를 실행할 수 있습니다.
+
+```text
+React /exercise
+  → fitroute://start?exercise=squat
+  → FitRouteLauncher.exe
+  → Windows Credential Manager refresh 또는 Desktop Login
+  → access token을 child environment로만 전달
+  → src/main.py --exercise squat --auto-start-session
+  → Camera 준비 완료 후 Workout Session 자동 시작
+```
+
+Launcher는 URL의 command와 exercise를 whitelist로 검증하고 `subprocess.Popen([...], shell=False)`만 사용합니다. Password는 저장하지 않으며 refresh token만 Windows Credential Manager에 보관합니다. Access token은 URL, command line, config 또는 `.env`에 기록하지 않고 AI child process의 환경변수로만 전달합니다. Web과 Desktop은 같은 Supabase 계정으로 로그인해야 같은 Dashboard 기록을 확인할 수 있습니다.
+
+개발 환경 빌드 예시:
+
+```powershell
+C:\path\to\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.txt
+C:\path\to\vision_ai\python.exe -m pip install pyinstaller
+powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
+  -PythonExecutable "C:\path\to\vision_ai\python.exe" `
+  -ProjectRoot "C:\path\to\AI-Exercise-Assistant" `
+  -ApiBaseUrl "https://fitroute-api.onrender.com" `
+  -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
+  -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
+```
+
+생성물은 `desktop_launcher/dist/FitRouteLauncher.exe`와 같은 폴더의 `config.json`입니다. `config.json`에는 개발 PC의 절대 경로와 Supabase publishable key만 들어가며 Git에서 제외됩니다. Service role/secret key는 Launcher와 Frontend에 사용하면 안 됩니다.
+
+Launcher 관련 테스트는 실제 Registry, Supabase Login, Credential 입력 또는 Webcam 실행 없이 수행합니다.
+
+```powershell
+python -m pytest tests/test_desktop_auth.py -q -p no:cacheprovider
+python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py -q -p no:cacheprovider
+```
+
+현재 검증 결과는 Auth 9개, Launcher/auto-start 20개 테스트 통과입니다. 생성된 onefile EXE는 `--help` startup/import smoke test를 통과했으며 Webcam은 실행하지 않았습니다. Protocol 등록/제거, Desktop 인증, installer와 실제 E2E 절차는 [Desktop Launcher 개발 문서](docs/desktop_client_launcher.md)를 참고하세요.
+
+### Launcher 개발 중 실패와 해결 기록
+
+| 증상 | 확인된 원인 | 해결 |
+|---|---|---|
+| `attempt to collect multiple Qt bindings packages` | 범용 `vision_ai` 환경의 import graph가 PyQt5와 PyQt6를 함께 탐색 | PyQt 패키지는 제거하지 않고 PyInstaller에서 `PyQt5`, `PyQt6` 제외 |
+| Launcher와 무관한 matplotlib runtime hook 포함 | `desktop_auth → httpx._main → rich → IPython → matplotlib` 선택 의존성 경로 | Launcher가 사용하지 않는 `matplotlib`을 제외해 `pyi_rth_mplconfig` 제거 |
+| `_ctypes` import 시 DLL load 실패 | Conda Python의 `_ctypes.pyd`가 `Library\bin\ffi.dll`에 의존하지만 onefile bundle에서 누락 | `-PythonExecutable`로 Conda root를 계산하고 존재하는 `ffi-7.dll`, `ffi-8.dll`, `ffi.dll`을 모두 `--add-binary`로 포함 |
+| `pyi_rth_pkgres` 실행 중 `pyexpat` DLL load 실패 | `pyexpat.pyd`의 직접 의존 파일인 `libexpat.dll` 누락 | `objdump`로 직접 의존성을 확인한 뒤 `libexpat.dll` 포함 |
+| `_lzma`, `_bz2`, `_sqlite3`, `_tkinter`, `_zmq` DLL 경고 | Conda의 관련 `.pyd`가 `Library\bin`의 런타임 DLL을 사용하지만 PyInstaller가 자동 해석하지 못함 | 확인된 `liblzma.dll`, `LIBBZ2.dll`, `sqlite3.dll`, `tcl86t.dll`, `tk86t.dll`, `libzmq-mt-4_3_5.dll`만 조건부 포함 |
+| Login UI의 `Label() got multiple values for keyword argument 'fg'` | `label()` helper의 기본 `fg`와 호출부의 override `fg`가 동시에 전달 | `bg`, `fg`를 `options.setdefault()`로 설정해 호출부 override 우선 적용 |
+
+Conda DLL은 이름을 추측해 하나만 선택하지 않았습니다. 각 `.pyd`의 PE dependency와 `Library\bin`의 실제 파일을 확인한 뒤 존재하는 파일만 bundle에 추가했습니다. `ctypes/_ctypes`는 Credential Manager 구현이 사용하므로 제외하지 않습니다.
+
 ## Production 실행 및 Docker
 
-Production 준비는 완료되어 있으며 실제 Cloud 배포는 아직 수행하지 않았습니다. Backend는 `backend/start.py`를 통해 Provider가 전달하는 `PORT`를 읽고, `--reload` 없이 `0.0.0.0:$PORT`에서 실행됩니다.
+로컬 Docker 검증과 내부 Staging Cloud 배포를 완료했습니다. Backend는 Render의 `https://fitroute-api.onrender.com`, Frontend는 Vercel의 `https://fitroute-ivory.vercel.app`에서 동작합니다. Backend는 `backend/start.py`를 통해 Provider가 전달하는 `PORT`를 읽고, `--reload` 없이 `0.0.0.0:$PORT`에서 실행됩니다.
 
 로컬 Docker 실행 구조는 다음과 같습니다.
 
@@ -279,11 +332,11 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. Vercel에 Frontend를 배포하고 고정 Production URL 확보
-2. Render `FRONTEND_ORIGINS`를 실제 Vercel Origin으로 교체
-3. Supabase Site URL 및 Redirect URLs 갱신
-4. Production 로그인 → Dashboard 실제 데이터 조회
-5. Browser → Render → Supabase End-to-End smoke test
+1. 실제 `fitroute://` 등록 상태에서 Web → Launcher → Desktop Login → Camera → Render 저장 E2E 확인
+2. Inno Setup으로 개발 PC용 installer 생성 및 설치/제거 검증
+3. 공개 Release asset, checksum, code signing 준비
+4. Python runtime·AI 모델·CUDA/TensorRT를 포함하는 일반 사용자 배포 전략 확정
+5. HTTPX/Rich의 선택 의존성으로 커진 Launcher bundle을 별도 최소 빌드 환경에서 최적화
 
 ## Backend
 
@@ -291,7 +344,7 @@ Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAP
 
 ## Frontend
 
-React + Vite 기반 FitRoute 웹 대시보드는 [frontend/README.md](frontend/README.md)를 참고하세요.
+React + Vite 기반 FitRoute 웹 대시보드는 [frontend/README.md](frontend/README.md)를 참고하세요. 운동 시작 버튼은 Squat 선택 후 `fitroute://` Desktop Launcher를 호출하며, protocol handler가 확인되지 않으면 설치 안내 fallback을 표시합니다.
 
 ```powershell
 # Terminal 1 (8000 포트 충돌 시 8001 사용)

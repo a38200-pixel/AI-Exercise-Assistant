@@ -58,12 +58,13 @@ Camera를 실행하지 않고 parsing과 최종 argument list를 확인할 수 �
 Copy-Item desktop_launcher/config.example.json desktop_launcher/config.json
 # config.json의 경로와 Supabase publishable 설정을 현재 PC에 맞게 수정
 python desktop_launcher/launcher.py --config desktop_launcher/config.json --dry-run "fitroute://start?exercise=squat"
-python -m pytest tests/test_desktop_launcher.py -q -p no:cacheprovider
+python -m pytest tests/test_desktop_auth.py -q -p no:cacheprovider
+python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py -q -p no:cacheprovider
 ```
 
 ## Launcher EXE 빌드
 
-현재 PC 검사 결과 PyInstaller는 설치되어 있지 않다. Codex는 이를 자동 설치하지 않았다. 사용자가 선택한 환경에 PyInstaller를 설치한 후 실행한다.
+현재 `vision_ai` 환경에서 PyInstaller onefile 빌드와 startup/import smoke test를 완료했다. 새 환경에서는 Launcher 의존성과 PyInstaller를 명시적으로 설치한 후 빌드한다.
 
 ```powershell
 C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.txt
@@ -84,6 +85,10 @@ desktop_launcher/dist/config.json
 ```
 
 `config.json`에는 개발 PC의 절대 경로가 들어가므로 Git에 포함하지 않는다.
+
+`build_launcher.ps1`은 `-PythonExecutable`의 부모를 Conda 환경 root로 계산한다. 범용 AI 환경에 함께 설치된 PyQt5/PyQt6와 Launcher가 사용하지 않는 matplotlib은 제외하며, Supabase Auth hidden import와 tkinter는 유지한다. `_ctypes`, `pyexpat`, tkinter 등 Conda extension이 직접 요구하는 `Library\bin` DLL은 실제 존재하는 파일만 onefile bundle에 추가한다.
+
+현재 빌드 및 문제 해결 기록은 [프로젝트 README의 Launcher 섹션](../README.md#web--windows-desktop-launcher)을 참고한다. DLL 누락 여부는 파일명 추측이 아니라 `.pyd`의 PE dependency, PyInstaller TOC와 onefile archive 목록으로 확인한다.
 
 ## Protocol 등록과 제거
 
