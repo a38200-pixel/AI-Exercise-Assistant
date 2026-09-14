@@ -48,10 +48,12 @@ npm run lint
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
-VITE_API_BASE_URL=https://YOUR_BACKEND_DOMAIN
+VITE_API_BASE_URL=https://fitroute-api.onrender.com
 ```
 
 `VITE_` 변수는 Browser bundle에 포함됩니다. 따라서 Supabase publishable/anon key만 허용되며 service role key, DB password, access/refresh token 또는 Backend secret을 넣으면 안 됩니다.
+
+Production에서 `VITE_API_BASE_URL`이 없으면 localhost로 fallback하지 않고 환경변수 누락 오류를 표시합니다. localhost 기본값은 개발 모드에서만 사용합니다.
 
 ```powershell
 npm run build
@@ -64,10 +66,12 @@ npm run preview -- --host 127.0.0.1
 
 React Router 경로(`/dashboard`, `/history/:date`, `/statistics`, `/profile`)를 직접 새로고침해도 `index.html`로 fallback되어야 합니다.
 
-- Vercel: 프로젝트 확정 후 SPA rewrite를 설정하고 모든 비정적 경로를 `/index.html`로 전달합니다.
+- Vercel: `vercel.json`의 SPA rewrite가 모든 직접 경로를 `/index.html`로 전달합니다.
 - Netlify: 프로젝트 확정 후 `/*  /index.html  200` redirect 규칙을 설정합니다.
 
-Provider가 아직 정해지지 않아 provider-specific 설정 파일은 생성하지 않았습니다.
+Frontend Staging Provider는 Vercel로 확정되었으며 `frontend/vercel.json`이 Production SPA fallback을 담당합니다.
+
+Vercel Frontend Staging의 Dashboard 입력값과 배포 후 CORS/Auth 절차는 [Vercel Frontend Staging Deployment](../docs/vercel_frontend_staging.md)를 참고합니다.
 
 배포 URL이 나온 뒤 Supabase Dashboard의 Authentication → URL Configuration에서 Site URL과 Redirect URLs를 실제 HTTPS Frontend domain으로 변경해야 합니다. 개발용 `http://localhost:5173`도 필요한 동안 허용 목록에 유지합니다.
 

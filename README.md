@@ -279,11 +279,11 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. Render에 Backend를 배포하고 HTTPS API URL 확보
-2. Render Production Workout API integration test
-3. Frontend Provider에 배포하고 SPA rewrite 설정
-4. Supabase Site URL 및 Redirect URLs 갱신
-5. Production 로그인 → Session 저장 → Dashboard 반영 smoke test
+1. Vercel에 Frontend를 배포하고 고정 Production URL 확보
+2. Render `FRONTEND_ORIGINS`를 실제 Vercel Origin으로 교체
+3. Supabase Site URL 및 Redirect URLs 갱신
+4. Production 로그인 → Dashboard 실제 데이터 조회
+5. Browser → Render → Supabase End-to-End smoke test
 
 ## Backend
 
@@ -308,3 +308,5 @@ npm run dev
 Production 배포 준비와 실제 배포 순서는 [Production Deployment Checklist](docs/production_deployment_checklist.md)를 참고하세요.
 
 Render Backend Staging의 Dashboard 입력값과 검증 절차는 [Render Backend Staging Deployment](docs/render_backend_staging.md)를 참고하세요.
+
+Vercel Frontend Staging의 Dashboard 입력값과 배포 후 CORS/Auth 절차는 [Vercel Frontend Staging Deployment](docs/vercel_frontend_staging.md)를 참고하세요.

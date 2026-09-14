@@ -28,9 +28,9 @@ LOG_LEVEL=info
 PORT=8000
 ```
 
-- [ ] 실제 값을 Provider secret/environment 설정에 등록한다.
+- [x] Render에 Backend Runtime 환경변수를 등록하고 API 연동을 검증한다.
 - [ ] `FRONTEND_ORIGINS`에는 path와 trailing slash 없는 HTTPS Origin만 등록한다.
-- [ ] service role, DB password, 사용자 Access Token을 등록하지 않는다.
+- [x] service role, DB password, 사용자 Access Token을 등록하지 않는다.
 
 ## 3. Docker
 
@@ -55,9 +55,9 @@ docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backe
 - [x] `npm run build`와 `npm run lint`가 통과한다.
 - [x] Vite `base`는 root `/` 기본값을 유지한다.
 - [x] `dist/`와 실제 env 파일은 Git에서 제외한다.
-- [ ] Frontend Provider를 선택한다: Vercel / Netlify.
-- [ ] Build command를 `npm run build`, output directory를 `dist`로 설정한다.
-- [ ] `VITE_API_BASE_URL`을 배포된 HTTPS Backend URL로 설정한다.
+- [x] Frontend Staging Provider로 Vercel을 선택한다.
+- [x] Build command `npm run build`, output directory `dist`를 확인한다.
+- [x] `VITE_API_BASE_URL`에 Render HTTPS URL을 사용할 준비를 완료한다.
 
 공개 가능한 Vite 변수만 등록합니다.
 
@@ -70,7 +70,7 @@ VITE_API_BASE_URL=https://YOUR_BACKEND_DOMAIN
 ## 5. SPA Routing
 
 - [x] Local production preview에서 `/dashboard`, `/history/2026-09-12`, `/statistics`, `/profile` 직접 접근이 200을 반환한다.
-- [ ] Vercel 선택 시 비정적 경로를 `/index.html`로 rewrite한다.
+- [x] `frontend/vercel.json`에서 비정적 경로를 `/index.html`로 rewrite한다.
 - [ ] Netlify 선택 시 `/* /index.html 200` fallback을 설정한다.
 - [ ] 실제 Hosting에서 `/dashboard` 직접 접속과 새로고침을 확인한다.
 - [ ] 실제 Hosting에서 `/history/2026-09-12`, `/statistics`, `/profile` 직접 접속을 확인한다.
@@ -102,10 +102,10 @@ Provider 선택 전에는 중복 설정 파일을 만들지 않습니다.
 
 ## 8. 실제 배포 순서
 
-1. [ ] FastAPI Backend를 Dockerfile 기반으로 배포한다.
-2. [ ] `GET https://BACKEND_DOMAIN/health`가 200인지 확인한다.
-3. [ ] Production API URL을 확보한다.
-4. [ ] Frontend의 `VITE_API_BASE_URL`을 해당 API URL로 설정한다.
+1. [x] FastAPI Backend를 Dockerfile 기반으로 Render에 배포한다.
+2. [x] `GET https://fitroute-api.onrender.com/health`가 200인지 확인한다.
+3. [x] Production API URL `https://fitroute-api.onrender.com`을 확보한다.
+4. [x] Vercel의 `VITE_API_BASE_URL`에 입력할 Render URL을 확정한다.
 5. [ ] React Production build를 배포한다.
 6. [ ] HTTPS Frontend domain을 확보한다.
 7. [ ] Backend `FRONTEND_ORIGINS`를 정확한 Frontend Origin으로 설정하고 재배포한다.
@@ -117,15 +117,17 @@ Provider 선택 전에는 중복 설정 파일을 만들지 않습니다.
 
 Render Backend Staging의 확정 설정과 Dashboard 절차는 [Render Backend Staging Deployment](render_backend_staging.md)를 참고합니다.
 
+Vercel Frontend Staging의 확정 설정과 Dashboard 절차는 [Vercel Frontend Staging Deployment](vercel_frontend_staging.md)를 참고합니다.
+
 ## 9. Production Smoke Test
 
-- [ ] `/health` 200
+- [x] Render `/health` 200
 - [ ] 허용된 Frontend Origin CORS 성공
 - [ ] 임의 Origin CORS 거부
 - [ ] 로그인 없는 Workout API 401
-- [ ] 로그인 후 Today API 200
-- [ ] Workout Session POST 201
-- [ ] Supabase 원본 row와 daily summary 누적 확인
+- [x] 로그인 후 Render Today API 200
+- [x] Render Workout Session POST 201
+- [x] Supabase 원본 row와 daily summary 누적 확인
 - [ ] React 새로고침 후 새 기록 표시
 - [ ] 직접 URL 새로고침 시 SPA 404 없음
 - [ ] 모바일 화면과 HTTPS mixed-content 오류 없음

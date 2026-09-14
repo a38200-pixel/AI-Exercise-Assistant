@@ -1,7 +1,10 @@
 import { supabase } from './supabase'
 import type { DailyWorkoutSummary, WorkoutSession } from '../types/workout'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined
+const API_BASE_URL = (
+  configuredApiBaseUrl || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '')
+).replace(/\/+$/, '')
 const REQUEST_TIMEOUT_MS = 10_000
 
 export class ApiError extends Error {
@@ -14,6 +17,9 @@ export class ApiError extends Error {
 }
 
 async function apiRequest<T>(path: string): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new ApiError('Frontend API 환경변수가 설정되지 않았습니다.')
+  }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new ApiError('로그인이 필요합니다.', 401)
 
