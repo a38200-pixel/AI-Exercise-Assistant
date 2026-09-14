@@ -1,7 +1,8 @@
 import { Activity, ArrowRight, Check, Dumbbell, LockKeyhole, Play, Zap } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { WorkoutInfoModal } from '../components/common/WorkoutInfoModal'
 import { PageHeader } from '../components/layout/PageHeader'
+import { requestDesktopClientLaunch } from '../lib/desktopClient'
 
 type ExerciseId = 'squat' | 'burpee' | 'pushup'
 
@@ -42,7 +43,23 @@ const exercises: Array<{
 export function ExerciseHomePage() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseId | null>(null)
   const [showStartGuide, setShowStartGuide] = useState(false)
+  const [launching, setLaunching] = useState(false)
+  const launchCleanup = useRef<() => void>(() => undefined)
   const selected = exercises.find(({ id }) => id === selectedExercise)
+
+  useEffect(() => () => launchCleanup.current(), [])
+
+  const startWorkout = () => {
+    if (selectedExercise !== 'squat') return
+    launchCleanup.current()
+    setLaunching(true)
+    setShowStartGuide(false)
+    launchCleanup.current = requestDesktopClientLaunch(
+      'squat',
+      () => { setLaunching(false); setShowStartGuide(true) },
+      () => setLaunching(false),
+    )
+  }
 
   return (
     <div className="exercise-home-page">
@@ -92,12 +109,12 @@ export function ExerciseHomePage() {
           <h3>{selected ? selected.englishName.toUpperCase() : '운동을 선택해 주세요'}</h3>
           <p>{selected ? '올바른 스쿼트 자세를 인식하고 반복 횟수를 기록합니다.' : '사용 가능한 운동 카드를 선택하면 시작할 수 있습니다.'}</p>
         </div>
-        <button className="btn-primary justify-center px-6 py-3.5" disabled={!selected} onClick={() => setShowStartGuide(true)}>
-          <Play size={17} fill="currentColor" /> 운동 시작
+        <button className="btn-primary justify-center px-6 py-3.5" disabled={!selected || launching} onClick={startWorkout}>
+          <Play size={17} fill="currentColor" /> {launching ? 'AI Client 연결 중…' : '운동 시작'}
         </button>
       </section>
 
-      {showStartGuide && <WorkoutInfoModal exercise="squat" close={() => setShowStartGuide(false)} />}
+      {showStartGuide && <WorkoutInfoModal exercise="squat" retry={startWorkout} close={() => setShowStartGuide(false)} />}
     </div>
   )
 }

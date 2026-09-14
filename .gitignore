@@ -12,6 +12,10 @@ frontend/.env
 frontend/.env.local
 frontend/node_modules/
 frontend/dist/
+desktop_launcher/build/
+desktop_launcher/dist/
+desktop_launcher/*.spec
+desktop_launcher/config.json
 .DS_Store
 .idea/
 .vscode/

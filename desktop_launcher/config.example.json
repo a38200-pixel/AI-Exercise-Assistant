@@ -1,0 +1,5 @@
+{
+  "python_executable": "C:\\path\\to\\vision_ai\\python.exe",
+  "project_root": "C:\\path\\to\\AI-Exercise-Assistant",
+  "entry_script": "src/main.py"
+}
