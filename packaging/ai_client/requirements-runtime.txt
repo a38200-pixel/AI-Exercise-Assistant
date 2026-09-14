@@ -1,0 +1,16 @@
+# PyTorch CUDA 12.8 wheels are resolved from the official PyTorch index.
+--extra-index-url https://download.pytorch.org/whl/cu128
+# FitRoute uses opencv-contrib-python only. Ultralytics metadata declares
+# opencv-python, but both wheels must not be installed together. Install
+# Ultralytics with --no-deps as documented in ai_client_packaging_plan.md.
+
+numpy==2.4.4
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+tensorrt==11.0.0.114
+opencv-contrib-python==5.0.0.93
+mediapipe==0.10.35
+xgboost==3.4.1
+scikit-learn==1.9.1
+ultralytics==8.4.70
+httpx==0.28.1

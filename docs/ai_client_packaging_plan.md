@@ -4,7 +4,7 @@
 
 이 문서는 개발 PC의 `vision_ai` Conda 환경과 Repository source에 의존하는 Python AI Client를 향후 독립적인 Windows `FitRouteAIClient.exe`로 패키징하기 위한 1단계 조사 결과다.
 
-이번 단계에서 완료한 것은 runtime dependency 조사, 절대경로/CWD 의존성 조사, frozen-aware model path 정리와 테스트다. 새 Conda 환경, `FitRouteAIClient.spec`, PyInstaller AI Client build, ONNX fallback, installer와 Release는 만들지 않았다.
+1단계에서 완료한 것은 runtime dependency 조사, 절대경로/CWD 의존성 조사, frozen-aware model path 정리와 테스트다. 1단계에서는 새 Conda 환경, `FitRouteAIClient.spec`, PyInstaller AI Client build, ONNX fallback, installer와 Release를 만들지 않았다. 현재 2단계 환경 결과는 이 문서 아래의 별도 절에 기록한다.
 
 현재 성공한 개발 환경 E2E는 다음과 같다.
 
@@ -320,4 +320,158 @@ python -m pip install pyinstaller==6.22.3 pytest
 python -m PyInstaller FitRouteAIClient.spec --noconfirm --clean
 ```
 
-이 명령은 이번 단계에서 실행하지 않았다.
+이 명령은 1단계에서는 실행하지 않았다. 실제 2단계 성공 명령은 다음 절에 기록한다.
+
+## 2단계: clean build environment 검증 결과
+
+검증일: 2026-09-14. 기존 `vision_ai`는 조회와 기존 path test 실행에만 사용했고 package 설치, 제거, upgrade 또는 downgrade를 하지 않았다.
+
+### 환경 생성과 설치 결과
+
+- 환경: `fitroute_build`
+- Python: 3.12.12
+- 실행 파일: `C:\Users\AISW_203_113\anaconda3\envs\fitroute_build\python.exe`
+- `conda run -n fitroute_build where.exe python`의 첫 결과도 위 실행 파일이었다.
+- Torch 2.11.0+cu128과 TorchVision 0.26.0+cu128은 PyTorch 공식 CUDA 12.8 wheel index에서 설치했다.
+- TensorRT metapackage가 실제로 `tensorrt_cu13`, `tensorrt_cu13_bindings`, `tensorrt_cu13_libs` 11.0.0.114를 설치하는 것을 확인했다.
+- PyInstaller 6.22.3과 `pyinstaller-hooks-contrib` 2026.7을 설치했지만 spec 작성이나 build는 실행하지 않았다.
+
+Repository의 dependency 파일은 역할을 분리한다.
+
+- `packaging/ai_client/requirements-runtime.txt`: 사람이 관리하는 핵심 top-level runtime 버전
+- `packaging/ai_client/requirements-build.txt`: PyInstaller build 도구
+- `packaging/ai_client/requirements-lock.txt`: 검증 환경에서 해석된 전체 snapshot. Conda bootstrap의 `pip`, `setuptools`, `wheel`은 제외했다.
+
+### 핵심 버전 비교
+
+| Package | vision_ai | fitroute_build | 결과 |
+|---|---:|---:|---|
+| Python | 3.12.12 | 3.12.12 | 일치 |
+| NumPy | 2.4.4 | 2.4.4 | 일치 |
+| PyTorch | 2.11.0+cu128 | 2.11.0+cu128 | 일치 |
+| TorchVision | 0.26.0+cu128 | 0.26.0+cu128 | 일치 |
+| Ultralytics | 8.4.70 | 8.4.70 | 일치 |
+| OpenCV distribution | opencv-contrib-python 5.0.0.93 | opencv-contrib-python 5.0.0.93 | 일치 |
+| MediaPipe | 0.10.35 | 0.10.35 | 일치 |
+| XGBoost | 3.4.1 | 3.4.1 | 일치 |
+| scikit-learn | 1.9.1 | 1.9.1 | 일치 |
+| HTTPX | 0.28.1 | 0.28.1 | 일치 |
+| TensorRT | 11.0.0.114 | 11.0.0.114 | 일치 |
+| TensorRT cu13 packages | 11.0.0.114 | 11.0.0.114 | 일치 |
+| PyInstaller | 6.22.3 | 6.22.3 | 일치 |
+
+### CUDA, import와 model smoke 결과
+
+- `torch.cuda.is_available()`: `True`
+- PyTorch CUDA runtime: 12.8
+- GPU: NVIDIA GeForce RTX 3080
+- 개별 import: `cv2`, `numpy`, `torch`, `torchvision`, `ultralytics`, `mediapipe`, `xgboost`, `sklearn`, `httpx`, `tensorrt` 모두 성공
+- TensorRT import/version: 11.0.0.114
+- OpenCV: module 5.0.0, `CAP_MSMF == 1400`, `cv2.imshow` callable, provider는 `opencv-contrib-python` 하나
+- CLI: `python src/main.py --help` 성공. Camera는 열리지 않았다.
+- Resource: engine 7,731,821 bytes, task 9,398,198 bytes, XGBoost model 3,378,634 bytes, classes 110 bytes 모두 Repository root에서 발견
+- XGBoost: model load 성공, 132 features 확인. 기존 확장자 경고에 따라 UBJSON으로 추정했지만 오류는 없었다.
+- Class order: `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`
+- MediaPipe: Tasks API import, `PoseLandmarkerOptions`, 외부 task asset을 사용한 PoseLandmarker 생성과 close 성공. Image/Camera inference는 하지 않았다.
+- Ultralytics: `YOLO` import와 TensorRT engine path 선택 성공. GPU/TensorRT context 생성을 피하려고 YOLO 객체 생성과 inference는 하지 않았다.
+- 기존 path test: 4 passed
+
+### Known Packaging Metadata Exception: OpenCV
+
+현재 두 핵심 package의 declared requirement는 동시에 단일 OpenCV provider를 표현할 수 없다.
+
+- MediaPipe 0.10.35: `opencv-contrib-python` 요구
+- Ultralytics 8.4.70: `opencv-python>=4.6.0` 요구
+
+두 wheel은 같은 `cv2` namespace와 native files를 설치하므로 clean build environment에는 `opencv-contrib-python`만 설치하고 Ultralytics를 `--no-deps`로 설치했다. 실제 imports, HighGUI와 MSMF 검증은 성공했지만 distribution metadata상 `opencv-contrib-python`은 `opencv-python`을 대신 만족시키지 않는다. 따라서 `python -m pip check`는 다음 한 건으로 종료 코드 1을 반환한다.
+
+```text
+ultralytics 8.4.70 requires opencv-python, which is not installed.
+```
+
+기존 `vision_ai`도 Ultralytics에 대해 같은 경고가 있으며, 그 외 오래된 개발 package의 OpenCV 요구 불일치도 존재한다. 새 환경에 두 OpenCV wheel을 동시에 설치하거나 package metadata를 위조하지 않았다.
+
+FitRoute build validation은 다음 중 하나만 유효한 상태로 판정한다.
+
+1. `pip check`가 종료 코드 0으로 성공한다.
+2. 위 문구와 정확히 같은 오류 한 줄만 존재하고, `opencv-contrib-python==5.0.0.93`만 설치되어 있으며 OpenCV GUI/MSMF smoke가 성공한다.
+
+허용 문구가 달라지거나 다른 dependency conflict가 한 줄이라도 추가되면 실패한다. contrib wheel이 없거나 `opencv-python`, `opencv-python-headless`, `opencv-contrib-python-headless` 중 하나가 함께 설치되어도 실패한다.
+
+### Build environment validator
+
+`packaging/ai_client/validate_build_env.py`가 위 정책을 실행 가능한 validation rule로 고정한다. 이 스크립트는 현재 Python environment, OpenCV distribution 집합과 버전, GUI/MSMF, CUDA, TensorRT, MediaPipe Tasks, XGBoost, Ultralytics, HTTPX import를 검사하고 `pip check` 원문을 제한적으로 판정한다. Webcam, 모델 inference와 GPU benchmark는 실행하지 않는다.
+
+`fitroute_build`에서의 실제 결과:
+
+```text
+Python environment: fitroute_build
+OpenCV distribution: opencv-contrib-python 5.0.0.93
+Duplicate OpenCV wheels: NO
+OpenCV GUI: OK
+MSMF: OK
+CUDA: OK (12.8)
+TensorRT: OK (11.0.0.114)
+MediaPipe: OK (0.10.35)
+XGBoost: OK (3.4.1)
+Ultralytics: OK (8.4.70)
+HTTPX: OK (0.28.1)
+Known metadata exception: ALLOWED
+Allowed metadata exceptions: 1
+Unexpected dependency conflicts: 0
+BUILD ENVIRONMENT VALID
+```
+
+Validator 종료 코드는 0이었다. 정책 단위 테스트 5개와 기존 path test 4개도 통과했으므로 2단계 build environment 준비를 완료하고 3단계 spec 작성이 가능한 상태로 판정한다.
+
+### 불필요 package 유입 검사
+
+`PyQt5`, `PyQt6`, `pygame`, `IPython`, `jupyter`, `black`, `pytest`는 새 환경에 없다. `matplotlib`은 MediaPipe 0.10.35가 직접 선언한 runtime dependency라 resolver가 설치했다. `cv2`의 distribution mapping은 `opencv-contrib-python` 하나다.
+
+### 실제 성공한 환경 재생성 명령
+
+현재 셸에는 `PIP_NO_INDEX=1`이 설정될 수 있으므로 설치 시 명시적으로 해제한다. 아래는 이번 단계에서 성공한 순서다. 긴 첫 설치 명령은 OpenCV namespace 충돌을 막기 위해 Ultralytics를 제외한다.
+
+```powershell
+conda create -n fitroute_build python=3.12.12 pip -y
+conda activate fitroute_build
+$env:PIP_NO_INDEX = "0"
+
+python -m pip install --extra-index-url https://download.pytorch.org/whl/cu128 `
+  numpy==2.4.4 torch==2.11.0+cu128 torchvision==0.26.0+cu128 `
+  tensorrt==11.0.0.114 opencv-contrib-python==5.0.0.93 `
+  mediapipe==0.10.35 xgboost==3.4.1 scikit-learn==1.9.1 `
+  httpx==0.28.1 pillow==12.2.0 pyyaml==6.0.3 requests==2.32.5 `
+  scipy==1.17.1 psutil==7.2.2 polars==1.40.1 `
+  nvidia-ml-py==13.610.43 ultralytics-thop==2.0.19 `
+  pyinstaller==6.22.3
+
+python -m pip install --no-deps ultralytics==8.4.70
+```
+
+Snapshot 기반 clean 재현 후보는 다음과 같다. 이는 이번 단계에서 별도 두 번째 환경으로 재실행하지 않았으며, `--no-deps`를 빼면 pip가 `opencv-python`을 추가할 수 있다.
+
+```powershell
+python -m pip install --no-deps `
+  --extra-index-url https://download.pytorch.org/whl/cu128 `
+  -r packaging/ai_client/requirements-lock.txt
+```
+
+### 다음 spec 단계 입력 정보
+
+Hidden import 후보:
+
+- `ultralytics.nn.backends.tensorrt`, `tensorrt`
+- `mediapipe.tasks.python`, `mediapipe.tasks.python.core`, `mediapipe.tasks.python.vision`, `mediapipe.tasks.python.vision.pose_landmarker`
+- 동적 분석 결과에 따라 `torch`, `torchvision` 하위 backend와 XGBoost sklearn wrapper
+
+Binary/data 후보:
+
+- TensorRT inference DLL과 Python bindings. builder resource DLL은 자동 전체 수집하지 않는다.
+- Torch CUDA/cuDNN runtime과 TorchVision native binaries
+- `mediapipe/tasks/c/libmediapipe.dll` 및 필요한 package-relative data
+- `xgboost/lib/xgboost.dll`, MSVC/OpenMP runtime
+- `cv2.pyd`, `opencv_videoio_ffmpeg500_64.dll`, 필요한 OpenCV data
+- exe 옆 외부 `models/` 네 resource
+
+OpenCV metadata 차이는 validator로 관리되는 알려진 예외이며 실제 runtime blocker로 취급하지 않는다. 남은 핵심 위험은 clean VM의 NVIDIA driver 및 Toolkit 없는 CUDA/TensorRT 검증, TensorRT engine GPU 호환성, PyInstaller native DLL 최소 집합 선별이다. 이번 단계에서는 spec, EXE, dist, model copy, Launcher, Registry, deploy와 Release를 변경하지 않았다.
