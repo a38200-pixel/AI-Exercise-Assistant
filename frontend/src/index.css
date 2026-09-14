@@ -97,12 +97,13 @@
   .hero-photo-frame { @apply relative mx-auto aspect-[4/5] w-full max-w-[29rem] overflow-hidden rounded-[2rem] border border-white/10 bg-surface shadow-2xl lg:absolute lg:right-[3%] lg:top-1/2 lg:w-[75%] lg:-translate-y-1/2; box-shadow:0 36px 90px rgba(0,0,0,.48),0 0 0 1px rgba(183,255,99,.04); }
   .hero-photo { @apply h-full w-full object-cover; object-position:center center; }
   .hero-photo-shade { @apply absolute inset-0; background:linear-gradient(90deg,rgba(7,13,9,.45),transparent 43%),linear-gradient(0deg,rgba(7,13,9,.42),transparent 34%),radial-gradient(circle at 72% 35%,rgba(183,255,99,.08),transparent 28%); }
-  .pose-map { @apply absolute inset-0 h-full w-full; filter:drop-shadow(0 0 5px rgba(183,255,99,.7)); }
-  .pose-map path { fill:none; stroke:rgba(183,255,99,.72); stroke-width:.48; stroke-linecap:round; stroke-linejoin:round; }
-  .pose-map circle { fill:#c8ff87; stroke:rgba(11,25,14,.75); stroke-width:.45; }
+  .pose-map { @apply absolute inset-0 h-full w-full; filter:drop-shadow(0 0 4px rgba(183,255,99,.52)); }
+  .pose-map path { fill:none; stroke:rgba(183,255,99,.7); stroke-width:.4; stroke-linecap:round; stroke-linejoin:round; }
+  .pose-map .pose-map-rear { stroke:rgba(183,255,99,.42); }
+  .pose-map circle { fill:#c8ff87; stroke:rgba(11,25,14,.82); stroke-width:.38; }
   .pose-status { @apply absolute bottom-4 right-4 flex items-center gap-2 rounded-full border border-white/10 bg-ink/65 px-3 py-2 text-[9px] font-bold tracking-[.15em] text-white/65 backdrop-blur-md; }
   .pose-status span { @apply h-1.5 w-1.5 rounded-full bg-lime; box-shadow:0 0 10px #b7ff63; }
-  .analysis-card { @apply absolute left-2 top-[7%] w-[12.5rem] rounded-2xl border border-white/10 bg-ink/80 p-4 shadow-2xl backdrop-blur-xl sm:left-5 sm:w-56 sm:p-5 lg:left-0 lg:top-[16%]; }
+  .analysis-card { @apply absolute left-2 top-[2%] w-[12.5rem] rounded-2xl border border-white/10 bg-ink/80 p-4 shadow-2xl backdrop-blur-xl sm:left-5 sm:top-[7%] sm:w-56 sm:p-5 lg:left-0 lg:top-[16%]; }
   .demo-pill { @apply rounded-full border border-lime/20 px-2 py-1 text-[8px] font-bold tracking-wider text-lime; }
   .feature-strip { @apply mx-auto grid max-w-[1480px] gap-8 border-y border-white/7 px-6 py-8 md:grid-cols-3 lg:px-10; }
   .landing-icon { @apply inline-flex h-11 w-11 items-center justify-center rounded-full bg-lime/10 text-lime; }

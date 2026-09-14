@@ -35,10 +35,24 @@ export function LandingPage() {
               />
               <div className="hero-photo-shade" aria-hidden="true" />
               <svg className="pose-map" viewBox="0 0 100 125" aria-hidden="true">
-                <path d="M57 32 L59 45 L48 45 L43 42 M59 45 L70 68 L57 76 L58 99 M70 68 L68 78 L75 101" />
-                {[['57', '32'], ['59', '45'], ['48', '45'], ['43', '42'], ['70', '68'], ['57', '76'], ['68', '78'], ['58', '99'], ['75', '101']].map(([cx, cy]) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.25" />)}
+                <path d="M58.7 45.8 L54.3 48.6 L63.2 48.8 Z" />
+                <path d="M63.2 48.8 L50 63.5 L45 50.3" />
+                <path className="pose-map-rear" d="M54.3 48.6 L43.6 63.5 L43.7 50.5" />
+                <path d="M63.2 48.8 L73.7 75.6 L64.7 74.5 L54.3 48.6" />
+                <path d="M73.7 75.6 L60.8 71.8 L69.5 94 L62 100.9" />
+                <path className="pose-map-rear" d="M64.7 74.5 L46.8 71.5 L57.7 92.1 L49.6 97.4" />
+                {[
+                  ['neck', 58.7, 45.8],
+                  ['left-shoulder', 63.2, 48.8], ['right-shoulder', 54.3, 48.6],
+                  ['left-elbow', 50, 63.5], ['right-elbow', 43.6, 63.5],
+                  ['left-wrist', 45, 50.3], ['right-wrist', 43.7, 50.5],
+                  ['left-hip', 73.7, 75.6], ['right-hip', 64.7, 74.5],
+                  ['left-knee', 60.8, 71.8], ['right-knee', 46.8, 71.5],
+                  ['left-ankle', 69.5, 94], ['right-ankle', 57.7, 92.1],
+                  ['left-foot', 62, 100.9], ['right-foot', 49.6, 97.4],
+                ].map(([name, cx, cy]) => <circle key={name} cx={cx} cy={cy} r="1" />)}
               </svg>
-              <div className="pose-status" aria-hidden="true"><span /> 33 LANDMARKS</div>
+              <div className="pose-status" aria-hidden="true"><span /> POSE DETECTED</div>
             </div>
 
             <div className="analysis-card">
