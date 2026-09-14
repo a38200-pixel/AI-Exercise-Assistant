@@ -13,7 +13,7 @@
 - [x] 기존 `FRONTEND_ORIGIN`을 하위 호환한다.
 - [x] 사용자 Bearer Token + RLS 구조를 유지하며 service role을 추가하지 않는다.
 - [x] Client 오류 응답에 traceback, DB 오류, token 또는 Supabase key를 포함하지 않는다.
-- [ ] 실제 Backend Provider를 선택한다: Render / Railway / Fly.io.
+- [x] Staging Backend Provider로 Render를 선택한다.
 
 ## 2. Backend 환경변수
 
@@ -40,12 +40,12 @@ PORT=8000
 - [x] AI 모델, TensorRT, MediaPipe, OpenCV와 dataset을 이미지에서 제외한다.
 - [x] secret을 Dockerfile에 하드코딩하지 않는다.
 - [x] `.dockerignore`로 Git, env, model, data, Frontend build를 제외한다.
-- [ ] Docker가 설치된 환경에서 build한다.
-- [ ] Container의 `/health`를 확인한다.
+- [x] Docker Desktop + WSL2 환경에서 실제 image build를 완료했다.
+- [x] `8001:8000` Container 실행과 `/health`, `/docs`, `/openapi.json` 200을 확인했다.
 
 ```powershell
 docker build -f backend/Dockerfile -t fitroute-backend .
-docker run --rm --env-file backend/.env -e PORT=8000 -p 8000:8000 fitroute-backend
+docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backend
 ```
 
 ## 4. Frontend 준비
@@ -114,6 +114,8 @@ Provider 선택 전에는 중복 설정 파일을 만들지 않습니다.
 10. [ ] Today, History, Date Detail, Statistics API 조회를 확인한다.
 11. [ ] Python AI Client의 `FITROUTE_API_BASE_URL`을 Production API로 변경한다.
 12. [ ] 실제 Session 종료 저장과 Dashboard 반영을 확인한다.
+
+Render Backend Staging의 확정 설정과 Dashboard 절차는 [Render Backend Staging Deployment](render_backend_staging.md)를 참고합니다.
 
 ## 9. Production Smoke Test
 

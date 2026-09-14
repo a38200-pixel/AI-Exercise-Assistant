@@ -8,6 +8,7 @@ import binascii
 from datetime import date, datetime, time, timedelta, timezone
 from getpass import getpass
 import json
+import os
 from pathlib import Path
 import sys
 import time as system_time
@@ -25,11 +26,19 @@ from backend.app.core.config import get_settings
 
 
 KOREA_TIMEZONE = timezone(timedelta(hours=9))
+DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument(
+        "--base-url",
+        default=os.getenv("FITROUTE_API_BASE_URL", DEFAULT_API_BASE_URL),
+        help=(
+            "Workout API base URL. CLI value overrides FITROUTE_API_BASE_URL "
+            f"(default: {DEFAULT_API_BASE_URL})."
+        ),
+    )
     parser.add_argument(
         "--date",
         type=date.fromisoformat,
@@ -41,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Post only the first sample instead of both accumulation samples",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def sample_payloads(workout_date: date) -> list[dict[str, Any]]:

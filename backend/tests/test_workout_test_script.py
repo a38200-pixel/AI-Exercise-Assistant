@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import time
 import unittest
+from unittest.mock import patch
 
 from backend.app.core.config import get_settings
-from backend.scripts.test_workout_api import normalize_and_validate_token
+from backend.scripts.test_workout_api import normalize_and_validate_token, parse_args
 
 
 def encode_segment(value: dict) -> str:
@@ -48,6 +50,34 @@ class WorkoutTestScriptTokenTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different Supabase project"):
             normalize_and_validate_token(
                 token_with(iss="https://different.supabase.co/auth/v1")
+            )
+
+
+class WorkoutTestScriptBaseUrlTests(unittest.TestCase):
+    def test_uses_local_url_by_default(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(parse_args([]).base_url, "http://127.0.0.1:8000")
+
+    def test_uses_environment_url_for_staging(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"FITROUTE_API_BASE_URL": "https://fitroute-api.onrender.com"},
+            clear=True,
+        ):
+            self.assertEqual(
+                parse_args([]).base_url,
+                "https://fitroute-api.onrender.com",
+            )
+
+    def test_cli_url_overrides_environment_url(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"FITROUTE_API_BASE_URL": "https://environment.example"},
+            clear=True,
+        ):
+            self.assertEqual(
+                parse_args(["--base-url", "https://command-line.example"]).base_url,
+                "https://command-line.example",
             )
 
 

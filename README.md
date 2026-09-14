@@ -275,12 +275,12 @@ npm run preview -- --host 127.0.0.1
 
 Hosting Provider에는 `frontend/dist`를 배포하고, React Router 직접 접근이 `/index.html`로 fallback되도록 SPA rewrite를 설정해야 합니다. 실제 Frontend URL이 확정되면 Supabase Authentication의 Site URL과 Redirect URLs도 해당 HTTPS 주소로 변경합니다.
 
-현재 환경에서는 Docker 실행 파일이 설치되어 있지 않아 실제 image build/container 실행은 아직 검증하지 않았습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, health check, Frontend production build와 SPA 직접 접근은 검증했습니다.
+Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container 실행을 완료했으며 `/health`, `/docs`, `/openapi.json`의 200 응답을 확인했습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, Frontend production build와 SPA 직접 접근도 검증했습니다.
 
 ## Next Steps
 
-1. Docker가 설치된 환경에서 Backend image build와 `/health` 확인
-2. Backend Provider에 배포하고 HTTPS API URL 확보
+1. Render에 Backend를 배포하고 HTTPS API URL 확보
+2. Render Production Workout API integration test
 3. Frontend Provider에 배포하고 SPA rewrite 설정
 4. Supabase Site URL 및 Redirect URLs 갱신
 5. Production 로그인 → Session 저장 → Dashboard 반영 smoke test
@@ -306,3 +306,5 @@ npm run dev
 `frontend/.env`의 `VITE_API_BASE_URL` 포트는 실제 Backend 포트와 같아야 합니다.
 
 Production 배포 준비와 실제 배포 순서는 [Production Deployment Checklist](docs/production_deployment_checklist.md)를 참고하세요.
+
+Render Backend Staging의 Dashboard 입력값과 검증 절차는 [Render Backend Staging Deployment](docs/render_backend_staging.md)를 참고하세요.
