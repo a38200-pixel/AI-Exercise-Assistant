@@ -9,8 +9,10 @@ React /exercise
   -> fitroute://start?exercise=squat
   -> HKCU custom protocol
   -> FitRouteLauncher.exe
+  -> Windows Credential Manager refresh 또는 Desktop Login
   -> config.json의 기존 vision_ai Python + 프로젝트
-  -> src/main.py --exercise squat
+  -> access token은 child environment로만 전달
+  -> src/main.py --exercise squat --auto-start-session
 ```
 
 Launcher는 AI 모델이나 Python runtime을 포함하지 않는다. 기존 Conda 환경, 모델 파일, 프로젝트 source가 설치된 현재 개발 PC를 대상으로 한다.
@@ -29,6 +31,7 @@ fitroute://start?exercise=squat
 - URL 값을 shell 문자열, 파일 경로 또는 Python code로 사용하지 않는다.
 - `subprocess.Popen([...], shell=False)`의 고정 argument list만 사용한다.
 - access token, refresh token, password는 URL이나 Launcher command line으로 전달하지 않는다.
+- `sb_secret_` 또는 legacy JWT의 `service_role` key는 Desktop config에서 거부한다.
 
 ## Launcher 구성
 
@@ -38,7 +41,10 @@ fitroute://start?exercise=squat
 {
   "python_executable": "C:\\path\\to\\vision_ai\\python.exe",
   "project_root": "C:\\path\\to\\AI-Exercise-Assistant",
-  "entry_script": "src/main.py"
+  "entry_script": "src/main.py",
+  "api_base_url": "https://fitroute-api.onrender.com",
+  "supabase_url": "https://YOUR_PROJECT.supabase.co",
+  "supabase_anon_key": "YOUR_PUBLISHABLE_KEY"
 }
 ```
 
@@ -50,7 +56,7 @@ Camera를 실행하지 않고 parsing과 최종 argument list를 확인할 수 �
 
 ```powershell
 Copy-Item desktop_launcher/config.example.json desktop_launcher/config.json
-# config.json의 두 경로를 현재 PC에 맞게 수정
+# config.json의 경로와 Supabase publishable 설정을 현재 PC에 맞게 수정
 python desktop_launcher/launcher.py --config desktop_launcher/config.json --dry-run "fitroute://start?exercise=squat"
 python -m pytest tests/test_desktop_launcher.py -q -p no:cacheprovider
 ```
@@ -60,10 +66,14 @@ python -m pytest tests/test_desktop_launcher.py -q -p no:cacheprovider
 현재 PC 검사 결과 PyInstaller는 설치되어 있지 않다. Codex는 이를 자동 설치하지 않았다. 사용자가 선택한 환경에 PyInstaller를 설치한 후 실행한다.
 
 ```powershell
+C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.txt
 C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install pyinstaller
 powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
   -PythonExecutable "C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe" `
-  -ProjectRoot "C:\Users\AISW_203_113\Documents\GitHub\AI-Exercise-Assistant"
+  -ProjectRoot "C:\Users\AISW_203_113\Documents\GitHub\AI-Exercise-Assistant" `
+  -ApiBaseUrl "https://fitroute-api.onrender.com" `
+  -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
+  -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
 ```
 
 생성물:
@@ -104,6 +114,56 @@ python desktop_launcher/unregister_protocol.py
 
 Launcher는 `Local\FitRouteAIClientCamera` Windows named mutex를 획득하고 AI process가 끝날 때까지 유지한다. 이미 mutex가 존재하면 두 번째 Camera process를 만들지 않고 종료한다.
 
+## Desktop 인증
+
+Desktop은 Web token을 전달받지 않고 같은 Supabase Project에 별도로 로그인한다. 현재 설치된 `supabase==2.31.0`의 `sign_in_with_password()`와 `refresh_session()`을 사용한다.
+
+최초 실행 흐름:
+
+1. Credential Manager에 refresh token이 없으면 tkinter Login Dialog를 표시한다.
+2. 사용자는 Web에서 사용 중인 동일한 계정의 email/password를 입력한다.
+3. password는 로그인 요청에만 사용하고 저장하지 않는다.
+4. access token은 현재 Launcher memory에만 유지한다.
+5. refresh token과 계정 email은 Windows Generic Credential `FitRoute AI Client/supabase_refresh_token`에 저장한다.
+
+이후 실행 흐름:
+
+1. Credential Manager에서 refresh token을 읽는다.
+2. Supabase session을 refresh해 최신 access token을 얻는다.
+3. token rotation이 있으면 새 refresh token으로 Credential Manager를 갱신한다.
+4. refresh가 거부되면 기존 credential을 제거하고 Login Dialog를 한 번 표시한다.
+
+Credential Manager 접근 또는 저장이 실패해도 config, `.env`, Registry에 token을 평문 저장하지 않는다. 로그인에 성공했다면 이번 Camera 실행에서만 access token을 사용하고 다음 실행에는 다시 로그인한다.
+
+Desktop 인증정보만 제거하려면 설치된 Launcher에서 다음을 실행한다.
+
+```powershell
+& "$env:LOCALAPPDATA\FitRoute\FitRouteLauncher.exe" --logout
+```
+
+source 개발 모드에서는 다음 명령을 사용할 수 있다.
+
+```powershell
+python desktop_launcher/launcher.py --logout
+```
+
+## Child process와 Session 자동 시작
+
+Launcher는 갱신된 access token을 command line이나 protocol URL에 넣지 않는다. `os.environ.copy()`로 만든 child 전용 environment에만 다음 값을 추가한다.
+
+```text
+FITROUTE_ACCESS_TOKEN=<현재 access token>
+FITROUTE_API_BASE_URL=<config의 Render URL>
+```
+
+실행 argument list에는 민감정보 없이 다음만 포함된다.
+
+```text
+python.exe src/main.py --exercise squat --auto-start-session
+```
+
+AI Client는 모델 초기화, Camera open과 첫 inference frame 처리가 성공한 뒤 `WorkoutSession.start()`를 호출한다. 따라서 모델 로딩 시간은 운동 시간에 포함되지 않으며 초기화가 실패하면 빈 Session도 생성되지 않는다. 기존 `python src/main.py --exercise squat` 명령은 계속 manual `S` 시작 방식이다.
+
 ## Installer 생성
 
 `desktop_launcher/installer/FitRouteAIClient.iss`는 Inno Setup source다. 현재 PC 검사 결과 Inno Setup compiler(`ISCC.exe`)는 설치되어 있지 않으며 Codex는 외부 프로그램을 설치하지 않았다.
@@ -140,7 +200,22 @@ VITE_DESKTOP_CLIENT_DOWNLOAD_URL=<공개한-installer-asset-URL>
 
 - 현재 PC의 `vision_ai` Python, 프로젝트 source, 모델과 호환 GPU/TensorRT가 필요하다.
 - Launcher installer는 완전한 일반 사용자용 AI Client installer가 아니다.
-- Web 인증 token은 Desktop으로 전달하지 않는다. 기존 `FITROUTE_ACCESS_TOKEN` 환경설정 방식을 유지한다.
+- Web 인증 token은 Desktop으로 전달하지 않는다. Web과 Desktop에서 같은 계정으로 각각 로그인해야 한다.
+- 기존 CMD의 `FITROUTE_ACCESS_TOKEN` 환경설정 방식은 manual/debug fallback으로 계속 사용할 수 있다.
+
+## 실제 E2E 확인
+
+1. Web과 Desktop Login Dialog에서 동일한 FitRoute 계정을 사용한다.
+2. `/exercise`에서 Squat을 선택하고 운동 시작을 누른다.
+3. 브라우저의 FitRoute 외부 앱 열기를 허용한다.
+4. 최초 한 번 Desktop Login을 완료한다.
+5. Camera HUD가 즉시 `ACTIVE`, `00:00`, Squat Count `0`으로 시작하는지 확인한다.
+6. `stand -> squat -> stand` 후 Count가 1 증가하는지 확인한다.
+7. `E`를 눌러 종료한다.
+8. Render log의 `POST /api/workouts` 응답이 201인지 확인한다.
+9. Web Dashboard/History를 새로고침하고 실행 전 실제 값 대비 증가량을 확인한다.
+
+테스트 자동화에서는 Registry, Webcam, 실제 Supabase login 또는 실제 DB write를 수행하지 않는다.
 
 ## 일반 사용자 배포 전 남은 작업
 
@@ -149,5 +224,5 @@ VITE_DESKTOP_CLIENT_DOWNLOAD_URL=<공개한-installer-asset-URL>
 - CUDA/TensorRT/GPU 호환성 검사와 CPU fallback 정책
 - code signing 및 installer 서명
 - 자동 업데이트와 버전 호환 정책
-- Web-to-Desktop 인증 handoff 설계
+- Web 계정과 Desktop 계정을 안전하게 연결·검증하는 account linking 설계
 - 공식 Release asset 배포와 checksum 제공

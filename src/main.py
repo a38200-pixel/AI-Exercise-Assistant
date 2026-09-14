@@ -470,6 +470,22 @@ def handle_keyboard_input(
     return False
 
 
+def auto_start_session_when_ready(
+    enabled: bool,
+    already_started: bool,
+    exercise_counter: ExerciseCounter,
+    workout_session: WorkoutSession,
+    current_time: float,
+) -> bool:
+    """첫 inference frame이 정상 완료된 뒤 Launcher 요청 세션을 한 번만 시작한다."""
+    if not enabled or already_started:
+        return already_started
+    started = workout_session.start(exercise_counter, current_time)
+    if started:
+        print("Workout session auto-started.")
+    return started
+
+
 def print_startup_information(
     detector: PersonDetector,
     pose_classifier: PoseClassifier,
@@ -531,7 +547,7 @@ def print_benchmark(benchmark: dict[str, Any]) -> None:
     print(f"Full pipeline:         {end_to_end_fps:.2f} FPS")
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--exercise",
@@ -545,7 +561,12 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help="30-frame warmup 후 지정한 초 동안 측정하고 자동 종료합니다.",
     )
-    arguments = parser.parse_args()
+    parser.add_argument(
+        "--auto-start-session",
+        action="store_true",
+        help="첫 inference frame 준비 후 Workout Session을 자동 시작합니다.",
+    )
+    arguments = parser.parse_args(argv)
     if arguments.benchmark_seconds is not None and arguments.benchmark_seconds <= 0:
         parser.error("--benchmark-seconds must be greater than 0")
     return arguments
@@ -573,6 +594,7 @@ def main() -> None:
     measurement_started: float | None = None
     display_pose = "ANALYZING"
     display_confidence = 0.0
+    auto_start_completed = False
     benchmark: dict[str, Any] = {
         "yolo": [],
         "mediapipe": [],
@@ -618,6 +640,13 @@ def main() -> None:
                 smoothing_state["stable_confidence"],
                 display_pose,
                 display_confidence,
+            )
+            auto_start_completed = auto_start_session_when_ready(
+                arguments.auto_start_session,
+                auto_start_completed,
+                exercise_counter,
+                workout_session,
+                current_time,
             )
             exercise_status = exercise_counter.get_status(current_time)
             workout_session.update(current_time)
