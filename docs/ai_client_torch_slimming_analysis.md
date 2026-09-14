@@ -286,3 +286,105 @@ C:\Users\AISW_203_113\anaconda3\envs\fitroute_build\python.exe packaging\ai_clie
 - `docs/ai_client_torch_slimming_analysis.md`
 
 6-B-3A에서는 baseline 수정 없음, spec 수정 없음, rebuild 없음, Webcam 실행 없음, network 실행 없음, commit/push 없음이다. 따라서 6-B-3B의 Python-only 1차 후보 실험으로 진행할 수 있지만, 실제 변경 전 현재 baseline을 rollback 기준으로 계속 보존해야 한다.
+
+## 16. 6-B-3B-1 — protoc.exe candidate
+
+### 범위와 출처
+
+성공 baseline `dist_candidate_polars/FitRouteAIClient/`은 그대로 보존하고, 별도 candidate에서 다음 파일 하나만 제외했다.
+
+| 항목 | 값 |
+|---|---|
+| Source package | PyTorch `2.11.0+cu128` |
+| Source | `fitroute_build/Lib/site-packages/torch/bin/protoc.exe` |
+| Baseline path | `_internal/torch/bin/protoc.exe` |
+| PyInstaller TOC 종류 | `BINARY` |
+| 크기 | 2,800,640 bytes / 2.670898 MiB |
+| SHA256 | `56F90682F1B878CBBCE76B7A8738DBAF20495938D4A809416EA0938D3E55245E` |
+
+이 실행 파일은 PyTorch wheel이 제공하는 Protocol Buffers schema compiler다. Python object serialization이나 MediaPipe Tasks runtime에 필요한 일반 runtime DLL이 아니다. 저장소와 FitRoute runtime import 경로에서 `.proto`→Python code generation 또는 `protoc.exe` subprocess 호출은 발견되지 않았다. `fitroute_build`에는 `google.protobuf` 패키지도 없으며 현재 MediaPipe 0.10.35 Tasks 경로는 FlatBuffers runtime으로 정상 import된다.
+
+### Candidate 구현
+
+- Spec: `packaging/ai_client/FitRouteAIClient.optimized_protoc.spec`
+- Build script: `packaging/ai_client/build_ai_client_candidate_protoc.ps1`
+- Workpath: `build_candidate_protoc/`
+- Distpath: `dist_candidate_protoc/`
+- 기존 TensorRT builder 8개 fail-closed filter 유지
+- 기존 Polars exclusion/guard 유지
+- binaries/datas에서 destination이 정확히 `torch/bin/protoc.exe`인 항목만 조회
+- 예상 개수 1, collection `binaries`, typecode `BINARY`, source parent `torch/bin`을 모두 확인한 뒤 제외
+- 조건이 다르면 build를 중단하고, COLLECT 후에도 `protoc.exe`가 발견되면 중단
+
+실행한 build 명령의 핵심은 다음과 같다.
+
+```powershell
+python -m PyInstaller `
+  --noconfirm `
+  --clean `
+  --workpath build_candidate_protoc `
+  --distpath dist_candidate_protoc `
+  packaging/ai_client/FitRouteAIClient.optimized_protoc.spec
+```
+
+실제 build는 `fitroute_build` 환경, PyInstaller 6.22.3, hooks-contrib 2026.7에서 성공했다. `vision_ai` 패키지는 변경하지 않았고 어떤 패키지도 install/uninstall/upgrade/downgrade하지 않았다.
+
+### 정적 비교 결과
+
+| 항목 | Baseline | protoc candidate | 결과 |
+|---|---:|---:|---|
+| 파일 수 | 3,654 | 3,653 | -1 |
+| Bytes | 5,206,768,754 | 5,203,968,114 | -2,800,640 |
+| MiB | 4,965.561632 | 4,962.890734 | -2.670898 |
+| GiB | 4.849181 | 4.846573 | -0.002608 |
+| 절감률 | - | 0.053788% | baseline 대비 |
+| `protoc.exe` | 1 | 0 | PASS |
+| TensorRT builder resource | 0 | 0 | PASS |
+| Polars runtime/module | 0 | 0 | PASS |
+| `torch/lib` | 37 files / 4,231,593,696 bytes | 동일 | PASS |
+
+상대 경로 집합의 유일한 차이는 `_internal/torch/bin/protoc.exe`다. 나머지 모든 공통 파일의 크기는 동일하다. `torch/lib` 37개 DLL 전체 SHA256가 일치하며 `torch_cuda.dll`, `torch_cpu.dll`도 각각 baseline과 동일하다. 다음 모델 4개의 SHA256도 모두 일치한다.
+
+| 모델 | SHA256 |
+|---|---|
+| `yolo26n.engine` | `BBA6FE01B7114764E4C6625D49E06EBABBCFD15FABFF41E5CBC77BD7F60DAE11` |
+| `pose_landmarker_full.task` | `5134A3AAD27A58B93DA0088D431F366DA362B44E3CCFBE3462B3827A839011B1` |
+| `model_weights.xgb` | `93571ABF066A2EF50840C88B83B40571D1BCBE93878347613AA9138E07F0A99D` |
+| `classes.json` | `A5D6627B3862AAC345A3F40EDE1774C3231F924ACE79B48FCD9A66F907091D87` |
+
+### 카메라 없는 검증
+
+| 검증 | 결과 |
+|---|---|
+| PowerShell build script syntax | PASS |
+| Spec Python syntax | PASS |
+| Build environment validation | PASS |
+| `FitRouteAIClient.exe --help` | PASS, exit 0 |
+| `FitRouteAIClient.exe --diagnose-runtime` | `RUNTIME DIAGNOSTIC PASS`, exit 0 |
+| Models | 4개 모두 OK |
+| OpenCV | 5.0.0, GUI/MSMF OK |
+| CUDA | 12.8, RTX 3080 OK |
+| TensorRT | 11.0.0.114 OK |
+| MediaPipe | 0.10.35 import/Tasks API OK |
+| Ultralytics | 8.4.70 OK |
+| HTTPX | 0.28.1 OK |
+| XGBoost | 9 classes / 132 features OK |
+| MediaPipe PoseLandmarker asset 생성/종료 smoke | PASS |
+| FlatBuffers + MediaPipe Tasks import | PASS |
+| PyInstaller missing-library warning | 0 |
+
+Baseline/candidate warn 파일은 각각 843줄이며 의미상 새 warning은 없다. 유일한 textual 차이는 같은 Windows optional `posix` warning의 importer 순서뿐이다. 기존 matplotlib font cache permission warning과 XGBoost 구형 `.xgb` format warning은 candidate 신규 회귀가 아니다.
+
+MediaPipe model-load smoke는 Webcam 없이 성공했지만 MediaPipe 내부 Clearcut telemetry가 외부 연결을 자동으로 한 차례 시도했고 `Status_ConnectFailed: 12029`로 실패했다. FitRoute API, Render POST, Supabase 변경은 실행하지 않았으며 성공한 외부 전송은 확인되지 않았다. 후속 자동 smoke에서는 해당 telemetry 가능성을 고려해야 한다.
+
+### 다음 검증
+
+Codex는 Webcam, `--exercise squat`, `fitroute://`, Launcher 설정 변경 또는 workout POST를 실행하지 않았다. 사용자가 직접 실행할 Camera 검증 명령은 다음과 같다.
+
+```cmd
+dist_candidate_protoc\FitRouteAIClient\FitRouteAIClient.exe --exercise squat
+```
+
+Camera에서 TensorRT detection, MediaPipe pose, XGBoost classification, Squat count와 FPS가 정상인지 확인한다. 이 검증이 통과한 뒤에만 Launcher active config를 candidate EXE로 임시 변경하고 `fitroute://start?exercise=squat`, Desktop Auth, auto session, workout 종료, Render 201, Supabase 저장, Dashboard 증가를 확인한다. E2E 성공 전에는 Launcher가 현재 성공 baseline을 계속 가리키도록 유지한다.
+
+현재 상태는 **CANDIDATE READY FOR USER CAMERA TEST**다. Camera와 Launcher E2E까지 성공하면 다음 candidate는 `torch.testing` 하나만 제외하는 실험이며 여러 Torch subtree를 동시에 제외하지 않는다.
