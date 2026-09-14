@@ -90,20 +90,19 @@
   .setting-row em { @apply col-start-2 text-[10px] font-bold not-italic text-muted/65 sm:col-start-auto; }
   .landing-nav { @apply mx-auto flex h-20 max-w-[1480px] items-center justify-between border-b border-white/7 px-6 lg:px-10; }
   .landing-nav nav a:hover { @apply text-lime; }
-  .hero-shell { @apply relative mx-auto grid min-h-[680px] max-w-[1480px] items-center overflow-hidden px-6 lg:grid-cols-[1.05fr_.95fr] lg:px-10; }
-  .hero-shell::before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 82% 25%,rgba(116,185,78,.19),transparent 30%),radial-gradient(circle at 60% 95%,rgba(183,255,99,.06),transparent 34%); pointer-events:none; }
-  .hero-visual { @apply relative hidden h-[580px] lg:block; }
-  .hero-visual::before { content:""; position:absolute; inset:8% 4% 2% 8%; border-radius:50% 50% 20% 60%; background:linear-gradient(145deg,rgba(183,255,99,.11),rgba(24,35,28,.7)); filter:blur(1px); border:1px solid rgba(183,255,99,.1); }
-  .pose-orbit { @apply absolute rounded-full border border-lime/15; }
-  .pose-orbit-one { @apply inset-[18%_11%_9%_18%]; }
-  .pose-orbit-two { @apply inset-[29%_22%_20%_30%]; }
-  .pose-figure { @apply absolute left-[42%] top-[23%] h-[340px] w-[180px] -rotate-6; filter:drop-shadow(0 35px 45px rgba(0,0,0,.45)); }
-  .pose-head { @apply absolute left-[62px] top-0 h-16 w-16 rounded-full bg-[linear-gradient(145deg,#b7ff63,#477547)]; }
-  .pose-body { @apply absolute left-[47px] top-[62px] h-36 w-24 rounded-[50%_50%_30%_30%] bg-[linear-gradient(160deg,#4c8050,#16261b)]; }
-  .pose-arm { @apply absolute left-[8px] top-[82px] h-10 w-28 -rotate-[28deg] rounded-full bg-[#385e3e]; transform-origin:right; }
-  .pose-leg { @apply absolute top-[185px] h-36 w-12 rounded-full bg-[linear-gradient(#17261b,#37593b)]; }
-  .pose-leg-one { @apply left-[58px] rotate-[24deg]; }.pose-leg-two { @apply left-[101px] -rotate-[32deg]; }
-  .analysis-card { @apply absolute bottom-[16%] right-[2%] w-60 rounded-2xl border border-white/10 bg-ink/75 p-5 shadow-2xl backdrop-blur-xl; }
+  .hero-shell { @apply relative mx-auto grid min-h-[680px] max-w-[1480px] items-center gap-6 overflow-hidden px-6 pb-16 lg:grid-cols-[1.05fr_.95fr] lg:gap-0 lg:px-10 lg:pb-0; }
+  .hero-shell::before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 82% 25%,rgba(116,185,78,.2),transparent 30%),radial-gradient(circle at 60% 95%,rgba(183,255,99,.07),transparent 34%); pointer-events:none; }
+  .hero-visual { @apply relative z-0 mx-auto h-auto min-w-0 w-full max-w-[35rem] pb-6 lg:h-[620px] lg:max-w-none lg:pb-0; }
+  .hero-visual::before { content:""; position:absolute; inset:12% 0 6% 13%; border-radius:50%; background:rgba(122,208,82,.15); filter:blur(70px); pointer-events:none; }
+  .hero-photo-frame { @apply relative mx-auto aspect-[4/5] w-full max-w-[29rem] overflow-hidden rounded-[2rem] border border-white/10 bg-surface shadow-2xl lg:absolute lg:right-[3%] lg:top-1/2 lg:w-[75%] lg:-translate-y-1/2; box-shadow:0 36px 90px rgba(0,0,0,.48),0 0 0 1px rgba(183,255,99,.04); }
+  .hero-photo { @apply h-full w-full object-cover; object-position:center center; }
+  .hero-photo-shade { @apply absolute inset-0; background:linear-gradient(90deg,rgba(7,13,9,.45),transparent 43%),linear-gradient(0deg,rgba(7,13,9,.42),transparent 34%),radial-gradient(circle at 72% 35%,rgba(183,255,99,.08),transparent 28%); }
+  .pose-map { @apply absolute inset-0 h-full w-full; filter:drop-shadow(0 0 5px rgba(183,255,99,.7)); }
+  .pose-map path { fill:none; stroke:rgba(183,255,99,.72); stroke-width:.48; stroke-linecap:round; stroke-linejoin:round; }
+  .pose-map circle { fill:#c8ff87; stroke:rgba(11,25,14,.75); stroke-width:.45; }
+  .pose-status { @apply absolute bottom-4 right-4 flex items-center gap-2 rounded-full border border-white/10 bg-ink/65 px-3 py-2 text-[9px] font-bold tracking-[.15em] text-white/65 backdrop-blur-md; }
+  .pose-status span { @apply h-1.5 w-1.5 rounded-full bg-lime; box-shadow:0 0 10px #b7ff63; }
+  .analysis-card { @apply absolute left-2 top-[7%] w-[12.5rem] rounded-2xl border border-white/10 bg-ink/80 p-4 shadow-2xl backdrop-blur-xl sm:left-5 sm:w-56 sm:p-5 lg:left-0 lg:top-[16%]; }
   .demo-pill { @apply rounded-full border border-lime/20 px-2 py-1 text-[8px] font-bold tracking-wider text-lime; }
   .feature-strip { @apply mx-auto grid max-w-[1480px] gap-8 border-y border-white/7 px-6 py-8 md:grid-cols-3 lg:px-10; }
   .landing-icon { @apply inline-flex h-11 w-11 items-center justify-center rounded-full bg-lime/10 text-lime; }

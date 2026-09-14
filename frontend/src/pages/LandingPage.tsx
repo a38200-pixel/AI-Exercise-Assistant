@@ -1,5 +1,6 @@
 import { Activity, ArrowRight, BarChart3, Check, Dumbbell, Menu, ShieldCheck, Smartphone } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import squatHeroImage from '../assets/fitroute-squat-hero.webp'
 import { Brand } from '../components/common/Brand'
 
 export function LandingPage() {
@@ -16,7 +17,7 @@ export function LandingPage() {
 
       <main>
         <section className="hero-shell">
-          <div className="relative z-10 max-w-2xl py-16 lg:py-24">
+          <div className="relative z-10 min-w-0 max-w-2xl py-16 lg:py-24">
             <p className="eyebrow">YOUR DAILY FITNESS ROUTE</p>
             <h1 className="mt-5 text-6xl font-black tracking-[-0.065em] sm:text-7xl lg:text-[6.3rem]">FitRoute<span className="text-lime">.</span></h1>
             <h2 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">오늘도, 더 건강한 나를 향한 한 걸음</h2>
@@ -24,10 +25,28 @@ export function LandingPage() {
             <div className="mt-9 flex flex-wrap gap-3"><Link className="btn-primary px-6 py-3.5" to="/signup">지금 시작하기 <ArrowRight size={18} /></Link><a className="btn-outline px-6 py-3.5" href="#features">기능 알아보기</a></div>
           </div>
 
-          <div className="hero-visual" aria-label="AI 운동 분석 데모 비주얼">
-            <div className="pose-orbit pose-orbit-one" /><div className="pose-orbit pose-orbit-two" />
-            <div className="pose-figure" aria-hidden="true"><span className="pose-head" /><span className="pose-body" /><span className="pose-arm" /><span className="pose-leg pose-leg-one" /><span className="pose-leg pose-leg-two" /></div>
-            <div className="analysis-card"><div className="flex items-center justify-between"><span className="text-xs text-white/45">AI Pose Analysis</span><span className="demo-pill">DEMO</span></div><div className="mt-6 flex items-center gap-3"><span className="metric-icon"><Activity size={20} /></span><div><p className="text-xs text-white/45">Movement</p><p className="font-bold">Squat</p></div></div><div className="mt-5 flex items-center justify-between text-sm"><span className="text-white/50">Confidence</span><strong>92.4%</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[92%] rounded-full bg-lime" /></div></div>
+          <div className="hero-visual">
+            <div className="hero-photo-frame">
+              <img
+                className="hero-photo"
+                src={squatHeroImage}
+                alt="어두운 피트니스 공간에서 정확한 스쿼트 자세로 운동하는 여성"
+                fetchPriority="high"
+              />
+              <div className="hero-photo-shade" aria-hidden="true" />
+              <svg className="pose-map" viewBox="0 0 100 125" aria-hidden="true">
+                <path d="M57 32 L59 45 L48 45 L43 42 M59 45 L70 68 L57 76 L58 99 M70 68 L68 78 L75 101" />
+                {[['57', '32'], ['59', '45'], ['48', '45'], ['43', '42'], ['70', '68'], ['57', '76'], ['68', '78'], ['58', '99'], ['75', '101']].map(([cx, cy]) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.25" />)}
+              </svg>
+              <div className="pose-status" aria-hidden="true"><span /> 33 LANDMARKS</div>
+            </div>
+
+            <div className="analysis-card">
+              <div className="flex items-center justify-between"><span className="text-xs text-white/50">AI Pose Analysis</span><span className="demo-pill">DEMO</span></div>
+              <div className="mt-5 flex items-center gap-3"><span className="metric-icon"><Activity size={20} /></span><div><p className="text-xs text-white/45">Movement</p><p className="font-bold">Squat</p></div></div>
+              <div className="mt-4 flex items-center justify-between text-sm"><span className="text-white/50">Confidence</span><strong>92.4%</strong></div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[92%] rounded-full bg-lime" /></div>
+            </div>
           </div>
         </section>
 
