@@ -1,0 +1,6 @@
+{
+  "ai_client_executable": "ai_client\\FitRouteAIClient.exe",
+  "api_base_url": "https://fitroute-api.onrender.com",
+  "supabase_url": "https://bntlpynhnpjszxxidkdv.supabase.co",
+  "supabase_anon_key": "sb_publishable_NehjiBej7ouM4GUSlDSyyA_i_3YyKOb"
+}

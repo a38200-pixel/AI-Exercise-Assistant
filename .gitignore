@@ -22,6 +22,7 @@ frontend/dist/
 /dist_candidate_protoc/
 /build_candidate_testing/
 /dist_candidate_testing/
+/installer_output/
 desktop_launcher/build/
 desktop_launcher/dist/
 desktop_launcher/*.spec

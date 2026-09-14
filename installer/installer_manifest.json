@@ -1,0 +1,52 @@
+{
+  "installer": {
+    "app_id": "{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}",
+    "version": "0.1.0",
+    "scope": "per-user",
+    "signed": false
+  },
+  "ai_baseline": {
+    "source": "dist_candidate_protoc/FitRouteAIClient",
+    "file_count": 3653,
+    "bytes": 5203968114,
+    "mib": 4962.890734,
+    "gib": 4.846573,
+    "executable_sha256": "09799FF2FABA0D53EA3CC4FB6DB32E80008A1257B14A51BEDE4F877CE3730A47"
+  },
+  "launcher": {
+    "source": "desktop_launcher/dist/FitRouteLauncher.exe",
+    "bytes": 63476752,
+    "sha256": "7FCBBB7EB2AC36939AA24C6B77A4ABF1330CFF61907FF2F3093904FF1E36B173"
+  },
+  "models": {
+    "models/detector/yolo26n.engine": {
+      "bytes": 7731821,
+      "sha256": "BBA6FE01B7114764E4C6625D49E06EBABBCFD15FABFF41E5CBC77BD7F60DAE11"
+    },
+    "models/pose/pose_landmarker_full.task": {
+      "bytes": 9398198,
+      "sha256": "5134A3AAD27A58B93DA0088D431F366DA362B44E3CCFBE3462B3827A839011B1"
+    },
+    "models/classifier/model_weights.xgb": {
+      "bytes": 3378634,
+      "sha256": "93571ABF066A2EF50840C88B83B40571D1BCBE93878347613AA9138E07F0A99D"
+    },
+    "models/classifier/classes.json": {
+      "bytes": 110,
+      "sha256": "A5D6627B3862AAC345A3F40EDE1774C3231F924ACE79B48FCD9A66F907091D87"
+    }
+  },
+  "production_config": {
+    "ai_client_executable": "ai_client\\FitRouteAIClient.exe",
+    "api_base_url": "https://fitroute-api.onrender.com",
+    "supabase_url": "https://bntlpynhnpjszxxidkdv.supabase.co",
+    "supabase_key_kind": "publishable",
+    "contains_secret_value": false
+  },
+  "excluded": {
+    "tensorrt_builder_resources": 0,
+    "polars_runtime": 0,
+    "torch_bin_protoc": 0,
+    "torch_testing": "KEEP"
+  }
+}

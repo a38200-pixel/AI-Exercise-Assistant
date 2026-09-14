@@ -372,6 +372,8 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 다음 작업 기준점은 최종 4.846573 GiB baseline을 포함하는 Inno Setup Installer입니다.
 
+Inno Setup Installer의 구조, 입력 검증, 빌드와 7-B/7-C 수동 테스트 절차는 [Windows Installer](docs/windows_installer.md)를 참고하세요.
+
 ## Backend
 
 Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAPI API scaffold는 [backend/README.md](backend/README.md)를 참고하세요. 실제 Cloud 연결 전에도 schema와 service unit test를 실행할 수 있습니다.
