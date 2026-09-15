@@ -1,6 +1,6 @@
 # FitRoute — AI Exercise Assistant
 
-![FitRoute UI overview](docs/UI.png)
+![FitRoute UI overview](docs/%EC%98%88%EC%83%81%20UI.png)
 
 ## Overview
 
@@ -285,7 +285,7 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 
 ### Windows Installer 및 Cloudflare R2 배포
 
-최종 Windows Desktop Client는 PyInstaller onedir bundle을 Inno Setup으로 패키징한 `FitRoute-AI-Client-Setup-0.1.0.exe`로 배포합니다. Installer에는 Launcher, Frozen AI Client, production config와 모델이 모두 포함되며 결과물은 약 **2.2 GiB**입니다. `%LOCALAPPDATA%\Programs\FitRoute AI Client`에 관리자 권한 없이 per-user 방식으로 설치하고 다음 구조를 만듭니다.
+현재 Production Windows Desktop Client는 PyInstaller onedir bundle을 Inno Setup으로 패키징한 `FitRoute-AI-Client-Setup-0.1.1.exe`로 배포합니다. Installer에는 Launcher, Frozen AI Client, production config와 모델이 모두 포함되며 결과물은 약 **2.2 GiB**입니다. `%LOCALAPPDATA%\Programs\FitRoute AI Client`에 관리자 권한 없이 per-user 방식으로 설치하고 다음 구조를 만듭니다.
 
 ```text
 FitRoute AI Client/
@@ -304,7 +304,7 @@ Installer는 `fitroute://` protocol을 현재 사용자 Registry에 등록합니
 Installer가 크기 때문에 Git repository나 Vercel 정적 asset에 포함하지 않고 Cloudflare R2 Object Storage에 별도로 업로드합니다. R2는 AI/API server가 아니라 versioned Windows binary를 보관하고 public HTTPS download를 처리하는 배포 계층입니다. Vercel Production에는 R2 public URL을 다음 환경변수로 주입합니다.
 
 ```dotenv
-VITE_DESKTOP_CLIENT_DOWNLOAD_URL=https://<public-r2-host>/FitRoute-AI-Client-Setup-0.1.0.exe
+VITE_DESKTOP_CLIENT_DOWNLOAD_URL=https://<public-r2-host>/releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe
 ```
 
 Web의 설치 안내 버튼은 이 환경변수의 URL을 사용해 R2 Installer를 내려받습니다. 값이 없으면 Frontend는 URL을 임의로 만들지 않고 `다운로드 준비 중` 상태를 표시합니다. 공개 download URL과 달리 R2 Access Key, Secret Access Key, API token 및 업로드 도구 credential은 배포 작업에만 사용하며 README나 Frontend에 포함하지 않습니다.
@@ -454,9 +454,98 @@ Hosting Provider에는 `frontend/dist`를 배포하고, React Router 직접 접�
 
 Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container 실행을 완료했으며 `/health`, `/docs`, `/openapi.json`의 200 응답을 확인했습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, Frontend production build와 SPA 직접 접근도 검증했습니다.
 
+## Windows AI Client Version History
+
+### v0.1.0 — Initial Production Release
+
+FitRoute의 초기 Windows Production 배포 버전입니다.
+
+- FitRoute Windows Launcher와 AI Client 최초 배포
+- `fitroute://` custom protocol을 통한 Web → Desktop 실행
+- Launcher 기반 Desktop 인증과 AI Client 실행
+- YOLO26n TensorRT, MediaPipe Pose, XGBoost 기반 운동 분석
+- Squat count와 Stretch duration 측정
+- Render Backend를 통한 운동 결과 저장
+- Supabase Auth와 PostgreSQL 기반 사용자 인증 및 데이터 저장
+- Inno Setup 기반 Windows Installer
+- Cloudflare R2를 이용한 초기 Installer 배포
+- Vercel Web의 설치 버튼과 R2 Installer URL 연동
+
+### v0.1.1 — Release Workflow Stabilization
+
+**Release date:** 2026-09-15
+
+사용자 운동 기능을 대규모로 변경한 버전이 아니라, Windows binary를 검증하고 배포하는 절차를 정식화한 배포 안정화 버전입니다. 핵심 AI runtime source는 Installer build의 보호 대상 hash 검사를 통과했으며, version metadata 변경으로 Installer binary의 SHA-256은 v0.1.0과 다릅니다.
+
+#### Release automation
+
+- Windows Release workflow를 Prepare와 Promote 단계로 분리
+- SemVer, Git clean working tree, Installer 입력과 version consistency 검증
+- Installer SHA-256 계산과 byte 크기 검증
+- R2 remote object 검증과 release metadata 자동 생성
+- `build → verify → distribute → other-PC E2E test → promote → rollback` 흐름 정립
+
+#### Versioned R2 distribution
+
+단일 Installer 파일을 교체하던 방식에서 다음과 같은 version별 불변 경로로 변경했습니다.
+
+```text
+releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe
+```
+
+동일 version overwrite는 `rclone --immutable`로 차단합니다. 약 2.2 GiB Installer 전송에는 `--s3-no-check-bucket`, `--s3-upload-cutoff=100M`, `--s3-chunk-size=100M`을 사용했습니다.
+
+#### Production promotion and rollback
+
+Prepare가 완료된 Installer를 바로 공개하지 않고, 별도 Windows PC E2E 테스트 후 Promote 단계에서 Production에 반영합니다.
+
+```text
+Prepare → Installer build → SHA-256 → R2 immutable upload
+→ remote verification → metadata 생성 → 별도 Windows PC E2E test
+→ Promote → Vercel download URL 변경 → Production deploy
+→ HTTP verification → production.json 기록
+```
+
+성공한 promotion만 `releases/windows/production.json`에 기록합니다. version별 R2 object와 이전 Production download URL을 유지하므로 문제가 발생하면 이전 version을 다시 Promote하는 방식으로 rollback할 수 있습니다.
+
+#### Release tool and Vercel stabilization
+
+- `rclone`, Inno Setup `ISCC.exe`, Vercel CLI를 PATH와 알려진 사용자 설치 경로에서 안전하게 탐색
+- 현재 확인된 경로: `%LOCALAPPDATA%\Microsoft\WinGet\Links\rclone.exe`, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, `%APPDATA%\npm\vercel.cmd`
+- Vercel의 정상 stderr 배너를 실패로 오인하지 않도록 `System.Diagnostics.Process` 기반 helper에서 ExitCode, StdOut, StdErr를 분리
+- native process의 실제 Working Directory를 `frontend`로 지정
+- 루트 `.vercelignore`를 allowlist로 구성해 `frontend/**`만 deployment에 포함
+- Vercel read-only dry manifest에서 **51 files / 325,900 bytes**, frontend 외부 및 대용량 AI/Installer artifact **0개** 확인
+
+#### v0.1.1 Production result
+
+| 항목 | 값 |
+|---|---|
+| Production | [https://fitroute-ivory.vercel.app](https://fitroute-ivory.vercel.app) |
+| Installer | `FitRoute-AI-Client-Setup-0.1.1.exe` |
+| Release URL | [Cloudflare R2 v0.1.1 Installer](https://pub-08036d191fd84004a7a3d27bf8521aaf.r2.dev/releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe) |
+| Size | 2,379,641,099 bytes / 2.216213 GiB |
+| SHA-256 | `748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD` |
+
+#### v0.1.0 → v0.1.1
+
+| 항목 | v0.1.0 | v0.1.1 |
+|---|---|---|
+| Windows AI 기능 | 초기 Production 기능 | 핵심 기능 유지, 배포 절차 안정화 |
+| Installer | 초기 배포 | versioned release |
+| R2 경로 | 단일 파일 | `releases/v<VERSION>/` |
+| Immutable upload | 미적용 | 적용 |
+| Release metadata | 미생성 | 자동 생성 |
+| Prepare / Promote | 수동 절차 | 단계별 자동화 |
+| Rollback 기반 | 제한적 | 이전 Production URL과 version object 기반 |
+| Vercel deploy 범위 | 수동 관리 | frontend allowlist |
+| Release validation | 기본 확인 | Git, version, SHA-256, size, remote object 검증 |
+
+v0.1.1의 알려진 최초 운동 저장 문제와 후속 분석 계획은 아래 Known Issues에 기록했습니다. 상세 운영 절차는 [Windows Release Process](docs/windows_release_process.md)를 참고하세요.
+
 ## Known Issues
 
-### Windows AI Client v0.1.1 - 최초 실행 시 첫 운동 기록 저장 실패 가능성
+### Windows AI Client v0.1.1 — Known Issue: First workout save after initial launch
 
 Windows AI Client v0.1.1의 별도 Windows PC E2E 테스트에서 설치 후 최초 실행 시 첫 번째 운동 세션의 저장이 정상 처리되지 않는 현상이 관찰되었습니다.
 
@@ -472,7 +561,7 @@ Windows AI Client v0.1.1의 별도 Windows PC E2E 테스트에서 설치 후 최
 - 최초 실행의 첫 운동 저장에서만 간헐적인 실패 관찰
 - 재시도 또는 이후 운동 세션에서는 정상 저장
 
-현재 v0.1.1은 전체 E2E 기능이 동작하는 것을 확인했지만, 이 문제를 해결 완료로 표시하지 않습니다. Known Issue로 기록하고 v0.1.2에서 원인을 재현·분석해 수정할 예정입니다.
+최초 실행에서만 실패할 가능성이 관찰되었으며 원인은 아직 확정되지 않았습니다. 현재 v0.1.1은 전체 E2E 기능이 동작하는 것을 확인했지만, 이 문제를 해결 완료로 표시하지 않습니다. Known Issue로 기록하고 후속 버전인 v0.1.2에서 원인을 재현·분석할 예정입니다.
 
 #### 우선 의심 순서
 
@@ -500,9 +589,9 @@ Windows AI Client v0.1.1의 별도 Windows PC E2E 테스트에서 설치 후 최
 
 ## Next Steps
 
-1. v0.1.2에서 최초 실행의 첫 운동 기록 저장 실패 현상 재현 및 수정
+1. v0.1.2에서 최초 실행의 첫 운동 기록 저장 문제를 재현·분석하고, 필요하면 save retry와 HTTP connection initialization을 개선
 2. 공개 Release용 code signing과 Installer SHA-256 게시 준비
-3. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
+3. Windows release workflow를 추가 안정화하고 Cloudflare R2 versioned object와 Vercel download URL 운영 절차 보완
 4. 향후 필요하면 별도 모바일 inference architecture 검토
 5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
 
