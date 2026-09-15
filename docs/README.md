@@ -5,7 +5,7 @@
 ## Product and architecture
 
 - [서비스 UI 시안](UI.png)
-- [서비스 구조](FiteRoute_서비스_구조.png)
+- [서비스 구조](FitRoute_서비스_구조.png)
 - [시스템 흐름도](FitRoute_시스템%20흐름도.png)
 - [아키텍처 다이어그램](FitRoute_아키텍쳐_다이어그램.png)
 - [전체 흐름 다이어그램](전체%20흐름%20다이어그램.png)
