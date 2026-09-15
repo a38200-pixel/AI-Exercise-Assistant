@@ -41,3 +41,7 @@ Root: HKCU; Subkey: "Software\Classes\fitroute\shell\open\command"; ValueType: s
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--logout"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "FitRouteDesktopCredentialLogout"
+
+[UninstallDelete]
+Type: files; Name: "{app}\launcher.log"
+Type: dirifempty; Name: "{app}"
