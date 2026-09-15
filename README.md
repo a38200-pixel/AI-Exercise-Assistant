@@ -267,6 +267,63 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 
 세부 수치는 [AI Client Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md), [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md), [Runtime Module Trace](docs/runtime_module_trace.md)를 참고하세요. Direct TensorRT 전용 구조는 이번 최적화 범위가 아닌 별도 아키텍처 단계입니다.
 
+### Windows Installer 및 Cloudflare R2 배포
+
+최종 Windows Desktop Client는 PyInstaller onedir bundle을 Inno Setup으로 패키징한 `FitRoute-AI-Client-Setup-0.1.0.exe`로 배포합니다. Installer에는 Launcher, Frozen AI Client, production config와 모델이 모두 포함되며 결과물은 약 **2.2 GiB**입니다. `%LOCALAPPDATA%\Programs\FitRoute AI Client`에 관리자 권한 없이 per-user 방식으로 설치하고 다음 구조를 만듭니다.
+
+```text
+FitRoute AI Client/
+├─ FitRouteLauncher.exe
+├─ config.json
+└─ ai_client/
+   ├─ FitRouteAIClient.exe
+   ├─ _internal/
+   └─ models/
+```
+
+Installer는 `fitroute://` protocol을 현재 사용자 Registry에 등록합니다. 설치된 AI Client는 Python runtime과 주요 dependency를 bundle에 포함하므로 사용자 PC에 Python, Conda, pip, 별도 TensorRT 또는 CUDA Toolkit을 설치하거나 기존 Python 환경을 변경하지 않습니다. 실시간 추론에는 호환 NVIDIA GPU와 Driver가 필요합니다.
+
+개발 PC에서 R2 다운로드 → 설치 → Web/Protocol/Launcher/Auth → Camera/AI → Render/Supabase/Dashboard 흐름과 제거까지 검증했습니다. Uninstall 시 프로그램 파일과 `launcher.log`, protocol Registry 등록 및 Windows Credential Manager의 Desktop refresh credential이 제거됩니다. 다만 Python/Conda가 없는 별도 NVIDIA GPU Windows PC에서의 최종 clean-PC 검증은 아직 남아 있습니다.
+
+Installer가 크기 때문에 Git repository나 Vercel 정적 asset에 포함하지 않고 Cloudflare R2 Object Storage에 별도로 업로드합니다. R2는 AI/API server가 아니라 versioned Windows binary를 보관하고 public HTTPS download를 처리하는 배포 계층입니다. Vercel Production에는 R2 public URL을 다음 환경변수로 주입합니다.
+
+```dotenv
+VITE_DESKTOP_CLIENT_DOWNLOAD_URL=https://<public-r2-host>/FitRoute-AI-Client-Setup-0.1.0.exe
+```
+
+Web의 설치 안내 버튼은 이 환경변수의 URL을 사용해 R2 Installer를 내려받습니다. 값이 없으면 Frontend는 URL을 임의로 만들지 않고 `다운로드 준비 중` 상태를 표시합니다. 공개 download URL과 달리 R2 Access Key, Secret Access Key, API token 및 업로드 도구 credential은 배포 작업에만 사용하며 README나 Frontend에 포함하지 않습니다.
+
+```text
+FitRoute Web (Vercel)
+  → Windows 앱 설치
+  → Cloudflare R2 public download
+  → Inno Setup Installer
+  → FitRouteLauncher.exe + ai_client/FitRouteAIClient.exe
+  → fitroute:// 등록
+  → Web에서 운동 시작
+  → Desktop Auth → Camera / AI inference
+```
+
+### 모바일 브라우저 지원 및 제한사항
+
+FitRoute의 React Frontend는 반응형 Web UI이므로 Desktop뿐 아니라 스마트폰과 Tablet 브라우저에서도 로그인, Dashboard, 운동 기록·통계 조회 및 Installer 안내 같은 Web 기능을 사용할 수 있습니다. 그러나 반응형 UI 지원과 실시간 AI 운동 분석의 모바일 실행 지원은 서로 다릅니다. YOLO, MediaPipe와 XGBoost는 현재 브라우저에서 실행되지 않으며 Web은 Windows Desktop AI Client를 여는 presentation/entry point 역할을 합니다.
+
+| 구성 요소 | 현재 구현 | 모바일 브라우저 |
+|---|---|---|
+| React Web UI | Responsive React Web | 가능 |
+| 로그인 | Supabase Auth | 가능 |
+| Dashboard / 운동 기록·통계 | Web + FastAPI + Supabase | 가능 |
+| Installer 다운로드 안내 | Web UI + R2 download URL | 가능 |
+| Windows Installer 실행 | Inno Setup `.exe` | 불가 |
+| `fitroute://` handler | Windows Registry + `FitRouteLauncher.exe` | 현재 불가 |
+| Desktop AI Client | Windows PyInstaller application | 불가 |
+| 실시간 Camera AI 분석 | Windows Desktop Client | 현재 불가 |
+| YOLO inference | NVIDIA TensorRT FP16 `.engine` | 현재 구조로 불가 |
+
+현재 `fitroute://` handler는 Windows Installer가 `HKCU\Software\Classes\fitroute`에 등록하는 `FitRouteLauncher.exe`이고 Android/iOS용 FitRoute native application은 없습니다. Inno Setup `.exe`, Windows PyInstaller binary와 Windows Credential Manager 기반 Desktop Auth도 Android, iOS 또는 iPadOS에서 그대로 실행할 수 없습니다. 또한 현재 YOLO26n TensorRT `.engine` backend는 NVIDIA GPU가 있는 Windows PC용이므로 모바일 플랫폼에는 별도의 inference backend가 필요합니다. 이는 모바일 앱 자체가 불가능하다는 뜻이 아닙니다.
+
+향후 모바일 지원 시에는 별도 제품 단계에서 ONNX Runtime Mobile, TensorFlow Lite 또는 Core ML 같은 모바일 inference backend, Android/iOS MediaPipe Tasks와 native Camera pipeline을 검토해야 합니다. XGBoost classifier 역시 모바일 실행 방법이나 ONNX/TFLite 변환을 평가하고, 인증 정보는 Windows Credential Manager 대신 Android Keystore/iOS Keychain에 저장해야 합니다. 앱 진입도 Windows Registry protocol 대신 Android App Link 또는 iOS Universal Link/플랫폼 custom scheme으로 별도 구현해야 하며, 이 항목들은 현재 구현된 기능이 아닙니다.
+
 Launcher는 `launcher.log`에 token 값 없이 lifecycle만 기록합니다. Access Token과 API URL은 child environment에만 전달하며 argv는 다음과 같습니다.
 
 ```text
@@ -289,6 +346,25 @@ Conda DLL은 이름을 추측해 하나만 선택하지 않았습니다. 각 `.p
 ## Production 실행 및 Docker
 
 로컬 Docker 검증과 내부 Staging Cloud 배포를 완료했습니다. Backend는 Render의 `https://fitroute-api.onrender.com`, Frontend는 Vercel의 `https://fitroute-ivory.vercel.app`에서 동작합니다. Backend는 `backend/start.py`를 통해 Provider가 전달하는 `PORT`를 읽고, `--reload` 없이 `0.0.0.0:$PORT`에서 실행됩니다.
+
+Cloud 배포와 Windows runtime의 역할은 다음과 같이 분리됩니다.
+
+| 구성 요소 | 배포 위치 | 역할 |
+|---|---|---|
+| React Frontend | Vercel | 반응형 Web UI, 인증 진입, Dashboard와 Desktop 설치/실행 안내 |
+| FastAPI Backend | Render | 인증된 운동 기록 API |
+| Auth / Database | Supabase | Supabase Auth, PostgreSQL, RLS 기반 사용자 데이터 분리 |
+| Installer binary | Cloudflare R2 | 약 2.2 GiB Windows Installer 저장 및 HTTPS download |
+| AI runtime | 사용자 Windows PC | Webcam, YOLO TensorRT, MediaPipe, XGBoost와 운동 상태 로직 |
+
+```text
+Browser → React / Vercel ───────→ Cloudflare R2 / Windows Installer
+              │
+              └→ FastAPI / Render → Supabase Auth + PostgreSQL
+
+Windows Web → fitroute:// → Launcher → Desktop Auth → AI Client
+                                                └→ Camera → YOLO TensorRT → MediaPipe → XGBoost
+```
 
 로컬 Docker 실행 구조는 다음과 같습니다.
 
@@ -364,13 +440,13 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. Inno Setup에서 Launcher와 최종 `ai_client/` onedir baseline을 함께 설치하도록 installer 제작
-2. 설치/업그레이드/제거, `fitroute://` Protocol 등록과 설치 경로 기반 Launcher 실행 검증
-3. clean PC에서 NVIDIA Driver/GPU 및 TensorRT engine 호환성 검증
-4. 공개 Release asset, checksum과 code signing 준비
+1. Python/Conda가 없는 clean Windows PC에서 NVIDIA Driver/GPU 및 TensorRT engine 호환성 검증
+2. 공개 Release용 code signing과 Installer SHA-256 게시 준비
+3. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
+4. 향후 필요하면 별도 모바일 inference architecture 검토
 5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
 
-독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 다음 작업 기준점은 최종 4.846573 GiB baseline을 포함하는 Inno Setup Installer입니다.
+독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 최종 4.846573 GiB baseline은 Inno Setup Installer로 패키징되었고 Cloudflare R2를 통한 Web 다운로드까지 연결되었습니다.
 
 Inno Setup Installer의 구조, 입력 검증, 빌드와 7-B/7-C 수동 테스트 절차는 [Windows Installer](docs/windows_installer.md)를 참고하세요.
 
