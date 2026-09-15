@@ -2,6 +2,9 @@
 
 FitRoute Windows Desktop Client는 build/upload와 Production 반영을 분리한다. Release object는 version별로 불변이며, 스크립트는 commit, tag 또는 push를 자동 실행하지 않는다.
 
+최종 갱신: 2026-09-15
+현재 `v0.1.1`이 Prepare, 별도 Windows PC E2E와 Promote를 통과해 Production에 반영되어 있다.
+
 ```text
 Code
   ↓
@@ -32,7 +35,9 @@ R2 Access Key, Secret, API token과 Vercel token은 source, metadata 또는 명�
 - Inno Setup: PATH의 `ISCC.exe`, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, Program Files 경로
 - Vercel: PATH의 `vercel.cmd`/`vercel`, `%APPDATA%\npm\vercel.cmd`, 사용 가능한 경우 npm global prefix
 
-Promotion preflight는 resolve된 Vercel 실행 파일로 `vercel whoami`와 읽기 전용 `vercel project inspect fitroute --scope toru7`을 호출한다. 인증 또는 project 접근이 확인되지 않으면 Production 변경 전에 중단하며 `vercel login`, project 생성이나 `vercel link`를 자동 실행하지 않는다. `frontend/.vercel/project.json`은 선택적으로 사용할 수 있지만 필수 조건이 아니며, env/deploy 명령은 `--project fitroute --scope toru7`로 대상을 명시한다. `-DryRun`도 executable discovery, 인증과 project 접근 확인을 수행하지만 upload, 환경변수 변경이나 deploy는 수행하지 않는다.
+Promotion preflight는 resolve된 Vercel 실행 파일로 `vercel whoami`와 읽기 전용 `vercel project inspect fitroute --scope toru7`을 호출한다. 인증 또는 project 접근이 확인되지 않으면 Production 변경 전에 중단하며 `vercel login`, project 생성이나 `vercel link`를 자동 실행하지 않는다. `frontend/.vercel/project.json`은 선택 사항이며, env/deploy 명령은 `--project fitroute --scope toru7`로 대상을 명시한다. `-DryRun`도 executable discovery, 인증과 project 접근 확인을 수행하지만 upload, 환경변수 변경이나 deploy는 수행하지 않는다.
+
+Vercel deploy process는 실제 Working Directory를 `<repo>/frontend`로 사용한다. Git-linked project의 root 확장으로 외부 파일이 포함되지 않도록 Repository root `.vercelignore`는 `frontend/**`만 허용한다. 읽기 전용 manifest 검증 결과는 51 files / 325,900 bytes이며 AI Client, Installer와 release artifact는 포함되지 않았다.
 
 ## 1. Prepare
 
@@ -127,7 +132,7 @@ Prepare 후 생성된 `installer/installer_manifest.json`과 `releases/windows/v
 
 1. `v<VERSION>.json` schema, SHA-256과 canonical object key를 검사한다.
 2. R2 object의 존재 여부와 byte 크기를 metadata와 비교한다.
-3. Vercel CLI 설치, 로그인과 project link를 검사한다.
+3. Vercel CLI 설치, 로그인과 `toru7/fitroute` project 접근을 검사한다.
 4. 현재 URL과 변경할 URL을 표시한다.
 5. `VITE_DESKTOP_CLIENT_DOWNLOAD_URL`의 Production 값을 갱신한다.
 6. `vercel deploy --prod --yes`를 실행한다.
@@ -136,14 +141,14 @@ Prepare 후 생성된 `installer/installer_manifest.json`과 `releases/windows/v
 
 ## 4. Rollback
 
-이전 release metadata와 R2 object는 삭제하지 않는다. 동일한 promotion script에 이전 version을 전달한다.
+이전 release metadata와 R2 object는 삭제하지 않는다. Rollback 대상의 `v<VERSION>.json`과 R2 object가 모두 남아 있을 때 동일한 promotion script에 이전 version을 전달한다.
 
 ```powershell
-.\scripts\promote_windows_release.ps1 -Version 0.1.0 -DryRun
-.\scripts\promote_windows_release.ps1 -Version 0.1.0 -ApproveProductionChange
+.\scripts\promote_windows_release.ps1 -Version <PREVIOUS_VERSION> -DryRun
+.\scripts\promote_windows_release.ps1 -Version <PREVIOUS_VERSION> -ApproveProductionChange
 ```
 
-이는 R2 binary를 수정하지 않고 Vercel의 공개 다운로드 URL을 기존 version으로 되돌린 뒤 Production을 재배포한다.
+이는 R2 binary를 수정하지 않고 Vercel의 공개 다운로드 URL을 기존 version으로 되돌린 뒤 Production을 재배포한다. 현재 Repository에는 `v0.1.1.json`만 있으므로, 존재하지 않는 v0.1.0 metadata를 대상으로 한 rollback 명령은 실행할 수 없다.
 
 ## Failure policy
 

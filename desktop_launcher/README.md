@@ -13,7 +13,7 @@ FitRouteAIClient.exe --exercise squat --auto-start-session
 설치 기본 구조는 다음과 같습니다.
 
 ```text
-%LOCALAPPDATA%\FitRoute\
+%LOCALAPPDATA%\Programs\FitRoute AI Client\
 ├─ FitRouteLauncher.exe
 ├─ config.json
 └─ ai_client\
@@ -31,4 +31,4 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 
 PyInstaller build는 `build_launcher.ps1`을 사용합니다. 이 스크립트는 build에 선택한 Conda Python의 runtime DLL을 포함하고 PyQt5, PyQt6와 matplotlib을 제외하지만, 해당 환경의 package를 제거하지 않습니다. Build용 Python 경로는 runtime config에 저장되지 않습니다.
 
-Build 명령, protocol 등록/제거, 인증 흐름, 실패 해결 기록과 사용자 E2E 절차는 [프로젝트 README](../README.md#web--windows-desktop-launcher)와 [Desktop Launcher 문서](../docs/desktop_client_launcher.md)를 참고하세요. 이 폴더의 스크립트는 자동으로 Registry나 Webcam을 변경·실행하지 않습니다.
+Build 명령, protocol 등록/제거, 인증 흐름, 실패 해결 기록과 사용자 E2E 절차는 [프로젝트 README](../README.md#8-windows-desktop-연동)와 [Desktop Launcher 문서](../docs/desktop_client_launcher.md)를 참고하세요. 이 폴더의 스크립트는 자동으로 Registry나 Webcam을 변경·실행하지 않습니다.

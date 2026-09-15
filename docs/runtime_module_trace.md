@@ -2,6 +2,9 @@
 
 최종 최적화 후보인 `dist_candidate_protoc/FitRouteAIClient`를 실제 카메라·TensorRT 추론 흐름으로 실행해 100ms 간격으로 native module을 관찰한 결과다. 이 문서에는 재현에 필요한 요약만 유지하며, 개인 PC 절대경로가 포함되는 전체 JSON/Markdown 출력은 Git에서 제외된 `artifacts/runtime-traces/`에 생성한다.
 
+검증일: 2026-09-15
+상태: **완료 — 최종 v0.1.1 Installer baseline의 native runtime 유지 근거**
+
 ## Trace 결과
 
 | 항목 | 결과 |

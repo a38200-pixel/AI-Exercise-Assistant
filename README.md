@@ -351,7 +351,7 @@ Production HTTP Verification
 - 동일 version overwrite 금지 (`--immutable`)
 - Production 반영 전 별도 Windows PC E2E 수행
 - Promote는 명시적인 승인 후에만 실행
-- 이전 Production URL을 이용한 rollback 가능
+- 이전 version metadata와 R2 object가 남아 있으면 동일 Promote 절차로 rollback 가능
 - 성공한 deploy와 HTTP 검증 이후에만 `production.json` 갱신
 
 R2 object 예시:
@@ -494,15 +494,22 @@ Supabase Auth와 PostgreSQL을 사용하며, RLS를 통해 사용자별 데이�
 
 ```text
 AI-Exercise-Assistant/
-├─ frontend/                 # React + Vite Web
-├─ backend/                  # FastAPI Backend
-├─ src/                      # AI Client source
-├─ desktop_launcher/         # Windows Launcher / Desktop Auth
-├─ models/                   # AI model assets
-├─ installer/                # Inno Setup / installer build
-├─ scripts/                  # Release / validation automation
-├─ releases/windows/         # Version metadata / production state
-└─ docs/                     # Architecture / deployment documentation
+├─ frontend/                 # React + Vite Web application
+├─ backend/                  # FastAPI API, Supabase integration, SQL, tests
+├─ src/                      # AI Client runtime source
+├─ desktop_launcher/         # Windows Launcher and Desktop Auth
+├─ packaging/ai_client/      # PyInstaller specs, build and analysis tools
+├─ installer/                # Inno Setup definition and input validation
+├─ models/                   # Detector, pose and classifier assets
+├─ config/                   # AI runtime settings
+├─ scripts/                  # Environment and Windows release automation
+├─ tests/                    # AI Client and Launcher test suite
+├─ releases/windows/         # Version metadata and current Production state
+├─ data/workout_logs/        # Local runtime output placeholder
+├─ docs/                     # Architecture, deployment and engineering records
+├─ requirements.txt          # AI development dependencies
+├─ .vercelignore             # Vercel frontend-only deployment allowlist
+└─ README.md
 ```
 
 ---
@@ -548,6 +555,11 @@ python src/main.py
 - [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md)
 - [Runtime Module Trace](docs/runtime_module_trace.md)
 - [Production Deployment Checklist](docs/production_deployment_checklist.md)
+- [Render Backend Deployment](docs/render_backend_staging.md)
+- [Vercel Frontend Deployment](docs/vercel_frontend_staging.md)
+- [Backend Guide](backend/README.md)
+- [Frontend Guide](frontend/README.md)
+- [Desktop Launcher Guide](desktop_launcher/README.md)
 - [Docs Index](docs/README.md)
 
 ---
@@ -563,7 +575,7 @@ FitRoute는 단순한 자세 분류 모델 구현에서 끝내지 않고 다음 
 - AI runtime 패키징 및 Windows Installer 제작
 - 대용량 binary distribution 구조 설계
 - Production 배포 및 E2E 검증
-- versioned release / promote / rollback workflow 자동화
+- versioned release / promote와 metadata 기반 rollback workflow 자동화
 - 문제 발생 시 로그와 runtime trace를 기반으로 원인을 분리하고 개선
 
 **모델 정확도만 보는 프로젝트가 아니라, 사용자가 설치하고 실행하고 기록을 다시 확인할 수 있는 End-to-End AI 서비스 구현을 목표로 했습니다.**

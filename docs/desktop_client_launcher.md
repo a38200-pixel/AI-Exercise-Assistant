@@ -1,5 +1,8 @@
 # FitRoute Desktop Launcher
 
+최종 갱신: 2026-09-15
+상태: **독립형 Launcher/AI Client 연동, Installer 배포 및 별도 Windows PC E2E 검증 완료**
+
 ## 목적과 구조
 
 현재 버전은 Web의 Squat 선택을 독립형 Windows AI Client 실행으로 연결한다.
@@ -85,7 +88,7 @@ desktop_launcher/dist/config.json
 
 `build_launcher.ps1`은 `-PythonExecutable`의 부모를 Conda 환경 root로 계산한다. 범용 AI 환경에 함께 설치된 PyQt5/PyQt6와 Launcher가 사용하지 않는 matplotlib은 제외하며, Supabase Auth hidden import와 tkinter는 유지한다. `_ctypes`, `pyexpat`, tkinter 등 Conda extension이 직접 요구하는 `Library\bin` DLL은 실제 존재하는 파일만 onefile bundle에 추가한다.
 
-현재 빌드 및 문제 해결 기록은 [프로젝트 README의 Launcher 섹션](../README.md#web--windows-desktop-launcher)을 참고한다. DLL 누락 여부는 파일명 추측이 아니라 `.pyd`의 PE dependency, PyInstaller TOC와 onefile archive 목록으로 확인한다.
+현재 빌드 및 문제 해결 기록은 [프로젝트 README의 Launcher 섹션](../README.md#8-windows-desktop-연동)을 참고한다. DLL 누락 여부는 파일명 추측이 아니라 `.pyd`의 PE dependency, PyInstaller TOC와 onefile archive 목록으로 확인한다.
 
 ## Protocol 등록과 제거
 
@@ -140,7 +143,7 @@ Credential Manager 접근 또는 저장이 실패해도 config, `.env`, Registry
 Desktop 인증정보만 제거하려면 설치된 Launcher에서 다음을 실행한다.
 
 ```powershell
-& "$env:LOCALAPPDATA\FitRoute\FitRouteLauncher.exe" --logout
+& "$env:LOCALAPPDATA\Programs\FitRoute AI Client\FitRouteLauncher.exe" --logout
 ```
 
 source 개발 모드에서는 다음 명령을 사용할 수 있다.
@@ -183,10 +186,10 @@ installer/FitRouteAIClient.iss
 예상 installer artifact:
 
 ```text
-installer_output/FitRoute-AI-Client-Setup-0.1.0.exe
+installer_output/FitRoute-AI-Client-Setup-0.1.1.exe
 ```
 
-현재 Installer는 Launcher, production config, 전체 onedir AI Client와 모델을 포함한다. 개발 PC에서 install/protocol/Auth/Camera/cloud save/uninstall 흐름을 검증했으며 clean PC 검증과 code signing은 남아 있다. 상세 절차는 [Windows Installer](windows_installer.md)를 참고한다.
+현재 Installer는 Launcher, production config, 전체 onedir AI Client와 모델을 포함한다. 개발 PC와 Python/Conda/Repository가 없는 별도 Windows PC에서 install/protocol/Auth/Camera/cloud save/uninstall 흐름을 검증했다. Code signing은 아직 적용하지 않았다. 상세 절차는 [Windows Installer](windows_installer.md)를 참고한다.
 
 ## Web fallback과 다운로드 URL
 
@@ -222,12 +225,9 @@ Production Frontend에는 Cloudflare R2의 versioned Installer URL을 설정한�
 
 테스트 자동화에서는 Registry, Webcam, 실제 Supabase login 또는 실제 DB write를 수행하지 않는다.
 
-## 일반 사용자 배포 전 남은 작업
+## 현재 제한사항과 후속 과제
 
-- Python runtime과 AI dependencies 패키징 전략
-- 모델 파일 배포 및 라이선스 검토
-- CUDA/TensorRT/GPU 호환성 검사와 CPU fallback 정책
-- code signing 및 installer 서명
-- 자동 업데이트와 버전 호환 정책
-- Web 계정과 Desktop 계정을 안전하게 연결·검증하는 account linking 설계
-- 공식 Release asset 배포와 checksum 제공
+- Code signing 및 Installer 서명
+- TensorRT engine의 GPU/driver 호환 범위 확대와 CPU/ONNX fallback 정책
+- 자동 업데이트와 client/backend version compatibility 정책
+- v0.1.1 최초 실행의 첫 운동 저장 실패 가능성 재현 및 분석

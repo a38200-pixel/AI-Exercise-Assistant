@@ -1,133 +1,94 @@
 # FitRoute Production Deployment Checklist
 
-이 문서는 배포 준비와 실제 배포 시 확인할 항목을 분리합니다. 현재 단계에서는 Cloud 리소스 생성이나 Dashboard 설정 변경을 수행하지 않습니다.
+최종 갱신: 2026-09-15
+상태: **Frontend, Backend, Auth/Database, Windows Installer 배포 및 타 PC E2E 검증 완료**
 
-## 1. Backend 준비
+## Production endpoints
 
-- [x] FastAPI Production entry point가 `PORT`를 읽는다.
-- [x] Production 실행에서 `--reload`를 사용하지 않는다.
-- [x] 서버는 Container 내부 `0.0.0.0:$PORT`에서 listen한다.
-- [x] `/health`는 인증·DB·외부 API 없이 `{"status":"ok"}`를 반환한다.
-- [x] `FRONTEND_ORIGINS`를 쉼표 기준의 안전한 Origin 목록으로 파싱한다.
-- [x] wildcard CORS를 허용하지 않는다.
-- [x] 기존 `FRONTEND_ORIGIN`을 하위 호환한다.
-- [x] 사용자 Bearer Token + RLS 구조를 유지하며 service role을 추가하지 않는다.
-- [x] Client 오류 응답에 traceback, DB 오류, token 또는 Supabase key를 포함하지 않는다.
-- [x] Staging Backend Provider로 Render를 선택한다.
+| Component | Production |
+|---|---|
+| Frontend | `https://fitroute-ivory.vercel.app` |
+| Backend | `https://fitroute-api.onrender.com` |
+| Auth / Database | Supabase Auth + PostgreSQL + RLS |
+| Windows Installer | Cloudflare R2 versioned object |
 
-## 2. Backend 환경변수
+실제 credential과 `.env` 값은 Git 또는 문서에 저장하지 않는다.
 
-Cloud Runtime Environment Variables에만 설정합니다.
+## Verified state
+
+- [x] Render Docker Backend가 Provider `PORT`로 `0.0.0.0`에서 실행됨
+- [x] `/health`, `/docs`, `/openapi.json` 응답 확인
+- [x] 인증된 Workout POST와 Today/Daily/Session 조회 확인
+- [x] Supabase 원본 session과 daily summary atomic 누적 확인
+- [x] Vercel React/Vite Production build 및 SPA rewrite 적용
+- [x] Production 회원가입·로그인과 보호 route 확인
+- [x] Render API → Supabase → Web Dashboard 조회 확인
+- [x] Windows Web download → Installer → `fitroute://` → Launcher → AI Client 실행 확인
+- [x] 별도 Windows PC에서 Camera/AI 운동과 cloud 저장 확인
+- [x] uninstall 시 설치 tree, protocol과 Desktop credential 정리 확인
+- [x] Vercel deployment manifest를 `frontend/**` 51 files / 325,900 bytes로 제한
+
+## Backend configuration
 
 ```dotenv
 ENVIRONMENT=production
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
-FRONTEND_ORIGINS=https://YOUR_FRONTEND_DOMAIN
+FRONTEND_ORIGINS=https://fitroute-ivory.vercel.app
 LOG_LEVEL=info
-PORT=8000
 ```
 
-- [x] Render에 Backend Runtime 환경변수를 등록하고 API 연동을 검증한다.
-- [ ] `FRONTEND_ORIGINS`에는 path와 trailing slash 없는 HTTPS Origin만 등록한다.
-- [x] service role, DB password, 사용자 Access Token을 등록하지 않는다.
+- `FRONTEND_ORIGINS`에는 path와 trailing slash가 없는 정확한 HTTPS Origin만 사용한다.
+- wildcard CORS, service-role key, DB password와 사용자 token을 사용하지 않는다.
+- `/health`는 인증·DB write 없이 process 상태만 반환한다.
 
-## 3. Docker
-
-- [x] `python:3.12-slim`을 사용한다.
-- [x] `backend/requirements.txt`만 설치한다.
-- [x] 비-root `app` 사용자로 실행한다.
-- [x] AI 모델, TensorRT, MediaPipe, OpenCV와 dataset을 이미지에서 제외한다.
-- [x] secret을 Dockerfile에 하드코딩하지 않는다.
-- [x] `.dockerignore`로 Git, env, model, data, Frontend build를 제외한다.
-- [x] Docker Desktop + WSL2 환경에서 실제 image build를 완료했다.
-- [x] `8001:8000` Container 실행과 `/health`, `/docs`, `/openapi.json` 200을 확인했다.
-
-```powershell
-docker build -f backend/Dockerfile -t fitroute-backend .
-docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backend
-```
-
-## 4. Frontend 준비
-
-- [x] `VITE_API_BASE_URL`은 `src/lib/api.ts` 한 곳에서 읽는다.
-- [x] Supabase URL과 publishable key는 Vite 환경변수에서 읽는다.
-- [x] `npm run build`와 `npm run lint`가 통과한다.
-- [x] Vite `base`는 root `/` 기본값을 유지한다.
-- [x] `dist/`와 실제 env 파일은 Git에서 제외한다.
-- [x] Frontend Staging Provider로 Vercel을 선택한다.
-- [x] Build command `npm run build`, output directory `dist`를 확인한다.
-- [x] `VITE_API_BASE_URL`에 Render HTTPS URL을 사용할 준비를 완료한다.
-
-공개 가능한 Vite 변수만 등록합니다.
+## Frontend configuration
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
-VITE_API_BASE_URL=https://YOUR_BACKEND_DOMAIN
+VITE_API_BASE_URL=https://fitroute-api.onrender.com
+VITE_DESKTOP_CLIENT_DOWNLOAD_URL=https://<public-r2-host>/releases/v<VERSION>/FitRoute-AI-Client-Setup-<VERSION>.exe
 ```
 
-## 5. SPA Routing
+`VITE_` 값은 browser bundle에 포함되므로 공개 가능한 URL과 publishable key만 허용한다. `frontend/vercel.json`은 React Router 직접 접근을 `/index.html`로 rewrite한다.
 
-- [x] Local production preview에서 `/dashboard`, `/history/2026-09-12`, `/statistics`, `/profile` 직접 접근이 200을 반환한다.
-- [x] `frontend/vercel.json`에서 비정적 경로를 `/index.html`로 rewrite한다.
-- [ ] Netlify 선택 시 `/* /index.html 200` fallback을 설정한다.
-- [ ] 실제 Hosting에서 `/dashboard` 직접 접속과 새로고침을 확인한다.
-- [ ] 실제 Hosting에서 `/history/2026-09-12`, `/statistics`, `/profile` 직접 접속을 확인한다.
+## Windows release gate
 
-Provider 선택 전에는 중복 설정 파일을 만들지 않습니다.
+새 version을 공개하기 전에 다음 순서를 지킨다.
 
-## 6. Supabase Production Auth
+1. SemVer, Git clean 상태와 Installer 입력을 검증한다.
+2. Installer를 build하고 size/SHA-256을 계산한다.
+3. version별 R2 경로에 `--immutable`로 업로드한다.
+4. remote object와 release metadata를 대조한다.
+5. 별도 Windows PC에서 download/install/protocol/auth/camera/save/uninstall을 검증한다.
+6. `promote_windows_release.ps1 -DryRun`으로 변경 계획을 확인한다.
+7. 명시적 승인 후 Vercel 환경변수와 Production deploy를 반영한다.
+8. Production HTTP 확인이 성공한 경우에만 `production.json`을 갱신한다.
 
-실제 Frontend URL이 확정된 후 Dashboard에서 수행합니다.
+상세 절차는 [Windows Release Process](windows_release_process.md)를 따른다.
 
-- [ ] Authentication → URL Configuration의 Site URL을 실제 HTTPS Frontend URL로 설정한다.
-- [ ] Redirect URLs에 실제 Frontend URL 패턴을 추가한다.
-- [ ] 개발 중이면 `http://localhost:5173` 허용 여부를 확인한다.
-- [ ] Email Confirmation 정책을 확인한다.
-- [ ] Password Policy를 확인한다.
-- [ ] User Signup 허용 정책을 확인한다.
-- [ ] Frontend가 publishable/anon key만 사용하는지 다시 확인한다.
-- [ ] RLS와 Security Advisor 결과를 확인한다.
+## Security review
 
-## 7. Secrets와 로그
+- [x] 실제 Backend/Frontend env와 build output은 Git 제외
+- [x] Docker image에 env 파일과 AI runtime 미포함
+- [x] Launcher password 미저장, refresh token만 Credential Manager에 저장
+- [x] access token은 child environment로만 전달
+- [x] release metadata에는 공개 URL, version, size와 SHA-256만 기록
+- [x] Vercel/R2 credential을 명령 출력과 문서에서 제외
 
-- [x] `backend/.env`, `frontend/.env`, `*.env.local`, build output을 Git에서 제외한다.
-- [x] `.env.example`과 `.env.production.example`에는 placeholder만 둔다.
-- [x] Backend는 Authorization header와 token을 출력하지 않는다.
-- [x] Frontend는 access token을 console에 출력하지 않는다.
-- [x] Docker image에 env 파일을 COPY하지 않는다.
-- [ ] 과거에 노출된 임시 Access Token이 만료됐는지 확인한다.
-- [ ] 배포 직전 Git history와 staged diff를 다시 secret scan한다.
+## Remaining release concerns
 
-## 8. 실제 배포 순서
+- Windows Installer는 아직 code signing되지 않아 SmartScreen 경고가 발생할 수 있다.
+- TensorRT engine은 GPU/driver/runtime 호환성 제약이 있다.
+- v0.1.1 최초 실행의 첫 운동 저장 실패 가능성은 [루트 README Known Issue](../README.md#16-known-issue)에 기록되어 있다.
 
-1. [x] FastAPI Backend를 Dockerfile 기반으로 Render에 배포한다.
-2. [x] `GET https://fitroute-api.onrender.com/health`가 200인지 확인한다.
-3. [x] Production API URL `https://fitroute-api.onrender.com`을 확보한다.
-4. [x] Vercel의 `VITE_API_BASE_URL`에 입력할 Render URL을 확정한다.
-5. [ ] React Production build를 배포한다.
-6. [ ] HTTPS Frontend domain을 확보한다.
-7. [ ] Backend `FRONTEND_ORIGINS`를 정확한 Frontend Origin으로 설정하고 재배포한다.
-8. [ ] Supabase Site URL과 Redirect URLs를 설정한다.
-9. [ ] Production 회원가입·로그인·로그아웃을 확인한다.
-10. [ ] Today, History, Date Detail, Statistics API 조회를 확인한다.
-11. [ ] Python AI Client의 `FITROUTE_API_BASE_URL`을 Production API로 변경한다.
-12. [ ] 실제 Session 종료 저장과 Dashboard 반영을 확인한다.
+## Regression smoke test
 
-Render Backend Staging의 확정 설정과 Dashboard 절차는 [Render Backend Staging Deployment](render_backend_staging.md)를 참고합니다.
-
-Vercel Frontend Staging의 확정 설정과 Dashboard 절차는 [Vercel Frontend Staging Deployment](vercel_frontend_staging.md)를 참고합니다.
-
-## 9. Production Smoke Test
-
-- [x] Render `/health` 200
-- [ ] 허용된 Frontend Origin CORS 성공
-- [ ] 임의 Origin CORS 거부
-- [ ] 로그인 없는 Workout API 401
-- [x] 로그인 후 Render Today API 200
-- [x] Render Workout Session POST 201
-- [x] Supabase 원본 row와 daily summary 누적 확인
-- [ ] React 새로고침 후 새 기록 표시
-- [ ] 직접 URL 새로고침 시 SPA 404 없음
-- [ ] 모바일 화면과 HTTPS mixed-content 오류 없음
+- Backend health와 인증 없는 Workout API의 `401`
+- 로그인, session 복원과 보호 route
+- Dashboard/History/Statistics 실제 API 응답
+- 직접 URL 새로고침의 SPA fallback
+- Windows protocol/Auth/Camera/TensorRT/MediaPipe/XGBoost
+- Workout `POST 201`, Supabase row와 Dashboard 증가
+- 모바일 Web UI와 HTTPS mixed-content/CORS 오류

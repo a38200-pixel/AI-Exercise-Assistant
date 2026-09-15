@@ -1,5 +1,7 @@
 # Backend
 
+FitRoute의 Production API입니다. 현재 Render의 `https://fitroute-api.onrender.com`에 Docker로 배포되어 있으며, 운동 session 저장과 일별 기록 조회를 담당합니다.
+
 ## Stack
 
 - FastAPI
@@ -22,7 +24,7 @@ SQL은 [001_initial_schema.sql](sql/001_initial_schema.sql)에 있습니다. Sup
 ## Authentication Flow
 
 ```text
-React / PWA / Mobile
+React Web / Windows AI Client
   -> Supabase Auth login
   -> Access Token
   -> Authorization: Bearer <token>

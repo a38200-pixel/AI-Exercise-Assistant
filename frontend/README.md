@@ -1,6 +1,6 @@
 # FitRoute Frontend
 
-AI Exercise Assistant의 운동 기록 웹 UI입니다. 첨부된 `docs/UI.png`를 디자인 기준으로 삼아 짙은 포레스트 내비게이션, 라임 포인트, 밝은 데이터 패널과 모바일 하단 내비게이션으로 구성했습니다.
+AI Exercise Assistant의 Production 운동 기록 Web UI입니다. 초기 시안인 `../docs/예상 UI.png`를 바탕으로 짙은 포레스트 내비게이션, 라임 포인트, 밝은 데이터 패널과 모바일 하단 내비게이션을 구현했습니다. 현재 서비스는 [https://fitroute-ivory.vercel.app](https://fitroute-ivory.vercel.app)에서 확인할 수 있습니다.
 
 ## Tech Stack
 
@@ -25,7 +25,7 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 VITE_DESKTOP_CLIENT_DOWNLOAD_URL=
 ```
 
-로컬에서 8000 포트를 `vmnat` 등이 사용 중이면 Backend를 8001로 실행하고 `VITE_API_BASE_URL=http://127.0.0.1:8001`로 설정합니다. `VITE_DESKTOP_CLIENT_DOWNLOAD_URL`은 서명된 installer를 공개한 뒤 해당 URL로 설정하며, 비어 있으면 다운로드 버튼이 비활성화됩니다. Frontend에는 publishable/anon key만 사용하며 service role key는 절대 넣지 않습니다. `.env`는 Git에서 제외됩니다.
+로컬에서 8000 포트를 `vmnat` 등이 사용 중이면 Backend를 8001로 실행하고 `VITE_API_BASE_URL=http://127.0.0.1:8001`로 설정합니다. `VITE_DESKTOP_CLIENT_DOWNLOAD_URL`에는 현재 공개할 versioned R2 Installer URL을 설정합니다. 비어 있으면 다운로드 버튼이 비활성화됩니다. Frontend에는 publishable/anon key만 사용하며 service role key는 절대 넣지 않습니다. `.env`는 Git에서 제외됩니다.
 
 ## Install / Run / Build
 
@@ -71,9 +71,9 @@ React Router 경로(`/dashboard`, `/history/:date`, `/statistics`, `/profile`)�
 - Vercel: `vercel.json`의 SPA rewrite가 모든 직접 경로를 `/index.html`로 전달합니다.
 - Netlify: 프로젝트 확정 후 `/*  /index.html  200` redirect 규칙을 설정합니다.
 
-Frontend Staging Provider는 Vercel로 확정되었으며 `frontend/vercel.json`이 Production SPA fallback을 담당합니다.
+Frontend Provider는 Vercel이며 `frontend/vercel.json`이 Production SPA fallback을 담당합니다.
 
-Vercel Frontend Staging의 Dashboard 입력값과 배포 후 CORS/Auth 절차는 [Vercel Frontend Staging Deployment](../docs/vercel_frontend_staging.md)를 참고합니다.
+Vercel의 Dashboard 입력값과 배포 후 CORS/Auth 절차는 [Vercel Frontend Deployment](../docs/vercel_frontend_staging.md)를 참고합니다.
 
 배포 URL이 나온 뒤 Supabase Dashboard의 Authentication → URL Configuration에서 Site URL과 Redirect URLs를 실제 HTTPS Frontend domain으로 변경해야 합니다. 개발용 `http://localhost:5173`도 필요한 동안 허용 목록에 유지합니다.
 
