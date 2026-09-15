@@ -100,14 +100,26 @@ try {
         throw "R2 object size does not match release metadata: $($remoteInfo.Size) != $($metadata.size_bytes)"
     }
 
-    $metadata.download_url | & $vercelExecutable env add VITE_DESKTOP_CLIENT_DOWNLOAD_URL production --force --project $VercelProject --scope $VercelScope --cwd $frontendDirectory --no-color
-    if ($LASTEXITCODE -ne 0) { throw 'Vercel Production environment update failed; deployment was not started.' }
-
-    $deployOutput = @(& $vercelExecutable deploy --prod --yes --project $VercelProject --scope $VercelScope --cwd $frontendDirectory --no-color 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Vercel Production deploy failed. Restore the previous release with this script. Output: $($deployOutput -join ' ')"
+    $envResult = Invoke-NativeProcess -ExecutablePath $vercelExecutable -ArgumentList @(
+        'env', 'add', 'VITE_DESKTOP_CLIENT_DOWNLOAD_URL', 'production', '--force',
+        '--project', $VercelProject, '--scope', $VercelScope,
+        '--cwd', $frontendDirectory, '--no-color'
+    ) -StandardInput ([string]$metadata.download_url)
+    if ($envResult.ExitCode -ne 0) {
+        $envFailure = Get-SafeNativeProcessOutput -Result $envResult
+        throw "Vercel Production environment update failed; deployment was not started. Output: $envFailure"
     }
-    $deploymentUrl = $deployOutput | Where-Object { $_ -match '^https://' } | Select-Object -Last 1
+
+    $deployResult = Invoke-NativeProcess -ExecutablePath $vercelExecutable -ArgumentList @(
+        'deploy', '--prod', '--yes', '--project', $VercelProject,
+        '--scope', $VercelScope, '--cwd', $frontendDirectory, '--no-color'
+    )
+    if ($deployResult.ExitCode -ne 0) {
+        $deployFailure = Get-SafeNativeProcessOutput -Result $deployResult
+        throw "Vercel Production deploy failed. Restore the previous release with this script. Output: $deployFailure"
+    }
+    $deployStdOut = $deployResult.StdOut -split '\r?\n'
+    $deploymentUrl = $deployStdOut | Where-Object { $_ -match '^https://' } | Select-Object -Last 1
     if (-not $deploymentUrl) { throw 'Vercel deploy completed without returning a deployment URL.' }
 
     $response = Invoke-WebRequest -UseBasicParsing -Uri $FrontendProductionUrl -TimeoutSec 60

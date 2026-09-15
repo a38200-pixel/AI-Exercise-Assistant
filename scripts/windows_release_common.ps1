@@ -127,23 +127,86 @@ function Resolve-VercelPath {
     throw "Vercel CLI was not found. Install it manually with: npm install -g vercel"
 }
 
+function ConvertTo-NativeProcessArgument {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+
+    if ($Value -match '["\r\n]') {
+        throw 'Native process arguments must not contain quotes or line breaks.'
+    }
+    return '"' + $Value + '"'
+}
+
+function Invoke-NativeProcess {
+    param(
+        [Parameter(Mandatory)][string]$ExecutablePath,
+        [Parameter(Mandatory)][string[]]$ArgumentList,
+        [AllowEmptyString()][string]$StandardInput
+    )
+
+    $resolvedExecutable = (Resolve-Path -LiteralPath $ExecutablePath).Path
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $resolvedExecutable
+    $startInfo.Arguments = (($ArgumentList | ForEach-Object {
+        ConvertTo-NativeProcessArgument -Value ([string]$_)
+    }) -join ' ')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $hasStandardInput = $PSBoundParameters.ContainsKey('StandardInput')
+    $startInfo.RedirectStandardInput = $hasStandardInput
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) {
+            throw "Native process could not be started: $resolvedExecutable"
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if ($hasStandardInput) {
+            $process.StandardInput.WriteLine($StandardInput)
+            $process.StandardInput.Close()
+        }
+        $process.WaitForExit()
+        return [PSCustomObject]@{
+            ExitCode = $process.ExitCode
+            StdOut = $stdoutTask.Result
+            StdErr = $stderrTask.Result
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Get-SafeNativeProcessOutput {
+    param([Parameter(Mandatory)]$Result)
+
+    $lines = @($Result.StdOut, $Result.StdErr) -join [Environment]::NewLine
+    $safeLines = $lines -split '\r?\n' | ForEach-Object {
+        if ($_ -match '(?i)(VERCEL_OIDC_TOKEN|authorization|access.?key|secret|password|eyJ[A-Za-z0-9_-]{20,})') {
+            '[REDACTED SENSITIVE OUTPUT]'
+        } else {
+            $_
+        }
+    }
+    $text = ($safeLines -join [Environment]::NewLine).Trim()
+    if ($text.Length -gt 6000) {
+        return $text.Substring(0, 6000) + [Environment]::NewLine + '[OUTPUT TRUNCATED]'
+    }
+    return $text
+}
+
 function Assert-VercelAuthentication {
     param(
         [Parameter(Mandatory)][string]$VercelExecutable,
         [Parameter(Mandatory)][string]$WorkingDirectory
     )
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        # Vercel writes its normal version banner to stderr. Authentication is
-        # determined by the native process exit code, not the output stream.
-        $ErrorActionPreference = 'Continue'
-        & $VercelExecutable whoami --cwd $WorkingDirectory --no-color 1>$null 2>$null
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    if ($exitCode -ne 0) {
+    $result = Invoke-NativeProcess -ExecutablePath $VercelExecutable -ArgumentList @(
+        'whoami', '--cwd', $WorkingDirectory, '--no-color'
+    )
+    if ($result.ExitCode -ne 0) {
         throw "Vercel CLI is installed but no authenticated session was confirmed. Run 'vercel login' and retry."
     }
 }
@@ -156,15 +219,11 @@ function Assert-VercelProjectAccess {
         [Parameter(Mandatory)][string]$Scope
     )
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        & $VercelExecutable project inspect $ProjectName --scope $Scope --format json --cwd $WorkingDirectory --no-color 1>$null 2>$null
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    if ($exitCode -ne 0) {
+    $result = Invoke-NativeProcess -ExecutablePath $VercelExecutable -ArgumentList @(
+        'project', 'inspect', $ProjectName, '--scope', $Scope,
+        '--format', 'json', '--cwd', $WorkingDirectory, '--no-color'
+    )
+    if ($result.ExitCode -ne 0) {
         throw "Vercel project '$ProjectName' is not accessible in scope '$Scope'. Verify access without creating or linking a new project."
     }
 }
