@@ -116,6 +116,7 @@ Inno Setup 6이 설치된 개발 PC의 Repository root에서 실행한다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\build_installer.ps1 `
+  -Version 0.1.1 `
   -PythonExecutable "C:\path\to\python.exe"
 ```
 
@@ -123,6 +124,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File installer\build_installer.ps
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\build_installer.ps1 `
+  -Version 0.1.1 `
   -PythonExecutable "C:\path\to\python.exe" `
   -IsccExecutable "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```

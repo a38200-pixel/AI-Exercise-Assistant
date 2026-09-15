@@ -1,14 +1,21 @@
 param(
     [string]$PythonExecutable = "",
-    [string]$IsccExecutable = ""
+    [string]$IsccExecutable = "",
+    [ValidatePattern('^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$')]
+    [string]$Version = "0.1.0"
 )
 
 $ErrorActionPreference = "Stop"
 $installerRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repositoryRoot = Split-Path -Parent $installerRoot
+$releaseHelpers = Join-Path $repositoryRoot "scripts\windows_release_common.ps1"
+if (-not (Test-Path -LiteralPath $releaseHelpers -PathType Leaf)) {
+    throw "Release helper was not found: $releaseHelpers"
+}
+. $releaseHelpers
 $validator = Join-Path $installerRoot "validate_installer_inputs.py"
 $iss = Join-Path $installerRoot "FitRouteAIClient.iss"
-$output = Join-Path $repositoryRoot "installer_output\FitRoute-AI-Client-Setup-0.1.0.exe"
+$output = Join-Path $repositoryRoot "installer_output\FitRoute-AI-Client-Setup-$Version.exe"
 $launcher = Join-Path $repositoryRoot "desktop_launcher\dist\FitRouteLauncher.exe"
 $aiRoot = Join-Path $repositoryRoot "dist_candidate_protoc\FitRouteAIClient"
 $aiExe = Join-Path $aiRoot "FitRouteAIClient.exe"
@@ -38,7 +45,7 @@ if (-not $PythonExecutable -or -not (Test-Path -LiteralPath $PythonExecutable -P
 }
 $PythonExecutable = (Resolve-Path -LiteralPath $PythonExecutable).Path
 
-& $PythonExecutable $validator --write-manifest
+& $PythonExecutable $validator --version $Version
 if ($LASTEXITCODE -ne 0) {
     throw "Installer input validation failed."
 }
@@ -52,48 +59,12 @@ foreach ($path in $protectedSources) {
 $beforeCount = @(Get-ChildItem -LiteralPath $aiRoot -Recurse -File).Count
 $beforeBytes = (Get-ChildItem -LiteralPath $aiRoot -Recurse -File | Measure-Object -Property Length -Sum).Sum
 
-if ($IsccExecutable) {
-    if (-not (Test-Path -LiteralPath $IsccExecutable -PathType Leaf)) {
-        throw "ISCC.exe was not found at the supplied path: $IsccExecutable"
-    }
-    $IsccExecutable = (Resolve-Path -LiteralPath $IsccExecutable).Path
-} else {
-    $isccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    $isccCandidates = @()
-    if ($isccCommand) {
-        $isccCandidates += $isccCommand.Source
-    }
-    $isccCandidates += @(
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        "C:\Program Files\Inno Setup 6\ISCC.exe"
-    )
-    foreach ($registryPath in @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1"
-    )) {
-        $item = Get-ItemProperty -LiteralPath $registryPath -ErrorAction SilentlyContinue
-        if ($item.InstallLocation) {
-            $isccCandidates += (Join-Path $item.InstallLocation "ISCC.exe")
-        }
-    }
-    $IsccExecutable = $isccCandidates |
-        Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
-        Select-Object -First 1
-}
-
-if (-not $IsccExecutable) {
-    Write-Output "INSTALLER SCRIPT READY"
-    Write-Output "INNO SETUP COMPILER NOT FOUND"
-    exit 2
-}
-
-$IsccExecutable = (Resolve-Path -LiteralPath $IsccExecutable).Path
+$IsccExecutable = Resolve-IsccPath -CandidatePath $IsccExecutable
 $isccVersion = (Get-Item -LiteralPath $IsccExecutable).VersionInfo.ProductVersion
 Write-Output "ISCC: $IsccExecutable"
 Write-Output "Inno Setup version: $isccVersion"
 
-& $IsccExecutable $iss
+& $IsccExecutable "/DMyAppVersion=$Version" $iss
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup compile failed with exit code $LASTEXITCODE."
 }
@@ -101,7 +72,7 @@ if (-not (Test-Path -LiteralPath $output -PathType Leaf)) {
     throw "Expected single-file installer output was not created: $output"
 }
 
-& $PythonExecutable $validator
+& $PythonExecutable $validator --version $Version --write-manifest
 if ($LASTEXITCODE -ne 0) {
     throw "Post-compile installer input validation failed."
 }

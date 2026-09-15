@@ -18,7 +18,7 @@ FitRoute는 실시간 카메라 영상에서 사용자의 자세를 인식하고
 - API health: [https://fitroute-api.onrender.com/health](https://fitroute-api.onrender.com/health)
 - 문서 인덱스: [docs/README.md](docs/README.md)
 
-현재 Windows Installer는 개발 PC E2E 검증을 마쳤으며, 별도 clean PC 호환성 검증과 code signing은 남아 있습니다.
+현재 Windows Installer는 개발 PC 검증에 이어 **별도 Windows PC에서 웹 다운로드 → 설치 → 실행 → 운동 기록 저장까지 E2E 검증을 완료**했습니다. 공개 Release용 code signing은 남아 있습니다.
 
 ## Current AI Pipeline
 
@@ -299,7 +299,7 @@ FitRoute AI Client/
 
 Installer는 `fitroute://` protocol을 현재 사용자 Registry에 등록합니다. 설치된 AI Client는 Python runtime과 주요 dependency를 bundle에 포함하므로 사용자 PC에 Python, Conda, pip, 별도 TensorRT 또는 CUDA Toolkit을 설치하거나 기존 Python 환경을 변경하지 않습니다. 실시간 추론에는 호환 NVIDIA GPU와 Driver가 필요합니다.
 
-개발 PC에서 R2 다운로드 → 설치 → Web/Protocol/Launcher/Auth → Camera/AI → Render/Supabase/Dashboard 흐름과 제거까지 검증했습니다. Uninstall 시 프로그램 파일과 `launcher.log`, protocol Registry 등록 및 Windows Credential Manager의 Desktop refresh credential이 제거됩니다. 다만 Python/Conda가 없는 별도 NVIDIA GPU Windows PC에서의 최종 clean-PC 검증은 아직 남아 있습니다.
+개발 PC에서 R2 다운로드 → 설치 → Web/Protocol/Launcher/Auth → Camera/AI → Render/Supabase/Dashboard 흐름과 제거까지 검증했습니다. 또한 **별도 Windows PC에서 웹 다운로드 → 설치 → 실행 → 저장까지 타 PC E2E 검증을 완료**했습니다. Uninstall 시 프로그램 파일과 `launcher.log`, protocol Registry 등록 및 Windows Credential Manager의 Desktop refresh credential이 제거됩니다.
 
 Installer가 크기 때문에 Git repository나 Vercel 정적 asset에 포함하지 않고 Cloudflare R2 Object Storage에 별도로 업로드합니다. R2는 AI/API server가 아니라 versioned Windows binary를 보관하고 public HTTPS download를 처리하는 배포 계층입니다. Vercel Production에는 R2 public URL을 다음 환경변수로 주입합니다.
 
@@ -456,15 +456,16 @@ Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container �
 
 ## Next Steps
 
-1. Python/Conda가 없는 clean Windows PC에서 NVIDIA Driver/GPU 및 TensorRT engine 호환성 검증
-2. 공개 Release용 code signing과 Installer SHA-256 게시 준비
-3. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
-4. 향후 필요하면 별도 모바일 inference architecture 검토
-5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
+1. 공개 Release용 code signing과 Installer SHA-256 게시 준비
+2. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
+3. 향후 필요하면 별도 모바일 inference architecture 검토
+4. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
 
 독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 최종 4.846573 GiB baseline은 Inno Setup Installer로 패키징되었고 Cloudflare R2를 통한 Web 다운로드까지 연결되었습니다.
 
-Inno Setup Installer의 구조, 입력 검증, 빌드와 7-B/7-C 수동 테스트 절차는 [Windows Installer](docs/windows_installer.md)를 참고하세요.
+Inno Setup Installer의 구조, 입력 검증, 빌드와 타 PC E2E 테스트 절차는 [Windows Installer](docs/windows_installer.md)를 참고하세요.
+
+Version별 R2 업로드, 타 PC 검증, Vercel promotion과 rollback 자동화 절차는 [Windows Release Process](docs/windows_release_process.md)를 참고하세요.
 
 ## Backend
 

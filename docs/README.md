@@ -24,6 +24,7 @@
 - [Desktop launcher](desktop_client_launcher.md)
 - [AI Client packaging plan](ai_client_packaging_plan.md)
 - [Windows installer](windows_installer.md)
+- [Windows release process](windows_release_process.md)
 
 ## Bundle optimization
 

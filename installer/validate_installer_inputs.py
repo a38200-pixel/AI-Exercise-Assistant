@@ -21,7 +21,12 @@ ISS_PATH = INSTALLER_ROOT / "FitRouteAIClient.iss"
 MANIFEST_PATH = INSTALLER_ROOT / "installer_manifest.json"
 
 APP_ID = "{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}"
-VERSION = "0.1.0"
+DEFAULT_VERSION = "0.1.0"
+SEMVER_PATTERN = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 EXPECTED_AI_BYTES = 5_203_968_114
 EXPECTED_AI_FILE_COUNT = 3_653
 EXPECTED_LAUNCHER_SHA256 = "7FCBBB7EB2AC36939AA24C6B77A4ABF1330CFF61907FF2F3093904FF1E36B173"
@@ -122,7 +127,9 @@ def validate_iss() -> str:
 
     required_fragments = (
         f"AppId={{{{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}}",
-        f'#define MyAppVersion "{VERSION}"',
+        "#ifndef MyAppVersion",
+        f'#define MyAppVersion "{DEFAULT_VERSION}"',
+        "#endif",
         "PrivilegesRequired=lowest",
         r"DefaultDirName={localappdata}\Programs\FitRoute AI Client",
         "ArchitecturesAllowed=x64compatible",
@@ -190,11 +197,16 @@ def validate_bundle() -> tuple[list[Path], dict[str, str]]:
     return files, model_hashes
 
 
-def build_manifest(files: list[Path], model_hashes: dict[str, str], config: dict[str, Any]) -> dict[str, Any]:
+def build_manifest(
+    files: list[Path],
+    model_hashes: dict[str, str],
+    config: dict[str, Any],
+    version: str,
+) -> dict[str, Any]:
     return {
         "installer": {
             "app_id": APP_ID,
-            "version": VERSION,
+            "version": version,
             "scope": "per-user",
             "signed": False,
         },
@@ -237,17 +249,19 @@ def build_manifest(files: list[Path], model_hashes: dict[str, str], config: dict
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-manifest", action="store_true")
+    parser.add_argument("--version", default=DEFAULT_VERSION)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
+        require(bool(SEMVER_PATTERN.fullmatch(args.version)), "Version must be valid SemVer.")
         config = load_config()
         validate_config(config)
         validate_iss()
         files, model_hashes = validate_bundle()
-        manifest = build_manifest(files, model_hashes, config)
+        manifest = build_manifest(files, model_hashes, config, args.version)
         if args.write_manifest:
             MANIFEST_PATH.write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",

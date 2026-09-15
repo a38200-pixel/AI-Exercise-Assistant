@@ -1,5 +1,7 @@
 #define MyAppName "FitRoute AI Client"
+#ifndef MyAppVersion
 #define MyAppVersion "0.1.0"
+#endif
 #define MyAppPublisher "FitRoute"
 #define MyAppExeName "FitRouteLauncher.exe"
 
