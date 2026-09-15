@@ -1,7 +1,7 @@
 {
   "installer": {
     "app_id": "{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "scope": "per-user",
     "signed": false
   },
