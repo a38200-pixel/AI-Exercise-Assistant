@@ -77,7 +77,8 @@ Write-Output "  SHA256:  $($metadata.sha256)"
 if ($DryRun) {
     Write-PlannedCommand -Executable $rcloneExecutable -Arguments @('lsjson', $remoteObject, '--stat', '--files-only', '--no-mimetype', '--no-modtime', '--s3-no-check-bucket')
     Write-PlannedCommand -Executable $vercelExecutable -Arguments @('env', 'add', 'VITE_DESKTOP_CLIENT_DOWNLOAD_URL', 'production', '--force', '--project', $VercelProject, '--scope', $VercelScope, '--cwd', $frontendDirectory)
-    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('deploy', '--prod', '--yes', '--project', $VercelProject, '--scope', $VercelScope, '--cwd', $frontendDirectory)
+    Write-Output "PLAN: deploy working directory: $frontendDirectory"
+    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('deploy', '--prod', '--yes', '--project', $VercelProject, '--scope', $VercelScope, '--no-color')
     Write-Output "PLAN: verify HTTP status at $FrontendProductionUrl"
     Write-Output 'DRY RUN COMPLETE: no R2 mutation, Vercel change, deployment, state write, or Git change was performed.'
     return
@@ -112,8 +113,8 @@ try {
 
     $deployResult = Invoke-NativeProcess -ExecutablePath $vercelExecutable -ArgumentList @(
         'deploy', '--prod', '--yes', '--project', $VercelProject,
-        '--scope', $VercelScope, '--cwd', $frontendDirectory, '--no-color'
-    )
+        '--scope', $VercelScope, '--no-color'
+    ) -WorkingDirectory $frontendDirectory
     if ($deployResult.ExitCode -ne 0) {
         $deployFailure = Get-SafeNativeProcessOutput -Result $deployResult
         throw "Vercel Production deploy failed. Restore the previous release with this script. Output: $deployFailure"

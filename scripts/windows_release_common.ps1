@@ -140,6 +140,7 @@ function Invoke-NativeProcess {
     param(
         [Parameter(Mandatory)][string]$ExecutablePath,
         [Parameter(Mandatory)][string[]]$ArgumentList,
+        [string]$WorkingDirectory = '',
         [AllowEmptyString()][string]$StandardInput
     )
 
@@ -151,6 +152,13 @@ function Invoke-NativeProcess {
     }) -join ' ')
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
+    if ($WorkingDirectory) {
+        $resolvedWorkingDirectory = (Resolve-Path -LiteralPath $WorkingDirectory).Path
+        if (-not (Test-Path -LiteralPath $resolvedWorkingDirectory -PathType Container)) {
+            throw "Native process working directory was not found: $WorkingDirectory"
+        }
+        $startInfo.WorkingDirectory = $resolvedWorkingDirectory
+    }
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $hasStandardInput = $PSBoundParameters.ContainsKey('StandardInput')
