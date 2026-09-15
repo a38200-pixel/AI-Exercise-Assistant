@@ -56,7 +56,8 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ### 실시간 AI 운동 분석
 
-- Webcam 영상에서 사람 영역을 탐지
+- Webcam 영상에서 YOLO26n으로 사람 영역을 탐지
+- Person BBox에 **30% padding**을 적용한 ROI를 Pose 입력으로 사용
 - MediaPipe PoseLandmarker로 **33개 landmark** 추출
 - landmark를 **132개 feature**로 변환
 - XGBoost 기반 자세 분류
@@ -68,7 +69,7 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 - **Squat**: `Stand → Squat → Stand` 완료 시 1회로 기록
 - **Stretch**: Stretch 상태 유지 시간을 누적 기록
 
-> 분류기는 여러 자세 class를 내부적으로 처리하지만, 현재 서비스에서 사용자에게 제공하는 운동 기능은 Squat / Stretch 중심으로 제한했습니다.
+> XGBoost 분류기는 `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`의 **9개 자세 class**를 내부적으로 분류합니다. 현재 서비스 기능은 이 중 `stand`, `squat`, `stretch`를 중심으로 Squat / Stretch 운동 로직에 연결했습니다.
 
 ### 운동 세션 기록
 
@@ -94,7 +95,7 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
 <p align="center">
-  <img src="docs/FiteRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
+  <img src="docs/FitRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
 </p>
 
 ### 주요 구성
@@ -113,7 +114,7 @@ FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을
 ## 5. 실제 Runtime 흐름
 
 <p align="center">
-  <img src="docs/FitRoute_시스템%20흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
+  <img src="docs/FitRoute_시스템_흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
 </p>
 
 ### 인증 및 운동 실행
@@ -164,7 +165,7 @@ Webcam
 YOLO26n TensorRT
 (Person Detection)
   ↓
-Person ROI
+Person ROI (+30% padding)
   ↓
 MediaPipe PoseLandmarker
 (33 landmarks)
@@ -193,6 +194,16 @@ landmark 기반 feature를 입력받아 자세 class를 분류합니다. 영상 
 
 **Rule-based Exercise Logic**  
 모델의 class 결과 자체를 운동 횟수로 사용하지 않고, 상태 전이를 기준으로 반복 동작을 기록하도록 분리했습니다.
+
+### Pose Classification 범위
+
+| Type | Details |
+| --- | --- |
+| Deep Learning / Vision | YOLO26n TensorRT 기반 Person Detection, MediaPipe PoseLandmarker 기반 Pose 추정 |
+| Machine Learning | 132차원 landmark feature를 입력으로 사용하는 XGBoost 9-class classifier |
+| Rule-based Logic | stable pose의 상태 전이를 이용한 Squat count / Stretch duration 계산 |
+
+분류 대상 9개 class: `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`
 
 ---
 
@@ -234,14 +245,37 @@ Windows에 등록된 FitRoute Launcher가 요청을 받아 안전하게 AI Clien
 
 이 구조를 통해 **브라우저 → Windows Desktop AI** 연결을 별도의 수동 실행 없이 구성했습니다.
 
+### Security 설계
+
+- URI의 command / exercise 값을 whitelist로 제한
+- child process 실행 시 `shell=False` 사용
+- 사용자 password는 저장하지 않음
+- refresh token만 Windows Credential Manager에 저장
+- access token은 URL / argv / config / log에 기록하지 않고 child environment로만 전달
+- Frontend / Launcher / 일반 API 요청에 Supabase service-role key를 사용하지 않음
+
 ---
 
-## 9. 최초 설치 흐름
+## 9. 실행 환경 및 플랫폼 범위
+
+| 영역 | 현재 지원 범위 |
+| --- | --- |
+| Web | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
+| AI Workout | Windows Desktop Client |
+| GPU Inference | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime |
+| 사용자 PC Python 환경 | 별도 Python / Conda / pip 설치 불필요 |
+| Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요 |
+
+Installer에 Python runtime과 주요 dependency 및 모델을 함께 포함해 사용자 PC의 기존 Python 환경을 변경하지 않습니다.
+
+---
+
+## 10. 최초 설치 흐름
 
 최초 한 번만 Windows Installer를 설치하면 이후에는 웹에서 바로 운동을 시작할 수 있습니다.
 
 <p align="center">
-  <img src="docs/FitRoute_최초%20설치%20흐름.png" alt="FitRoute 최초 설치 흐름" width="100%" />
+  <img src="docs/FitRoute_최초_설치_흐름.png" alt="FitRoute 최초 설치 흐름" width="100%" />
 </p>
 
 ```text
@@ -262,7 +296,7 @@ Installer는 사용자 단위로 설치되며, 사용자 PC에는 Python/Conda �
 
 ---
 
-## 10. Packaging & Distribution
+## 11. Packaging & Distribution
 
 AI Client는 PyInstaller `onedir` 방식으로 패키징했습니다.
 
@@ -286,7 +320,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했습니다.
 
 ---
 
-## 11. Release Engineering
+## 12. Release Engineering
 
 v0.1.1부터 Windows 배포 과정을 자동화했습니다.
 
@@ -328,7 +362,7 @@ releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe
 
 ---
 
-## 12. 문제 해결 경험
+## 13. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
 
@@ -381,7 +415,7 @@ Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeComm
 
 ---
 
-## 13. 검증 결과
+## 14. 검증 결과
 
 현재 확인된 주요 검증 결과입니다.
 
@@ -399,7 +433,7 @@ Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeComm
 
 ---
 
-## 14. Version History
+## 15. Version History
 
 | Version | 내용 |
 | --- | --- |
@@ -419,7 +453,7 @@ Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeComm
 
 ---
 
-## 15. Known Issue
+## 16. Known Issue
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
 
@@ -444,7 +478,19 @@ Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeComm
 
 ---
 
-## 16. Repository Structure
+## 17. 주요 데이터 구조
+
+| Table | Role |
+| --- | --- |
+| `profiles` | 사용자 프로필 정보 |
+| `workout_sessions` | 개별 운동 세션 상세 기록 |
+| `daily_workout_summary` | 날짜별 운동 요약 및 통계 |
+
+Supabase Auth와 PostgreSQL을 사용하며, RLS를 통해 사용자별 데이터 접근 범위를 분리합니다. Frontend의 운동 기록/통계 조회는 Backend API를 통해 처리합니다.
+
+---
+
+## 18. Repository Structure
 
 ```text
 AI-Exercise-Assistant/
@@ -461,7 +507,36 @@ AI-Exercise-Assistant/
 
 ---
 
-## 17. 관련 기술 문서
+## 19. 개발 환경에서 실행
+
+포트폴리오 README에서는 최소 실행 경로만 제공합니다. 모델 준비, TensorRT export, Launcher build, Installer 제작은 아래 상세 문서를 참고하세요.
+
+### Backend
+
+```powershell
+docker build -f backend/Dockerfile -t fitroute-backend .
+docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backend
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+### AI Client (개발 환경)
+
+```powershell
+python src/main.py
+```
+
+> AI Client 로컬 실행에는 프로젝트에서 검증한 모델 파일과 NVIDIA/TensorRT 호환 환경이 필요합니다. 일반 사용자는 Windows Installer를 통해 실행하므로 별도 Python 개발 환경이 필요하지 않습니다.
+
+---
+
+## 20. 관련 기술 문서
 
 포트폴리오 README에서는 핵심 내용만 요약하고, 세부 검증/설계 내용은 문서로 분리했습니다.
 
@@ -473,10 +548,11 @@ AI-Exercise-Assistant/
 - [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md)
 - [Runtime Module Trace](docs/runtime_module_trace.md)
 - [Production Deployment Checklist](docs/production_deployment_checklist.md)
+- [Docs Index](docs/README.md)
 
 ---
 
-## 18. 프로젝트에서 보여주고자 한 역량
+## 21. 프로젝트에서 보여주고자 한 역량
 
 FitRoute는 단순한 자세 분류 모델 구현에서 끝내지 않고 다음 범위까지 직접 연결한 프로젝트입니다.
 
