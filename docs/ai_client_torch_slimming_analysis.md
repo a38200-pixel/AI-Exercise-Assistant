@@ -19,7 +19,7 @@
 | `_internal/torchvision` | 25,418,473 | 24.240945 | 0.023673 | 187 |
 | TorchVision root `cudart64_12.dll` | 573,952 | 0.547363 | 0.000535 | 1 |
 
-`torch/lib` 37개 파일은 모두 AMD64 PE DLL이다. 전체 파일별 SHA256, architecture, direct imports의 기계 판독 가능한 원본은 `docs/ai_client_torch_bundle_inventory.json`에 있다.
+`torch/lib` 37개 파일은 모두 AMD64 PE DLL이다. 전체 파일별 SHA256, architecture, direct imports의 기계 판독 가능한 원본은 분석 스크립트로 로컬 `artifacts/` 아래에 생성한다.
 
 ## 3. Table A — Torch Top 50 files
 
@@ -276,13 +276,13 @@ Python-only 현실적 감축은 4GB 문제의 약 0.6%에 불과하다. native �
 분석 스크립트:
 
 ```powershell
-C:\Users\AISW_203_113\anaconda3\envs\fitroute_build\python.exe packaging\ai_client\analyze_torch_bundle.py --output docs\ai_client_torch_bundle_inventory.json
+<fitroute-build-env>\python.exe packaging\ai_client\analyze_torch_bundle.py --output artifacts\ai-client\ai_client_torch_bundle_inventory.json
 ```
 
 스크립트는 baseline을 읽어 크기, SHA256, PE import, 그룹, Top 50, Python subtree를 계산한다. 결과 문서는 다음과 같다.
 
 - `packaging/ai_client/analyze_torch_bundle.py`
-- `docs/ai_client_torch_bundle_inventory.json`
+- `artifacts/ai-client/ai_client_torch_bundle_inventory.json` (로컬 생성, Git 제외)
 - `docs/ai_client_torch_slimming_analysis.md`
 
 6-B-3A에서는 baseline 수정 없음, spec 수정 없음, rebuild 없음, Webcam 실행 없음, network 실행 없음, commit/push 없음이다. 따라서 6-B-3B의 Python-only 1차 후보 실험으로 진행할 수 있지만, 실제 변경 전 현재 baseline을 rollback 기준으로 계속 보존해야 한다.

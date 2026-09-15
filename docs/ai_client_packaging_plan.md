@@ -330,8 +330,8 @@ python -m PyInstaller FitRouteAIClient.spec --noconfirm --clean
 
 - 환경: `fitroute_build`
 - Python: 3.12.12
-- 실행 파일: `C:\Users\AISW_203_113\anaconda3\envs\fitroute_build\python.exe`
-- `conda run -n fitroute_build where.exe python`의 첫 결과도 위 실행 파일이었다.
+- 실행 파일: `<fitroute-build-env>\python.exe`
+- `conda run -n fitroute_build where.exe python`의 첫 결과가 격리된 build 환경을 가리키는 것을 확인했다.
 - Torch 2.11.0+cu128과 TorchVision 0.26.0+cu128은 PyTorch 공식 CUDA 12.8 wheel index에서 설치했다.
 - TensorRT metapackage가 실제로 `tensorrt_cu13`, `tensorrt_cu13_bindings`, `tensorrt_cu13_libs` 11.0.0.114를 설치하는 것을 확인했다.
 - PyInstaller 6.22.3과 `pyinstaller-hooks-contrib` 2026.7을 설치했지만 spec 작성이나 build는 실행하지 않았다.

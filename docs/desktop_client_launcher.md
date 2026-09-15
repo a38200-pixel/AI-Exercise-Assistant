@@ -65,10 +65,10 @@ python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py
 현재 `vision_ai` 환경에서 PyInstaller onefile 빌드와 startup/import smoke test를 완료했다. 새 환경에서는 Launcher 의존성과 PyInstaller를 명시적으로 설치한 후 빌드한다.
 
 ```powershell
-C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.txt
-C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe -m pip install pyinstaller
+<python-executable> -m pip install -r desktop_launcher\requirements.txt
+<python-executable> -m pip install pyinstaller
 powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
-  -PythonExecutable "C:\Users\AISW_203_113\anaconda3\envs\vision_ai\python.exe" `
+  -PythonExecutable "<python-executable>" `
   -ApiBaseUrl "https://fitroute-api.onrender.com" `
   -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
   -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
@@ -170,23 +170,23 @@ AI Client는 모델 초기화, Camera open과 첫 inference frame 처리가 성�
 
 ## Installer 생성
 
-`desktop_launcher/installer/FitRouteAIClient.iss`는 Inno Setup source다. 현재 PC 검사 결과 Inno Setup compiler(`ISCC.exe`)는 설치되어 있지 않으며 Codex는 외부 프로그램을 설치하지 않았다.
+현재 Installer source와 검증·빌드 도구는 루트 `installer/`에 통합되어 있다.
 
-1. 먼저 Launcher EXE와 `config.json`을 빌드한다.
-2. 사용자가 Inno Setup을 설치한다.
-3. 다음 source를 Inno Setup Compiler에서 빌드한다.
+1. 검증된 Launcher EXE와 최종 Frozen AI Client baseline을 준비한다.
+2. Installer 입력 검증을 실행한다.
+3. Inno Setup Compiler로 다음 source를 빌드한다.
 
 ```text
-desktop_launcher/installer/FitRouteAIClient.iss
+installer/FitRouteAIClient.iss
 ```
 
 예상 installer artifact:
 
 ```text
-desktop_launcher/dist/installer/FitRoute-AI-Client-Setup.exe
+installer_output/FitRoute-AI-Client-Setup-0.1.0.exe
 ```
 
-현재 Inno Setup source는 아직 Launcher와 config만 다루며 5단계에서는 변경하지 않았다. 다음 installer 단계에서 `%LOCALAPPDATA%\FitRoute\ai_client\` 아래에 전체 onedir bundle을 포함해야 한다. Protocol/Registry도 이번 단계에서는 다시 등록하거나 변경하지 않았다.
+현재 Installer는 Launcher, production config, 전체 onedir AI Client와 모델을 포함한다. 개발 PC에서 install/protocol/Auth/Camera/cloud save/uninstall 흐름을 검증했으며 clean PC 검증과 code signing은 남아 있다. 상세 절차는 [Windows Installer](windows_installer.md)를 참고한다.
 
 ## Web fallback과 다운로드 URL
 
@@ -198,12 +198,12 @@ Installer 공개 주소는 한 곳에서 관리한다.
 VITE_DESKTOP_CLIENT_DOWNLOAD_URL=<공개한-installer-asset-URL>
 ```
 
-현재 실제 public installer URL은 없으므로 가짜 값을 넣지 않았다. 값이 비어 있으면 Web 설치 버튼은 `다운로드 준비 중`으로 비활성화되며 CLI fallback을 보여준다. 이후 GitHub Release 같은 versioned asset에 사용자가 직접 업로드한 뒤 URL을 설정하고 Frontend를 다시 빌드한다.
+Production Frontend에는 Cloudflare R2의 versioned Installer URL을 설정한다. 값이 비어 있으면 Web은 URL을 임의로 만들지 않고 `다운로드 준비 중` 상태를 표시한다.
 
 ## 현재 배포 제약
 
 - Python, Conda와 repository source는 runtime에 필요하지 않다.
-- 현재 Launcher와 6.79 GiB AI Client bundle은 별도 산출물이며 installer로 아직 묶지 않았다.
+- Launcher와 최종 4.846573 GiB AI Client bundle은 Inno Setup Installer로 패키징했다.
 - 호환 NVIDIA GPU/driver와 현재 TensorRT engine이 필요하다.
 - Web 인증 token은 Desktop으로 전달하지 않는다. Web과 Desktop에서 같은 계정으로 각각 로그인해야 한다.
 - 기존 CMD의 `FITROUTE_ACCESS_TOKEN` 환경설정 방식은 manual/debug fallback으로 계속 사용할 수 있다.

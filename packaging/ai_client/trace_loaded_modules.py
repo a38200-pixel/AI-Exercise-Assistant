@@ -29,10 +29,11 @@ MAX_MODULE_NAME32 = 255
 MAX_PATH = 260
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_JSON_OUTPUT = REPOSITORY_ROOT / "docs" / "runtime_module_trace.json"
-DEFAULT_MARKDOWN_OUTPUT = REPOSITORY_ROOT / "docs" / "runtime_module_trace.md"
+DEFAULT_ARTIFACT_DIRECTORY = REPOSITORY_ROOT / "artifacts" / "runtime-traces"
+DEFAULT_JSON_OUTPUT = DEFAULT_ARTIFACT_DIRECTORY / "runtime_module_trace.json"
+DEFAULT_MARKDOWN_OUTPUT = DEFAULT_ARTIFACT_DIRECTORY / "runtime_module_trace.md"
 DEFAULT_TORCH_INVENTORY = (
-    REPOSITORY_ROOT / "docs" / "ai_client_torch_bundle_inventory.json"
+    REPOSITORY_ROOT / "artifacts" / "ai-client" / "ai_client_torch_bundle_inventory.json"
 )
 
 FALLBACK_STATIC_REQUIRED = {
@@ -42,6 +43,10 @@ FALLBACK_STATIC_REQUIRED = {
     "cufft64_11.dll",
     "cusolver64_11.dll",
     "cusparse64_12.dll",
+    "c10.dll",
+    "c10_cuda.dll",
+    "msvcp140.dll",
+    "torch_cpu.dll",
 }
 
 

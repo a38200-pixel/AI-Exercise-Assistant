@@ -4,9 +4,9 @@
 
 7-A는 검증 완료된 Windows Launcher와 Frozen AI Client를 관리자 권한 없이 설치할 수 있는 Inno Setup offline installer로 묶는 단계다. Installer는 AI Client나 Launcher를 다시 빌드하지 않으며 Python, Conda, pip, CUDA Toolkit 또는 인터넷 다운로드를 요구하지 않는다.
 
-현재 Installer는 개발/release candidate이며 code signing되지 않는다. 실제 설치·실행·제거 검증은 7-B, clean PC 검증은 7-C에서 수행한다.
+현재 Installer는 개발/release candidate이며 code signing되지 않는다. 개발 PC에서 compile과 7-B 설치·실행·제거 검증을 완료했고, Python/Conda가 없는 별도 PC에서 수행하는 7-C 검증은 남아 있다.
 
-현재 개발 PC에서는 Installer 입력 검증과 Launcher/Auth 테스트가 통과했지만 Inno Setup compiler(`ISCC.exe`)가 발견되지 않아 Setup compile은 아직 수행되지 않았다. Build wrapper는 이 경우 자동 다운로드나 설치 없이 `INSTALLER SCRIPT READY / INNO SETUP COMPILER NOT FOUND`로 종료한다. Inno Setup 6 설치 후 아래 build 명령을 다시 실행해야 7-B용 Setup EXE가 생성된다.
+생성된 `FitRoute-AI-Client-Setup-0.1.0.exe`는 2,379,641,099 bytes(약 2.216 GiB)이며 SHA-256은 `19597EC7AA68118C14AC57EF47323982F25160F62F988F8FE679E65201F295C2`다. 배포 파일 자체는 크기 때문에 Git이 아닌 Cloudflare R2에서 관리한다.
 
 ## Source baseline
 
@@ -112,7 +112,7 @@ python installer\validate_installer_inputs.py --write-manifest
 
 ## Build procedure
 
-Inno Setup 6을 개발 PC에 별도로 설치한 후 Repository root에서 실행한다.
+Inno Setup 6이 설치된 개발 PC의 Repository root에서 실행한다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\build_installer.ps1 `
@@ -137,7 +137,11 @@ installer_output/FitRoute-AI-Client-Setup-0.1.0.exe
 
 `lzma2/normal`, solid compression과 disk spanning 비활성화를 사용해 single Setup EXE를 우선한다. 현재 환경에 ISCC가 없거나 Inno Setup 단일 파일 크기 제한을 넘으면 임의로 disk spanning으로 바꾸지 않고 정확한 오류를 보고한다.
 
-## 7-B manual installation checklist
+## 7-B manual installation result
+
+개발 PC에서 아래 흐름을 완료했다. Installer 설치, `fitroute://` 등록, Desktop Auth, Camera/AI inference, Render/Supabase 저장, Dashboard 반영과 uninstall을 확인했다. 제거 후 설치 파일, protocol Registry, Desktop credential과 `launcher.log`가 정리되고 Supabase 운동 기록은 유지됐다.
+
+재검증 시 사용하는 checklist는 다음과 같다.
 
 1. 실행 중인 FitRoute Launcher와 AI Client가 없는지 확인한다.
 2. `installer_output/FitRoute-AI-Client-Setup-0.1.0.exe`를 사용자가 직접 실행한다.

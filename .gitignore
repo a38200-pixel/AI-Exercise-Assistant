@@ -23,6 +23,8 @@ frontend/dist/
 /build_candidate_testing/
 /dist_candidate_testing/
 /installer_output/
+/artifacts/
+/pytest-cache-files-*/
 desktop_launcher/build/
 desktop_launcher/dist/
 desktop_launcher/*.spec

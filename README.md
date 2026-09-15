@@ -1,10 +1,24 @@
-# AI Exercise Assistant
+# FitRoute — AI Exercise Assistant
 
-#초기 yolo detection FPS29.44
+![FitRoute UI overview](docs/UI.png)
 
 ## Overview
 
-실시간 카메라 영상에서 사람을 검출하고 자세를 분류하는 AI 운동 보조 시스템입니다. 기존 학습 모델을 재학습하지 않고 YOLO26n, MediaPipe Tasks와 XGBoost를 연결합니다.
+FitRoute는 실시간 카메라 영상에서 사용자의 자세를 인식하고 운동 횟수·시간을 기록하는 AI 운동 보조 서비스입니다. Windows AI Client의 YOLO26n·MediaPipe·XGBoost 파이프라인과 React Web, FastAPI, Supabase를 하나의 사용자 흐름으로 연결했습니다.
+
+| 영역 | 구현 내용 |
+|---|---|
+| AI Client | YOLO26n TensorRT/PyTorch, MediaPipe Pose, XGBoost, smoothing, 운동 상태 머신 |
+| Web | React + TypeScript + Vite 기반 대시보드·운동 기록·통계·반응형 UI |
+| API / Data | FastAPI, Supabase Auth, PostgreSQL, RLS, 일별 집계 |
+| Desktop 연동 | `fitroute://` Launcher, Windows Credential Manager, 자동 세션 시작 |
+| 배포 | Vercel Frontend, Render Backend, Cloudflare R2 Installer, Docker |
+
+- Web: [https://fitroute-ivory.vercel.app](https://fitroute-ivory.vercel.app)
+- API health: [https://fitroute-api.onrender.com/health](https://fitroute-api.onrender.com/health)
+- 문서 인덱스: [docs/README.md](docs/README.md)
+
+현재 Windows Installer는 개발 PC E2E 검증을 마쳤으며, 별도 clean PC 호환성 검증과 code signing은 남아 있습니다.
 
 ## Current AI Pipeline
 
@@ -77,9 +91,11 @@ YOLO 파일 위치는 다음과 같습니다.
 ```text
 models/detector/yolo26n.pt
 models/detector/yolo26n.engine
+models/detector/yolo26n.onnx
+models/detector/yolo26n.fp16.onnx
 ```
 
-`yolo26n.pt`가 없어도 export script가 Ultralytics의 공식 로딩 방식으로 준비합니다. `.engine` 파일은 생성 GPU/TensorRT 환경에 종속적이므로 Git에서 제외됩니다.
+TensorRT engine을 우선 사용하고 PyTorch 가중치로 fallback합니다. ONNX와 FP16 ONNX는 향후 배포 fallback 검토를 위해 보존합니다. `.engine` 파일은 생성 GPU/TensorRT 환경에 종속적이므로 Git에서 제외됩니다.
 
 ## Environment Check
 
