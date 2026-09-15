@@ -148,6 +148,27 @@ function Assert-VercelAuthentication {
     }
 }
 
+function Assert-VercelProjectAccess {
+    param(
+        [Parameter(Mandatory)][string]$VercelExecutable,
+        [Parameter(Mandatory)][string]$WorkingDirectory,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$Scope
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $VercelExecutable project inspect $ProjectName --scope $Scope --format json --cwd $WorkingDirectory --no-color 1>$null 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "Vercel project '$ProjectName' is not accessible in scope '$Scope'. Verify access without creating or linking a new project."
+    }
+}
+
 function Get-R2ObjectInfo {
     param(
         [Parameter(Mandatory)][string]$RcloneExecutable,

@@ -6,6 +6,10 @@ param(
     [string]$R2Bucket = 'fitroute-downloads',
     [string]$CurrentDownloadUrl = '',
     [string]$FrontendProductionUrl = 'https://fitroute-ivory.vercel.app/',
+    [ValidateNotNullOrEmpty()]
+    [string]$VercelProject = 'fitroute',
+    [ValidateNotNullOrEmpty()]
+    [string]$VercelScope = 'toru7',
     [switch]$ApproveProductionChange,
     [switch]$DryRun
 )
@@ -61,6 +65,8 @@ Write-Output "[rclone] Found: $rcloneExecutable"
 Write-Output "[Vercel] Found: $vercelExecutable"
 Assert-VercelAuthentication -VercelExecutable $vercelExecutable -WorkingDirectory $frontendDirectory
 Write-Output '[Vercel] Authentication: CONFIRMED'
+Assert-VercelProjectAccess -VercelExecutable $vercelExecutable -WorkingDirectory $frontendDirectory -ProjectName $VercelProject -Scope $VercelScope
+Write-Output "[Vercel] Project access: CONFIRMED ($VercelScope/$VercelProject)"
 
 Write-Output 'Production change'
 Write-Output "  Current: $CurrentDownloadUrl"
@@ -70,8 +76,8 @@ Write-Output "  SHA256:  $($metadata.sha256)"
 
 if ($DryRun) {
     Write-PlannedCommand -Executable $rcloneExecutable -Arguments @('lsjson', $remoteObject, '--stat', '--files-only', '--no-mimetype', '--no-modtime', '--s3-no-check-bucket')
-    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('env', 'add', 'VITE_DESKTOP_CLIENT_DOWNLOAD_URL', 'production', '--force', '--cwd', $frontendDirectory)
-    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('deploy', '--prod', '--yes', '--cwd', $frontendDirectory)
+    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('env', 'add', 'VITE_DESKTOP_CLIENT_DOWNLOAD_URL', 'production', '--force', '--project', $VercelProject, '--scope', $VercelScope, '--cwd', $frontendDirectory)
+    Write-PlannedCommand -Executable $vercelExecutable -Arguments @('deploy', '--prod', '--yes', '--project', $VercelProject, '--scope', $VercelScope, '--cwd', $frontendDirectory)
     Write-Output "PLAN: verify HTTP status at $FrontendProductionUrl"
     Write-Output 'DRY RUN COMPLETE: no R2 mutation, Vercel change, deployment, state write, or Git change was performed.'
     return
@@ -94,14 +100,10 @@ try {
         throw "R2 object size does not match release metadata: $($remoteInfo.Size) != $($metadata.size_bytes)"
     }
 
-    $projectLink = Join-Path $frontendDirectory '.vercel\project.json'
-    if (-not (Test-Path -LiteralPath $projectLink -PathType Leaf)) {
-        throw "Vercel project is not linked. Run 'vercel link --cwd frontend' interactively first."
-    }
-    $metadata.download_url | & $vercelExecutable env add VITE_DESKTOP_CLIENT_DOWNLOAD_URL production --force --cwd $frontendDirectory --no-color
+    $metadata.download_url | & $vercelExecutable env add VITE_DESKTOP_CLIENT_DOWNLOAD_URL production --force --project $VercelProject --scope $VercelScope --cwd $frontendDirectory --no-color
     if ($LASTEXITCODE -ne 0) { throw 'Vercel Production environment update failed; deployment was not started.' }
 
-    $deployOutput = @(& $vercelExecutable deploy --prod --yes --cwd $frontendDirectory --no-color 2>&1)
+    $deployOutput = @(& $vercelExecutable deploy --prod --yes --project $VercelProject --scope $VercelScope --cwd $frontendDirectory --no-color 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "Vercel Production deploy failed. Restore the previous release with this script. Output: $($deployOutput -join ' ')"
     }

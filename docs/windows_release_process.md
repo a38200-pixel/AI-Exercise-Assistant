@@ -21,7 +21,7 @@ Production
 - Inno Setup 6 (`ISCC.exe`)
 - Python과 검증된 Installer 입력 bundle
 - `rclone` remote `r2`와 bucket-scoped credential
-- Vercel CLI 로그인 및 `frontend/.vercel/project.json` project link
+- Vercel CLI 로그인 및 `toru7/fitroute` project 접근 권한
 - 깨끗한 Git working tree
 
 R2 Access Key, Secret, API token과 Vercel token은 source, metadata 또는 명령행에 넣지 않는다. 기존 rclone credential store와 Vercel CLI login을 사용한다. R2 public base URL은 공개 설정값이므로 parameter 또는 `FITROUTE_R2_PUBLIC_BASE_URL` 환경변수로 전달한다.
@@ -32,7 +32,7 @@ R2 Access Key, Secret, API token과 Vercel token은 source, metadata 또는 명�
 - Inno Setup: PATH의 `ISCC.exe`, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, Program Files 경로
 - Vercel: PATH의 `vercel.cmd`/`vercel`, `%APPDATA%\npm\vercel.cmd`, 사용 가능한 경우 npm global prefix
 
-Promotion preflight는 resolve된 Vercel 실행 파일로 `vercel whoami`를 호출한다. 인증이 확인되지 않으면 Production 변경 전에 중단하며 `vercel login`을 자동 실행하지 않는다. 사용자가 직접 로그인한 뒤 다시 실행해야 한다. `-DryRun`도 executable discovery와 Vercel 인증 확인을 수행하지만 upload, 환경변수 변경이나 deploy는 수행하지 않는다.
+Promotion preflight는 resolve된 Vercel 실행 파일로 `vercel whoami`와 읽기 전용 `vercel project inspect fitroute --scope toru7`을 호출한다. 인증 또는 project 접근이 확인되지 않으면 Production 변경 전에 중단하며 `vercel login`, project 생성이나 `vercel link`를 자동 실행하지 않는다. `frontend/.vercel/project.json`은 선택적으로 사용할 수 있지만 필수 조건이 아니며, env/deploy 명령은 `--project fitroute --scope toru7`로 대상을 명시한다. `-DryRun`도 executable discovery, 인증과 project 접근 확인을 수행하지만 upload, 환경변수 변경이나 deploy는 수행하지 않는다.
 
 ## 1. Prepare
 
