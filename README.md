@@ -1,628 +1,504 @@
-# FitRoute — AI Exercise Assistant
+<div align="center">
 
-![FitRoute UI overview](docs/%EC%98%88%EC%83%81%20UI.png)
+# FitRoute
 
-## Overview
+### AI 기반 실시간 운동 자세 분석 · 운동 기록 관리 서비스
 
-FitRoute는 실시간 카메라 영상에서 사용자의 자세를 인식하고 운동 횟수·시간을 기록하는 AI 운동 보조 서비스입니다. Windows AI Client의 YOLO26n·MediaPipe·XGBoost 파이프라인과 React Web, FastAPI, Supabase를 하나의 사용자 흐름으로 연결했습니다.
+웹에서 운동을 시작하면 Windows AI Client가 실행되어 실시간 자세를 분석하고,  
+운동 결과를 Backend와 Supabase에 저장해 대시보드·운동 기록·통계로 연결합니다.
+
+**개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
+
+[Production](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n TensorRT` · `MediaPipe` · `XGBoost`
+
+</div>
+
+---
+
+## 1. 프로젝트 한눈에 보기
+
+FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하나의 사용자 흐름으로 연결한 운동 기록 서비스**입니다.
+
+사용자는 웹에서 로그인한 뒤 운동을 시작할 수 있고, `fitroute://` Custom URI Scheme을 통해 Windows Launcher와 AI Client가 실행됩니다. AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 Supabase에 저장되며, 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
 
 | 영역 | 구현 내용 |
-|---|---|
-| AI Client | YOLO26n TensorRT/PyTorch, MediaPipe Pose, XGBoost, smoothing, 운동 상태 머신 |
-| Web | React + TypeScript + Vite 기반 대시보드·운동 기록·통계·반응형 UI |
-| API / Data | FastAPI, Supabase Auth, PostgreSQL, RLS, 일별 집계 |
-| Desktop 연동 | `fitroute://` Launcher, Windows Credential Manager, 자동 세션 시작 |
-| 배포 | Vercel Frontend, Render Backend, Cloudflare R2 Installer, Docker |
+| --- | --- |
+| Web | 로그인, 운동 선택, 대시보드, 운동 기록, 통계, 프로필 |
+| Desktop AI | Webcam 기반 실시간 자세 분석, 스쿼트 카운트, 스트레칭 시간 측정 |
+| Backend | 운동 결과 저장, 기록/통계 조회 API, 비즈니스 로직 |
+| Data/Auth | Supabase Auth, PostgreSQL, 사용자별 데이터 접근을 위한 RLS 구조 |
+| Distribution | Windows Installer, Custom URI Scheme, Cloudflare R2 배포 |
+| Release | Prepare → E2E Test → Promote → Rollback 가능한 버전별 배포 workflow |
 
-- Web: [https://fitroute-ivory.vercel.app](https://fitroute-ivory.vercel.app)
-- API health: [https://fitroute-api.onrender.com/health](https://fitroute-api.onrender.com/health)
-- 문서 인덱스: [docs/README.md](docs/README.md)
+---
 
-현재 Windows Installer는 개발 PC 검증에 이어 **별도 Windows PC에서 웹 다운로드 → 설치 → 실행 → 운동 기록 저장까지 E2E 검증을 완료**했습니다. 공개 Release용 code signing은 남아 있습니다.
+## 2. 실제 구현 화면
 
-## Current AI Pipeline
+### Web Service
 
-```text
-Camera
-  -> YOLO26n TensorRT / PyTorch (Person Detection)
-  -> Person BBox
-  -> MediaPipe Pose (33 Landmarks)
-  -> 132 Features (x, y, z, visibility)
-  -> XGBoost (9-Class Pose Classification)
-  -> Raw pose prediction
-  -> Consecutive-frame prediction smoothing
-  -> Stable pose + confidence 표시
-  -> Exercise State Machine
-  -> Squat / Stretch
-  -> Workout Session Timer
-  -> Session Summary (Python dict)
-  -> FastAPI POST /api/workouts (session end only)
-  -> Supabase workout_sessions + daily_workout_summary
-  -> React Dashboard / History / Statistics
-```
+랜딩 페이지부터 운동 선택, 대시보드, 운동 기록, 통계 분석까지 실제 구현한 주요 화면입니다.
 
-TensorRT 엔진이 있으면 우선 사용하고, 없으면 PyTorch 모델로 fallback합니다.
+<p align="center">
+  <img src="docs/FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
+</p>
 
-## Supported Pose Classes
+### Real-time AI Workout
 
-|  ID | Class    |
-| --: | -------- |
-|   0 | squat    |
-|   1 | run      |
-|   2 | sit      |
-|   3 | stretch  |
-|   4 | walk     |
-|   5 | jump     |
-|   6 | bendover |
-|   7 | stand    |
-|   8 | lying    |
+실제 Webcam 입력에서 Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
 
-## Exercise Rules
+<p align="center">
+  <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
+</p>
 
-- Squat: `stand -> squat -> stand` 완료 시 1회
-- Stretch: `stretch` 자세 유지 시간 측정
+---
 
-운동 카운터와 타이머는 stable pose 기반 상태 머신으로 구현되어 있습니다. Workout Session은 전체 경과시간과 세션 내 Squat 횟수 및 Stretch 시간을 관리합니다. 세션 종료 시 선택적으로 FastAPI를 통해 Supabase에 저장합니다.
+## 3. 핵심 기능
 
-## Setup
+### 실시간 AI 운동 분석
 
-기존 Conda 환경을 활성화한 뒤 필요한 최소 패키지를 설치합니다. AI Client 의존성은 기존 모델 및 CUDA 환경과의 호환성을 유지하고, Docker에서 사용하는 Backend 의존성은 검증된 버전으로 고정합니다.
+- Webcam 영상에서 사람 영역을 탐지
+- MediaPipe PoseLandmarker로 **33개 landmark** 추출
+- landmark를 **132개 feature**로 변환
+- XGBoost 기반 자세 분류
+- 현재 자세와 Confidence 실시간 표시
+- 내부 자세 분류 결과를 운동 로직에 연결
 
-```bash
-pip install -r requirements.txt
-```
+현재 사용자 기능은 다음 두 가지에 집중했습니다.
 
-TensorRT export는 NVIDIA GPU, CUDA, TensorRT 및 현재 Ultralytics 버전과 호환되는 환경이 필요하며, export 과정에서 추가 패키지 설치가 요구될 수 있습니다.
+- **Squat**: `Stand → Squat → Stand` 완료 시 1회로 기록
+- **Stretch**: Stretch 상태 유지 시간을 누적 기록
 
-## Models
+> 분류기는 여러 자세 class를 내부적으로 처리하지만, 현재 서비스에서 사용자에게 제공하는 운동 기능은 Squat / Stretch 중심으로 제한했습니다.
 
-다음 기존 파일은 사용자가 직접 복사해야 합니다. 애플리케이션은 이 파일들을 임의로 생성하거나 다운로드하지 않습니다.
+### 운동 세션 기록
 
-```text
-models/pose/pose_landmarker_full.task
-models/classifier/model_weights.xgb
-models/classifier/classes.json
-```
+- 운동 세션 시작/종료
+- 총 운동 시간 저장
+- 스쿼트 횟수 저장
+- 스트레칭 누적 시간 저장
+- 운동 종료 후 Backend API를 통해 저장
+- 저장 실패 시 pending/retry 흐름 지원
 
-`classes.json`은 학습 당시의 클래스 순서를 그대로 유지해야 합니다.
+### 웹 기록 및 통계
 
-YOLO 파일 위치는 다음과 같습니다.
+- 오늘의 운동 요약
+- 최근 운동 세션 조회
+- 날짜별 운동 기록
+- 주간/월간 운동 통계
+- 프로필 관리
 
-```text
-models/detector/yolo26n.pt
-models/detector/yolo26n.engine
-models/detector/yolo26n.onnx
-models/detector/yolo26n.fp16.onnx
-```
+---
 
-TensorRT engine을 우선 사용하고 PyTorch 가중치로 fallback합니다. ONNX와 FP16 ONNX는 향후 배포 fallback 검토를 위해 보존합니다. `.engine` 파일은 생성 GPU/TensorRT 환경에 종속적이므로 Git에서 제외됩니다.
+## 4. 서비스 구조
 
-## Environment Check
+FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
-```bash
-python scripts/check_environment.py
-```
+<p align="center">
+  <img src="docs/FiteRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
+</p>
 
-Python과 주요 패키지 버전, CUDA/GPU 상태 및 모든 모델 파일의 존재 여부를 출력합니다.
+### 주요 구성
 
-## TensorRT Export
+| Component | Role |
+| --- | --- |
+| Vercel Frontend | React + Vite 기반 웹 UI |
+| FitRoute Launcher | `fitroute://` 요청 처리, Desktop 인증, AI Client 실행 |
+| FitRoute AI Client | 실시간 Webcam inference 및 운동 로직 |
+| Render Backend | FastAPI 기반 운동 저장/조회 API |
+| Supabase | Auth + PostgreSQL + RLS |
+| Cloudflare R2 | Windows Installer 배포 |
 
-```bash
-python scripts/export_yolo26n_tensorrt.py
-```
+---
 
-정적 batch 1, image size 640, FP16 설정으로 export하며 최종 결과를 다음 위치에 둡니다.
+## 5. 실제 Runtime 흐름
+
+<p align="center">
+  <img src="docs/FitRoute_시스템%20흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
+</p>
+
+### 인증 및 운동 실행
 
 ```text
-models/detector/yolo26n.engine
+사용자
+  ↓
+Vercel Frontend
+  ↔ Supabase Auth
+  ↓ 운동 시작
+fitroute://
+  ↓
+FitRoute Launcher
+  ↔ Supabase Auth (Desktop 로그인 / 토큰 복원)
+  ↓
+FitRoute AI Client
 ```
 
-## Person Detection Test
-
-```bash
-python tests/test_person_detection.py
-```
-
-웹캠 화면에 사람 bounding box, confidence, FPS를 표시합니다. 처음 30프레임은 평균 benchmark에서 제외합니다. `Esc` 또는 `Q`로 종료합니다.
-
-## Main
-
-```bash
-python src/main.py
-```
-
-현재 main은 각 YOLO 사람 bbox에 30% padding을 적용한 crop에서 33개 landmark를 추출하고, 132개 feature로 XGBoost 자세 분류를 수행합니다. 원본 bbox, landmark point, 자세 label과 confidence를 화면에 표시하며 `Esc` 또는 `Q`로 종료합니다.
-
-Prediction smoothing은 일반 자세를 3프레임, 짧은 `jump`를 2프레임 연속 확인한 뒤 stable 자세로 확정합니다. 일시적인 pose 미검출은 3프레임까지 기존 stable 자세를 유지합니다. Tracking은 아직 사용하지 않으므로 화면에서 가장 큰 사람을 주 사용자로 선택합니다.
-
-운동 판단에는 raw prediction이 아닌 stable pose만 사용합니다.
-
-- `1`: Squat — `stand -> squat -> stand` 완료 시 1회
-- `2`: Stretch — `stretch` 자세의 실제 경과 시간 누적
-- `0`: Idle
-- `R`: 현재 선택된 운동 기록만 초기화
-- `S`: 새 Workout Session 시작 및 운동 기록 전체 초기화
-- `E`: 진행 중인 Session 종료 및 terminal summary 출력
-- `P`: 직전 저장 실패 Session의 API 업로드 재시도
-- `Q` 또는 `Esc`: 종료
-
-세션 시간은 운동 모드와 독립적이므로 Idle과 휴식 시간도 포함합니다. 세션이 진행 중일 때 `Q` 또는 `Esc`로 종료하면 현재 시각까지 자동으로 마감합니다. Summary는 향후 API 전송을 위해 다음 필드를 유지합니다.
+### 운동 결과 저장
 
 ```text
-workout_date, started_at, ended_at, workout_seconds,
-squat_count, stretch_seconds
+AI Client
+  ↓ POST /api/workouts
+Render Backend
+  ↔ Supabase PostgreSQL
 ```
 
-## AI Client → FastAPI 자동 저장
-
-AI 프로그램은 `FITROUTE_ACCESS_TOKEN`이 설정된 경우 `E`, `Q`, `Esc`로 세션을 종료하는 순간 summary를 `POST /api/workouts`에 한 번 전송합니다. 토큰과 비밀번호는 파일에 저장하지 않습니다.
-
-8000 포트를 `vmnat`가 사용 중인 현재 개발 환경에서는 Backend를 8001로 실행합니다.
-
-```cmd
-uvicorn backend.app.main:app --reload --port 8001
-```
-
-새 터미널에서 로그인 토큰을 발급합니다.
-
-```cmd
-python backend/scripts/get_test_token.py
-```
-
-CMD:
-
-```cmd
-set FITROUTE_ACCESS_TOKEN=eyJ...
-set FITROUTE_API_BASE_URL=http://127.0.0.1:8001
-python src/main.py
-```
-
-PowerShell:
-
-```powershell
-$env:FITROUTE_ACCESS_TOKEN="eyJ..."
-$env:FITROUTE_API_BASE_URL="http://127.0.0.1:8001"
-python src/main.py
-```
-
-토큰이 없으면 `Cloud: DISABLED`로 표시되며 로컬 운동 인식은 그대로 동작합니다. 저장 성공 시 `Cloud: SAVED`와 Session ID를 표시합니다. 401, validation 오류, 서버 오류, timeout 또는 연결 실패 시 프로그램은 종료되지 않고 `Cloud: FAILED`와 함께 summary를 메모리에 유지합니다. Backend를 복구하거나 토큰을 갱신한 뒤 `P`를 누르면 같은 pending summary만 재시도합니다. 성공한 summary는 pending에서 제거되므로 `P`로 중복 저장되지 않습니다.
-
-API Client 단위 테스트:
-
-```cmd
-pytest tests/test_api_client.py -v
-```
-
-Smoothing 로직만 검증하려면 다음 명령을 사용합니다.
-
-```bash
-python tests/test_prediction_smoothing.py
-```
-
-운동 상태 머신만 검증하려면 다음 명령을 사용합니다.
-
-```bash
-python tests/test_exercise_counter.py
-```
-
-Workout Session을 검증하려면 다음 명령을 사용합니다.
-
-```bash
-python tests/test_workout_session.py
-```
-
-30-frame warmup 후 30초 동안 전체 파이프라인의 단계별 성능을 측정하려면 다음 명령을 사용합니다.
-
-```bash
-python src/main.py --benchmark-seconds 30
-```
-
-## Web → Windows Desktop Launcher
-
-Vercel의 운동 선택 화면에서 `fitroute://start?exercise=squat` custom protocol을 호출해 Windows Desktop Launcher를 열고, 독립형 Frozen AI Client를 실행할 수 있습니다.
+### 대시보드 조회
 
 ```text
-React /exercise
-  → fitroute://start?exercise=squat
-  → FitRouteLauncher.exe
-  → Windows Credential Manager refresh 또는 Desktop Login
-  → access token을 child environment로만 전달
-  → FitRouteAIClient.exe --exercise squat --auto-start-session
-  → Camera 준비 완료 후 Workout Session 자동 시작
+Frontend
+  ↓ 조회 요청
+Render Backend
+  ↔ Supabase
+  ↓
+Frontend
 ```
 
-Launcher는 URL의 command와 exercise를 whitelist로 검증하고 `subprocess.Popen([...], shell=False)`만 사용합니다. Password는 저장하지 않으며 refresh token만 Windows Credential Manager에 보관합니다. Access token은 URL, command line, config 또는 `.env`에 기록하지 않고 AI child process의 환경변수로만 전달합니다. Web과 Desktop은 같은 Supabase 계정으로 로그인해야 같은 Dashboard 기록을 확인할 수 있습니다.
+Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backend API를 통해 조회 및 응답받도록 역할을 분리**했습니다.
 
-개발 환경 빌드 예시:
+---
 
-```powershell
-C:\path\to\vision_ai\python.exe -m pip install -r desktop_launcher\requirements.txt
-C:\path\to\vision_ai\python.exe -m pip install pyinstaller
-powershell -ExecutionPolicy Bypass -File .\desktop_launcher\build_launcher.ps1 `
-  -PythonExecutable "C:\path\to\vision_ai\python.exe" `
-  -ApiBaseUrl "https://fitroute-api.onrender.com" `
-  -SupabaseUrl "https://YOUR_PROJECT.supabase.co" `
-  -SupabaseAnonKey "YOUR_PUBLISHABLE_KEY"
-```
-
-생성물은 `desktop_launcher/dist/FitRouteLauncher.exe`와 같은 폴더의 `config.json`입니다. 기본 개발 build는 AI Client를 `..\..\dist\FitRouteAIClient\FitRouteAIClient.exe` 상대 경로로 참조합니다. 최종 설치 구조에서는 Launcher 옆 `ai_client\FitRouteAIClient.exe`를 사용합니다. 런타임 config에는 Python executable, Conda 환경, repository root나 `src/main.py` 경로가 없습니다. Supabase publishable key는 들어가지만 service role/secret key는 Launcher와 Frontend에 사용하면 안 됩니다.
-
-Launcher 관련 테스트는 실제 Registry, Supabase Login, Credential 입력 또는 Webcam 실행 없이 수행합니다.
-
-```powershell
-python -m pytest tests/test_desktop_auth.py -q -p no:cacheprovider
-python -m pytest tests/test_desktop_launcher.py tests/test_auto_start_session.py -q -p no:cacheprovider
-```
-
-5단계 검증에서 Launcher/Auth/auto-start/path/runtime diagnostic 관련 테스트 39개와 전체 root suite 85개가 통과했습니다. 재빌드한 onefile Launcher(63,476,752 bytes)는 `--help`와 `--dry-run`이 모두 exit 0이었고, 상대 경로가 실제 Frozen AI Client를 찾는 것도 확인했습니다. AI Client의 `--diagnose-runtime`도 PASS였으며 이 자동 검증에서는 Webcam을 실행하지 않았습니다. Protocol 등록/제거, Desktop 인증과 실제 E2E 절차는 [Desktop Launcher 개발 문서](docs/desktop_client_launcher.md)를 참고하세요.
-
-### Windows AI Client bundle 최적화 현황
-
-6-B 최적화는 완료되었습니다. 기존 성공 bundle을 보존하고 최적화 항목을 한 번에 하나씩 제외한 별도 candidate로 검증했으며, 최종 설치 대상 baseline은 `dist_candidate_protoc/FitRouteAIClient/`입니다.
-
-| 단계 | Bundle 크기 | 이전 단계 대비 | Original 대비 |
-|---|---:|---:|---:|
-| Original | 6.794548 GiB | - | - |
-| TensorRT Builder resource 8개 제거 | 5.020208 GiB | -1.774341 GiB | 약 -26.1% |
-| Polars runtime 제거 | 4.849181 GiB | -0.171026 GiB | 약 -28.6% |
-| `torch/bin/protoc.exe` 제거 (최종) | **4.846573 GiB** | -0.002608 GiB | **약 -28.67%** |
-
-최종 크기는 **5,203,968,114 bytes / 4,962.890734 MiB / 4.846573 GiB**입니다. Original 대비 **2,091,622,330 bytes / 1.947975 GiB**를 절감했고 총 감소율은 **28.669679%**입니다. 최종 baseline에는 TensorRT inference runtime/plugin/parser와 Torch/CUDA runtime, OpenCV, MediaPipe, XGBoost 및 네 개 모델이 유지됩니다.
-
-최종 baseline은 다음 실제 흐름을 통과했습니다.
-
-- `--help`, 제한 PATH `--diagnose-runtime`
-- Camera와 YOLO26n TensorRT inference
-- MediaPipe pose, XGBoost classification, Squat count
-- Web → Protocol → Launcher → Desktop Auth → Frozen AI Client
-- Render API 저장, Supabase 반영, Web Dashboard 조회
-
-`torch.testing` 전체 제거 실험은 PyTorch 2.11의 최상위 `torch/__init__.py`가 이를 직접 import하여 `import torch` 자체가 실패했으므로 최종 baseline에 합치지 않았습니다. 따라서 `torch.testing`은 **KEEP**입니다.
-
-6-B-3C에서 75.609초 동안 실제 Camera/TensorRT inference 프로세스를 100ms 간격으로 추적해 전체 361개 모듈을 관찰했으며, Bundle native 331개 중 218개가 실제 로드되었습니다. 특히 CUDA 25/25, Torch native 12/12, TensorRT 4/4가 모두 로드되었고 MediaPipe 1/1, XGBoost 1/1과 `torch_cuda.dll`의 직접 PE dependency 11개도 전부 관찰되었습니다. `NOT_OBSERVED` 중 가장 큰 파일은 OpenCV FFmpeg DLL 약 29.446 MiB였으며, 우선 검토 기준인 50~100 MiB 이상의 대형 미관찰 native DLL은 없었습니다. 현재 Ultralytics + Torch 구조에서 추가 native 제거는 회귀 위험 대비 절감 효과가 작아 6-B 최적화를 여기서 종료합니다.
-
-세부 수치는 [AI Client Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md), [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md), [Runtime Module Trace](docs/runtime_module_trace.md)를 참고하세요. Direct TensorRT 전용 구조는 이번 최적화 범위가 아닌 별도 아키텍처 단계입니다.
-
-### Windows Installer 및 Cloudflare R2 배포
-
-현재 Production Windows Desktop Client는 PyInstaller onedir bundle을 Inno Setup으로 패키징한 `FitRoute-AI-Client-Setup-0.1.1.exe`로 배포합니다. Installer에는 Launcher, Frozen AI Client, production config와 모델이 모두 포함되며 결과물은 약 **2.2 GiB**입니다. `%LOCALAPPDATA%\Programs\FitRoute AI Client`에 관리자 권한 없이 per-user 방식으로 설치하고 다음 구조를 만듭니다.
+## 6. AI Pipeline
 
 ```text
-FitRoute AI Client/
-├─ FitRouteLauncher.exe
-├─ config.json
-└─ ai_client/
-   ├─ FitRouteAIClient.exe
-   ├─ _internal/
-   └─ models/
+Webcam
+  ↓
+YOLO26n TensorRT
+(Person Detection)
+  ↓
+Person ROI
+  ↓
+MediaPipe PoseLandmarker
+(33 landmarks)
+  ↓
+132 Features
+  ↓
+XGBoost Classifier
+  ↓
+Temporal Smoothing
+  ↓
+Squat / Stretch Logic
+  ↓
+Workout Summary
 ```
 
-Installer는 `fitroute://` protocol을 현재 사용자 Registry에 등록합니다. 설치된 AI Client는 Python runtime과 주요 dependency를 bundle에 포함하므로 사용자 PC에 Python, Conda, pip, 별도 TensorRT 또는 CUDA Toolkit을 설치하거나 기존 Python 환경을 변경하지 않습니다. 실시간 추론에는 호환 NVIDIA GPU와 Driver가 필요합니다.
+### 설계 포인트
 
-개발 PC에서 R2 다운로드 → 설치 → Web/Protocol/Launcher/Auth → Camera/AI → Render/Supabase/Dashboard 흐름과 제거까지 검증했습니다. 또한 **별도 Windows PC에서 웹 다운로드 → 설치 → 실행 → 저장까지 타 PC E2E 검증을 완료**했습니다. Uninstall 시 프로그램 파일과 `launcher.log`, protocol Registry 등록 및 Windows Credential Manager의 Desktop refresh credential이 제거됩니다.
+**YOLO26n TensorRT**  
+사람 영역을 먼저 탐지해 Pose 분석 영역을 제한하고 Windows NVIDIA 환경에서 실시간 inference에 적합하도록 TensorRT engine을 사용했습니다.
 
-Installer가 크기 때문에 Git repository나 Vercel 정적 asset에 포함하지 않고 Cloudflare R2 Object Storage에 별도로 업로드합니다. R2는 AI/API server가 아니라 versioned Windows binary를 보관하고 public HTTPS download를 처리하는 배포 계층입니다. Vercel Production에는 R2 public URL을 다음 환경변수로 주입합니다.
+**MediaPipe PoseLandmarker**  
+33개 landmark의 좌표 정보를 추출해 자세 분류의 입력 feature로 사용했습니다.
 
-```dotenv
-VITE_DESKTOP_CLIENT_DOWNLOAD_URL=https://<public-r2-host>/releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe
-```
+**XGBoost**  
+landmark 기반 feature를 입력받아 자세 class를 분류합니다. 영상 frame 단위 예측의 흔들림을 줄이기 위해 smoothing을 적용한 뒤 실제 운동 로직과 연결했습니다.
 
-Web의 설치 안내 버튼은 이 환경변수의 URL을 사용해 R2 Installer를 내려받습니다. 값이 없으면 Frontend는 URL을 임의로 만들지 않고 `다운로드 준비 중` 상태를 표시합니다. 공개 download URL과 달리 R2 Access Key, Secret Access Key, API token 및 업로드 도구 credential은 배포 작업에만 사용하며 README나 Frontend에 포함하지 않습니다.
+**Rule-based Exercise Logic**  
+모델의 class 결과 자체를 운동 횟수로 사용하지 않고, 상태 전이를 기준으로 반복 동작을 기록하도록 분리했습니다.
+
+---
+
+## 7. Tech Stack
+
+| Category | Stack |
+| --- | --- |
+| Frontend | React, Vite, JavaScript/TypeScript |
+| Backend | FastAPI, Python, HTTPX, Docker |
+| Database / Auth | Supabase Auth, PostgreSQL, RLS |
+| Computer Vision | OpenCV, Ultralytics YOLO26n, TensorRT |
+| Pose | MediaPipe PoseLandmarker Tasks API |
+| ML | XGBoost |
+| Desktop | Python, Windows Custom URI Scheme, Windows Credential Manager |
+| Packaging | PyInstaller, Inno Setup |
+| Deployment | Vercel, Render, Cloudflare R2 |
+| Release Automation | PowerShell, rclone, Vercel CLI |
+
+---
+
+## 8. Windows Desktop 연동
+
+웹에서 `운동 시작` 버튼을 클릭하면 다음 Custom URI 요청이 발생합니다.
 
 ```text
-FitRoute Web (Vercel)
-  → Windows 앱 설치
-  → Cloudflare R2 public download
-  → Inno Setup Installer
-  → FitRouteLauncher.exe + ai_client/FitRouteAIClient.exe
-  → fitroute:// 등록
-  → Web에서 운동 시작
-  → Desktop Auth → Camera / AI inference
+fitroute://start?exercise=squat
 ```
 
-### 모바일 브라우저 지원 및 제한사항
+Windows에 등록된 FitRoute Launcher가 요청을 받아 안전하게 AI Client를 실행합니다.
 
-FitRoute의 React Frontend는 반응형 Web UI이므로 Desktop뿐 아니라 스마트폰과 Tablet 브라우저에서도 로그인, Dashboard, 운동 기록·통계 조회 및 Installer 안내 같은 Web 기능을 사용할 수 있습니다. 그러나 반응형 UI 지원과 실시간 AI 운동 분석의 모바일 실행 지원은 서로 다릅니다. YOLO, MediaPipe와 XGBoost는 현재 브라우저에서 실행되지 않으며 Web은 Windows Desktop AI Client를 여는 presentation/entry point 역할을 합니다.
+### Launcher에서 처리하는 역할
 
-| 구성 요소 | 현재 구현 | 모바일 브라우저 |
-|---|---|---|
-| React Web UI | Responsive React Web | 가능 |
-| 로그인 | Supabase Auth | 가능 |
-| Dashboard / 운동 기록·통계 | Web + FastAPI + Supabase | 가능 |
-| Installer 다운로드 안내 | Web UI + R2 download URL | 가능 |
-| Windows Installer 실행 | Inno Setup `.exe` | 불가 |
-| `fitroute://` handler | Windows Registry + `FitRouteLauncher.exe` | 현재 불가 |
-| Desktop AI Client | Windows PyInstaller application | 불가 |
-| 실시간 Camera AI 분석 | Windows Desktop Client | 현재 불가 |
-| YOLO inference | NVIDIA TensorRT FP16 `.engine` | 현재 구조로 불가 |
+- 허용된 command / exercise 값만 처리하는 whitelist 적용
+- Desktop 로그인 또는 refresh token 복원
+- Access token을 URL이나 command-line argument에 노출하지 않음
+- Access token은 child process environment를 통해 AI Client에 전달
+- Refresh token은 Windows Generic Credential에 저장
+- 중복 카메라 실행 방지를 위한 mutex 적용
 
-현재 `fitroute://` handler는 Windows Installer가 `HKCU\Software\Classes\fitroute`에 등록하는 `FitRouteLauncher.exe`이고 Android/iOS용 FitRoute native application은 없습니다. Inno Setup `.exe`, Windows PyInstaller binary와 Windows Credential Manager 기반 Desktop Auth도 Android, iOS 또는 iPadOS에서 그대로 실행할 수 없습니다. 또한 현재 YOLO26n TensorRT `.engine` backend는 NVIDIA GPU가 있는 Windows PC용이므로 모바일 플랫폼에는 별도의 inference backend가 필요합니다. 이는 모바일 앱 자체가 불가능하다는 뜻이 아닙니다.
+이 구조를 통해 **브라우저 → Windows Desktop AI** 연결을 별도의 수동 실행 없이 구성했습니다.
 
-향후 모바일 지원 시에는 별도 제품 단계에서 ONNX Runtime Mobile, TensorFlow Lite 또는 Core ML 같은 모바일 inference backend, Android/iOS MediaPipe Tasks와 native Camera pipeline을 검토해야 합니다. XGBoost classifier 역시 모바일 실행 방법이나 ONNX/TFLite 변환을 평가하고, 인증 정보는 Windows Credential Manager 대신 Android Keystore/iOS Keychain에 저장해야 합니다. 앱 진입도 Windows Registry protocol 대신 Android App Link 또는 iOS Universal Link/플랫폼 custom scheme으로 별도 구현해야 하며, 이 항목들은 현재 구현된 기능이 아닙니다.
+---
 
-Launcher는 `launcher.log`에 token 값 없이 lifecycle만 기록합니다. Access Token과 API URL은 child environment에만 전달하며 argv는 다음과 같습니다.
+## 9. 최초 설치 흐름
+
+최초 한 번만 Windows Installer를 설치하면 이후에는 웹에서 바로 운동을 시작할 수 있습니다.
+
+<p align="center">
+  <img src="docs/FitRoute_최초%20설치%20흐름.png" alt="FitRoute 최초 설치 흐름" width="100%" />
+</p>
 
 ```text
-FitRouteAIClient.exe --exercise squat --auto-start-session
+Web 설치하기
+  ↓
+Cloudflare R2 Installer 다운로드
+  ↓
+Inno Setup Installer
+  ↓
+Launcher + AI Client 설치
+  ↓
+fitroute:// Registry 등록
+  ↓
+설치 완료
 ```
 
-### Launcher 개발 중 실패와 해결 기록
+Installer는 사용자 단위로 설치되며, 사용자 PC에는 Python/Conda 개발 환경이 필요하지 않습니다.
 
-| 증상 | 확인된 원인 | 해결 |
-|---|---|---|
-| `attempt to collect multiple Qt bindings packages` | 범용 `vision_ai` 환경의 import graph가 PyQt5와 PyQt6를 함께 탐색 | PyQt 패키지는 제거하지 않고 PyInstaller에서 `PyQt5`, `PyQt6` 제외 |
-| Launcher와 무관한 matplotlib runtime hook 포함 | `desktop_auth → httpx._main → rich → IPython → matplotlib` 선택 의존성 경로 | Launcher가 사용하지 않는 `matplotlib`을 제외해 `pyi_rth_mplconfig` 제거 |
-| `_ctypes` import 시 DLL load 실패 | Conda Python의 `_ctypes.pyd`가 `Library\bin\ffi.dll`에 의존하지만 onefile bundle에서 누락 | `-PythonExecutable`로 Conda root를 계산하고 존재하는 `ffi-7.dll`, `ffi-8.dll`, `ffi.dll`을 모두 `--add-binary`로 포함 |
-| `pyi_rth_pkgres` 실행 중 `pyexpat` DLL load 실패 | `pyexpat.pyd`의 직접 의존 파일인 `libexpat.dll` 누락 | `objdump`로 직접 의존성을 확인한 뒤 `libexpat.dll` 포함 |
-| `_lzma`, `_bz2`, `_sqlite3`, `_tkinter`, `_zmq` DLL 경고 | Conda의 관련 `.pyd`가 `Library\bin`의 런타임 DLL을 사용하지만 PyInstaller가 자동 해석하지 못함 | 확인된 `liblzma.dll`, `LIBBZ2.dll`, `sqlite3.dll`, `tcl86t.dll`, `tk86t.dll`, `libzmq-mt-4_3_5.dll`만 조건부 포함 |
-| Login UI의 `Label() got multiple values for keyword argument 'fg'` | `label()` helper의 기본 `fg`와 호출부의 override `fg`가 동시에 전달 | `bg`, `fg`를 `options.setdefault()`로 설정해 호출부 override 우선 적용 |
+---
 
-Conda DLL은 이름을 추측해 하나만 선택하지 않았습니다. 각 `.pyd`의 PE dependency와 `Library\bin`의 실제 파일을 확인한 뒤 존재하는 파일만 bundle에 추가했습니다. `ctypes/_ctypes`는 Credential Manager 구현이 사용하므로 제외하지 않습니다.
+## 10. Packaging & Distribution
 
-## Production 실행 및 Docker
+AI Client는 PyInstaller `onedir` 방식으로 패키징했습니다.
 
-로컬 Docker 검증과 내부 Staging Cloud 배포를 완료했습니다. Backend는 Render의 `https://fitroute-api.onrender.com`, Frontend는 Vercel의 `https://fitroute-ivory.vercel.app`에서 동작합니다. Backend는 `backend/start.py`를 통해 Provider가 전달하는 `PORT`를 읽고, `--reload` 없이 `0.0.0.0:$PORT`에서 실행됩니다.
+초기 bundle은 약 **6.79 GiB**였으며, runtime dependency를 분석해 실제 inference에 필요하지 않은 항목을 제거했습니다.
 
-Cloud 배포와 Windows runtime의 역할은 다음과 같이 분리됩니다.
+| 단계 | 결과 |
+| --- | ---: |
+| 초기 AI Client bundle | 약 6.79 GiB |
+| 최종 AI Client bundle | 약 4.85 GiB |
+| Bundle 감소 | 약 28.7% |
+| 최종 Installer | 2.216 GiB |
 
-| 구성 요소 | 배포 위치 | 역할 |
-|---|---|---|
-| React Frontend | Vercel | 반응형 Web UI, 인증 진입, Dashboard와 Desktop 설치/실행 안내 |
-| FastAPI Backend | Render | 인증된 운동 기록 API |
-| Auth / Database | Supabase | Supabase Auth, PostgreSQL, RLS 기반 사용자 데이터 분리 |
-| Installer binary | Cloudflare R2 | 약 2.2 GiB Windows Installer 저장 및 HTTPS download |
-| AI runtime | 사용자 Windows PC | Webcam, YOLO TensorRT, MediaPipe, XGBoost와 운동 상태 로직 |
+주요 최적화:
+
+- TensorRT builder 전용 resource 제거
+- Polars runtime 제거
+- `torch/bin/protoc.exe` 제거
+- CUDA / Torch / TensorRT runtime module trace를 통해 추가 제거 가능성 검증
+
+단순히 파일 크기를 줄이는 것보다 **실제 Camera → TensorRT → MediaPipe → XGBoost runtime이 유지되는지 검증하면서 최적화**했습니다.
+
+---
+
+## 11. Release Engineering
+
+v0.1.1부터 Windows 배포 과정을 자동화했습니다.
 
 ```text
-Browser → React / Vercel ───────→ Cloudflare R2 / Windows Installer
-              │
-              └→ FastAPI / Render → Supabase Auth + PostgreSQL
-
-Windows Web → fitroute:// → Launcher → Desktop Auth → AI Client
-                                                └→ Camera → YOLO TensorRT → MediaPipe → XGBoost
+Prepare
+  ↓
+Installer Build
+  ↓
+SHA-256 / Size Verification
+  ↓
+R2 Immutable Upload
+  ↓
+Release Metadata
+  ↓
+Separate Windows PC E2E Test
+  ↓
+Promote
+  ↓
+Vercel Production Deploy
+  ↓
+Production HTTP Verification
 ```
 
-로컬 Docker 실행 구조는 다음과 같습니다.
+### Release 원칙
 
-```text
-Windows Client
-http://127.0.0.1:8001
-        ↓
-Docker Port Mapping
-Windows 8001 → Container 8000
-        ↓
-Container FastAPI
-0.0.0.0:8000
-```
+- `SemVer` 기반 version 관리
+- R2 object를 버전별 경로에 저장
+- 동일 version overwrite 금지 (`--immutable`)
+- Production 반영 전 별도 Windows PC E2E 수행
+- Promote는 명시적인 승인 후에만 실행
+- 이전 Production URL을 이용한 rollback 가능
+- 성공한 deploy와 HTTP 검증 이후에만 `production.json` 갱신
 
-`0.0.0.0`은 Container가 요청을 받기 위한 listen 주소이며 브라우저에 입력하는 주소가 아닙니다.
-
-Repository root에서 Backend 이미지를 빌드하고 실행합니다.
-
-```powershell
-docker build -f backend/Dockerfile -t fitroute-backend .
-docker run --rm --env-file backend/.env -e PORT=8000 -p 8001:8000 fitroute-backend
-```
-
-실행 후 다음 주소로 확인합니다.
-
-```text
-http://127.0.0.1:8001/health
-http://127.0.0.1:8001/docs
-```
-
-이 구성에서는 Frontend와 Python AI Client가 모두 Windows의 공개 포트 `8001`을 사용합니다.
-
-```dotenv
-# frontend/.env
-VITE_API_BASE_URL=http://127.0.0.1:8001
-```
-
-```cmd
-set FITROUTE_API_BASE_URL=http://127.0.0.1:8001
-```
-
-Docker를 사용하지 않고 FastAPI를 직접 실행할 때는 포트 매핑이 없습니다.
-
-```powershell
-uvicorn backend.app.main:app --reload --port 8001
-```
-
-Cloud Runtime에는 실제 `.env` 파일을 업로드하지 않고 다음 환경변수를 Provider 설정에 등록합니다.
-
-```dotenv
-ENVIRONMENT=production
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
-FRONTEND_ORIGINS=https://YOUR_FRONTEND_DOMAIN
-LOG_LEVEL=info
-```
-
-`PORT`는 Cloud Provider가 전달하는 값을 사용합니다. `FRONTEND_ORIGINS`에는 trailing slash 없는 정확한 HTTPS Frontend Origin만 넣고 wildcard `*`는 사용하지 않습니다. Service role key, DB password, 사용자 Access Token은 Production 환경변수나 Frontend에 넣지 않습니다.
-
-Frontend Production build는 다음과 같이 검증합니다.
-
-```powershell
-cd frontend
-npm install
-npm run lint
-npm run build
-npm run preview -- --host 127.0.0.1
-```
-
-Hosting Provider에는 `frontend/dist`를 배포하고, React Router 직접 접근이 `/index.html`로 fallback되도록 SPA rewrite를 설정해야 합니다. 실제 Frontend URL이 확정되면 Supabase Authentication의 Site URL과 Redirect URLs도 해당 HTTPS 주소로 변경합니다.
-
-Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container 실행을 완료했으며 `/health`, `/docs`, `/openapi.json`의 200 응답을 확인했습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, Frontend production build와 SPA 직접 접근도 검증했습니다.
-
-## Windows AI Client Version History
-
-### v0.1.0 — Initial Production Release
-
-FitRoute의 초기 Windows Production 배포 버전입니다.
-
-- FitRoute Windows Launcher와 AI Client 최초 배포
-- `fitroute://` custom protocol을 통한 Web → Desktop 실행
-- Launcher 기반 Desktop 인증과 AI Client 실행
-- YOLO26n TensorRT, MediaPipe Pose, XGBoost 기반 운동 분석
-- Squat count와 Stretch duration 측정
-- Render Backend를 통한 운동 결과 저장
-- Supabase Auth와 PostgreSQL 기반 사용자 인증 및 데이터 저장
-- Inno Setup 기반 Windows Installer
-- Cloudflare R2를 이용한 초기 Installer 배포
-- Vercel Web의 설치 버튼과 R2 Installer URL 연동
-
-### v0.1.1 — Release Workflow Stabilization
-
-**Release date:** 2026-09-15
-
-사용자 운동 기능을 대규모로 변경한 버전이 아니라, Windows binary를 검증하고 배포하는 절차를 정식화한 배포 안정화 버전입니다. 핵심 AI runtime source는 Installer build의 보호 대상 hash 검사를 통과했으며, version metadata 변경으로 Installer binary의 SHA-256은 v0.1.0과 다릅니다.
-
-#### Release automation
-
-- Windows Release workflow를 Prepare와 Promote 단계로 분리
-- SemVer, Git clean working tree, Installer 입력과 version consistency 검증
-- Installer SHA-256 계산과 byte 크기 검증
-- R2 remote object 검증과 release metadata 자동 생성
-- `build → verify → distribute → other-PC E2E test → promote → rollback` 흐름 정립
-
-#### Versioned R2 distribution
-
-단일 Installer 파일을 교체하던 방식에서 다음과 같은 version별 불변 경로로 변경했습니다.
+R2 object 예시:
 
 ```text
 releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe
 ```
 
-동일 version overwrite는 `rclone --immutable`로 차단합니다. 약 2.2 GiB Installer 전송에는 `--s3-no-check-bucket`, `--s3-upload-cutoff=100M`, `--s3-chunk-size=100M`을 사용했습니다.
+---
 
-#### Production promotion and rollback
+## 12. 문제 해결 경험
 
-Prepare가 완료된 Installer를 바로 공개하지 않고, 별도 Windows PC E2E 테스트 후 Promote 단계에서 Production에 반영합니다.
+### 1) Windows AI bundle 과대화
+
+**문제**  
+PyInstaller 결과물이 약 6.79 GiB까지 증가했습니다.
+
+**접근**  
+Torch / CUDA / TensorRT / Polars 등의 파일을 크기와 runtime load 여부 기준으로 분리 분석했습니다.
+
+**결과**  
+Camera inference가 정상 동작하는 범위에서 약 4.85 GiB까지 축소했고, 더 작은 native runtime을 위해서는 Ultralytics/Torch 의존성 자체를 줄여야 한다고 판단해 무리한 삭제를 중단했습니다.
+
+### 2) 브라우저와 Desktop AI 연결
+
+**문제**  
+웹에서 Windows AI 프로그램을 자연스럽게 실행해야 했습니다.
+
+**해결**  
+Custom URI Scheme `fitroute://` + Launcher를 설계하고, 인증과 AI Client 실행 책임을 Launcher에 분리했습니다.
+
+### 3) 대용량 Installer 배포
+
+**문제**  
+2 GiB가 넘는 Installer를 일반적인 GitHub Release 단일 파일로 관리하기 어려웠습니다.
+
+**해결**  
+Cloudflare R2를 binary distribution storage로 분리하고 Vercel은 public download URL만 참조하도록 구성했습니다.
+
+### 4) Vercel CLI가 저장소 전체를 배포 대상으로 인식
+
+**문제**  
+Production CLI deploy 과정에서 AI runtime과 Installer까지 포함해 수 GB를 업로드하려는 문제가 발생했습니다.
+
+**해결**  
+Vercel native process의 Working Directory를 `frontend`로 고정하고 root `.vercelignore`를 allowlist 방식으로 구성했습니다.
+
+**검증**
 
 ```text
-Prepare → Installer build → SHA-256 → R2 immutable upload
-→ remote verification → metadata 생성 → 별도 Windows PC E2E test
-→ Promote → Vercel download URL 변경 → Production deploy
-→ HTTP verification → production.json 기록
+Deployment manifest: 51 files / 325,900 bytes
+frontend 외부 파일: 0
+AI / Installer artifact: 0
 ```
 
-성공한 promotion만 `releases/windows/production.json`에 기록합니다. version별 R2 object와 이전 Production download URL을 유지하므로 문제가 발생하면 이전 version을 다시 Promote하는 방식으로 rollback할 수 있습니다.
+### 5) Vercel CLI stderr와 PowerShell 오류 처리
 
-#### Release tool and Vercel stabilization
+Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeCommandError`로 처리되는 문제를 확인했습니다.
 
-- `rclone`, Inno Setup `ISCC.exe`, Vercel CLI를 PATH와 알려진 사용자 설치 경로에서 안전하게 탐색
-- 현재 확인된 경로: `%LOCALAPPDATA%\Microsoft\WinGet\Links\rclone.exe`, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, `%APPDATA%\npm\vercel.cmd`
-- Vercel의 정상 stderr 배너를 실패로 오인하지 않도록 `System.Diagnostics.Process` 기반 helper에서 ExitCode, StdOut, StdErr를 분리
-- native process의 실제 Working Directory를 `frontend`로 지정
-- 루트 `.vercelignore`를 allowlist로 구성해 `frontend/**`만 deployment에 포함
-- Vercel read-only dry manifest에서 **51 files / 325,900 bytes**, frontend 외부 및 대용량 AI/Installer artifact **0개** 확인
+`System.Diagnostics.Process` 기반 helper를 구현해 `StdOut`, `StdErr`, `ExitCode`를 분리하고 **ExitCode == 0**을 성공 기준으로 사용하도록 개선했습니다.
 
-#### v0.1.1 Production result
+---
 
-| 항목 | 값 |
-|---|---|
-| Production | [https://fitroute-ivory.vercel.app](https://fitroute-ivory.vercel.app) |
-| Installer | `FitRoute-AI-Client-Setup-0.1.1.exe` |
-| Release URL | [Cloudflare R2 v0.1.1 Installer](https://pub-08036d191fd84004a7a3d27bf8521aaf.r2.dev/releases/v0.1.1/FitRoute-AI-Client-Setup-0.1.1.exe) |
-| Size | 2,379,641,099 bytes / 2.216213 GiB |
-| SHA-256 | `748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD` |
+## 13. 검증 결과
 
-#### v0.1.0 → v0.1.1
+현재 확인된 주요 검증 결과입니다.
 
-| 항목 | v0.1.0 | v0.1.1 |
-|---|---|---|
-| Windows AI 기능 | 초기 Production 기능 | 핵심 기능 유지, 배포 절차 안정화 |
-| Installer | 초기 배포 | versioned release |
-| R2 경로 | 단일 파일 | `releases/v<VERSION>/` |
-| Immutable upload | 미적용 | 적용 |
-| Release metadata | 미생성 | 자동 생성 |
-| Prepare / Promote | 수동 절차 | 단계별 자동화 |
-| Rollback 기반 | 제한적 | 이전 Production URL과 version object 기반 |
-| Vercel deploy 범위 | 수동 관리 | frontend allowlist |
-| Release validation | 기본 확인 | Git, version, SHA-256, size, remote object 검증 |
+- Windows Installer build 성공
+- 별도 Windows PC 설치/실행 E2E 성공
+- `fitroute://` → Launcher → AI Client 실행 성공
+- Webcam / TensorRT / MediaPipe / XGBoost runtime 성공
+- Render Backend 운동 결과 저장 성공
+- Supabase 반영 성공
+- Web Dashboard 기록 조회 성공
+- Windows uninstall 및 protocol/credential 정리 확인
+- Python test suite **122 passed**
+- Production deploy 성공
+- Production HTTP **200** 확인
 
-v0.1.1의 알려진 최초 운동 저장 문제와 후속 분석 계획은 아래 Known Issues에 기록했습니다. 상세 운영 절차는 [Windows Release Process](docs/windows_release_process.md)를 참고하세요.
+---
 
-## Known Issues
+## 14. Version History
 
-### Windows AI Client v0.1.1 — Known Issue: First workout save after initial launch
+| Version | 내용 |
+| --- | --- |
+| `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포 |
+| `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
 
-Windows AI Client v0.1.1의 별도 Windows PC E2E 테스트에서 설치 후 최초 실행 시 첫 번째 운동 세션의 저장이 정상 처리되지 않는 현상이 관찰되었습니다.
+### v0.1.1 Release
 
-현재 확인된 특징:
+- Release date: **2026-09-15**
+- Installer: `FitRoute-AI-Client-Setup-0.1.1.exe`
+- Size: **2,379,641,099 bytes (2.216213 GiB)**
+- SHA-256:
 
-- Installer 설치 및 `fitroute://` 프로토콜 호출 정상
-- FitRoute Launcher 실행 정상
-- Desktop 로그인 및 인증 정상
-- FitRoute AI Client 실행 정상
-- 카메라 및 AI 추론 정상
-- 이후 운동 세션의 Render Backend → Supabase 저장 정상
-- 웹 Dashboard 조회 정상
-- 최초 실행의 첫 운동 저장에서만 간헐적인 실패 관찰
-- 재시도 또는 이후 운동 세션에서는 정상 저장
-
-최초 실행에서만 실패할 가능성이 관찰되었으며 원인은 아직 확정되지 않았습니다. 현재 v0.1.1은 전체 E2E 기능이 동작하는 것을 확인했지만, 이 문제를 해결 완료로 표시하지 않습니다. Known Issue로 기록하고 후속 버전인 v0.1.2에서 원인을 재현·분석할 예정입니다.
-
-#### 우선 의심 순서
-
-1. Render Backend 최초 요청 시 cold start 또는 초기 응답 지연
-2. FitRoute Launcher의 Desktop 인증/access token 준비 시점과 AI Client 최초 저장 요청 사이의 timing issue
-3. AI Client의 최초 HTTP 연결 초기화(DNS, TLS, HTTPX connection 등)
-4. `--auto-start-session` 사용 시 최초 세션 상태 초기화와 운동 결과 저장 시점 사이의 race condition
-
-#### 후속 확인 항목
-
-문제 재현 시 다음 로그를 함께 비교합니다.
-
-- FitRoute Launcher 인증/token 복원 로그
-- AI Client `POST /api/workouts` 요청 결과 및 HTTP status
-- Render Backend 요청 로그
-- Supabase workout record 생성 여부
-
-판별 기준:
-
-- Render에 요청이 없음 → AI Client, 인증 또는 HTTP 요청 단계 확인
-- Render에서 `401`/`403` → access token 및 인증 timing 확인
-- Render에서 timeout/`5xx` → Render cold start 또는 네트워크 초기 연결 확인
-- Backend 요청 성공 후 Supabase에 데이터 없음 → Backend 저장 로직 확인
-- Supabase에는 저장됐지만 웹에 표시되지 않음 → Dashboard 조회 흐름 확인
-
-## Next Steps
-
-1. v0.1.2에서 최초 실행의 첫 운동 기록 저장 문제를 재현·분석하고, 필요하면 save retry와 HTTP connection initialization을 개선
-2. 공개 Release용 code signing과 Installer SHA-256 게시 준비
-3. Windows release workflow를 추가 안정화하고 Cloudflare R2 versioned object와 Vercel download URL 운영 절차 보완
-4. 향후 필요하면 별도 모바일 inference architecture 검토
-5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
-
-독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 최종 4.846573 GiB baseline은 Inno Setup Installer로 패키징되었고 Cloudflare R2를 통한 Web 다운로드까지 연결되었습니다.
-
-Inno Setup Installer의 구조, 입력 검증, 빌드와 타 PC E2E 테스트 절차는 [Windows Installer](docs/windows_installer.md)를 참고하세요.
-
-Version별 R2 업로드, 타 PC 검증, Vercel promotion과 rollback 자동화 절차는 [Windows Release Process](docs/windows_release_process.md)를 참고하세요.
-
-## Backend
-
-Supabase PostgreSQL schema, RLS, Supabase Auth Bearer token dependency와 FastAPI API scaffold는 [backend/README.md](backend/README.md)를 참고하세요. 실제 Cloud 연결 전에도 schema와 service unit test를 실행할 수 있습니다.
-
-## Frontend
-
-React + Vite 기반 FitRoute 웹 대시보드는 [frontend/README.md](frontend/README.md)를 참고하세요. 운동 시작 버튼은 Squat 선택 후 `fitroute://` Desktop Launcher를 호출하며, protocol handler가 확인되지 않으면 설치 안내 fallback을 표시합니다.
-
-```powershell
-# Terminal 1 (8000 포트 충돌 시 8001 사용)
-uvicorn backend.app.main:app --reload --port 8001
-
-# Terminal 2
-cd frontend
-npm install
-npm run dev
+```text
+748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD
 ```
 
-`frontend/.env`의 `VITE_API_BASE_URL` 포트는 실제 Backend 포트와 같아야 합니다.
+---
 
-Production 배포 준비와 실제 배포 순서는 [Production Deployment Checklist](docs/production_deployment_checklist.md)를 참고하세요.
+## 15. Known Issue
 
-Render Backend Staging의 Dashboard 입력값과 검증 절차는 [Render Backend Staging Deployment](docs/render_backend_staging.md)를 참고하세요.
+### 최초 실행 후 첫 운동 저장 실패 가능성
 
-Vercel Frontend Staging의 Dashboard 입력값과 배포 후 CORS/Auth 절차는 [Vercel Frontend Staging Deployment](docs/vercel_frontend_staging.md)를 참고하세요.
+별도 Windows PC E2E 테스트에서 **설치 후 최초 실행의 첫 번째 운동 세션 저장이 정상 처리되지 않는 현상**이 관찰되었습니다.
+
+확인된 특징:
+
+- Installer / Launcher / AI Client 실행 정상
+- Desktop 인증 정상
+- Camera 및 AI inference 정상
+- 재시도 또는 이후 세션의 저장 정상
+- 이후 Render → Supabase 저장 및 Dashboard 조회 정상
+
+현재 원인은 확정하지 않았으며 다음 항목을 우선 확인할 예정입니다.
+
+1. Render Backend 최초 요청의 cold start / 초기 응답 지연
+2. Desktop 인증 및 access token 준비 timing
+3. 최초 HTTP connection 초기화
+4. `--auto-start-session`의 최초 session initialization timing
+
+이 문제는 해결된 것으로 표시하지 않고 후속 patch version에서 재현 및 분석할 예정입니다.
+
+---
+
+## 16. Repository Structure
+
+```text
+AI-Exercise-Assistant/
+├─ frontend/                 # React + Vite Web
+├─ backend/                  # FastAPI Backend
+├─ src/                      # AI Client source
+├─ desktop_launcher/         # Windows Launcher / Desktop Auth
+├─ models/                   # AI model assets
+├─ installer/                # Inno Setup / installer build
+├─ scripts/                  # Release / validation automation
+├─ releases/windows/         # Version metadata / production state
+└─ docs/                     # Architecture / deployment documentation
+```
+
+---
+
+## 17. 관련 기술 문서
+
+포트폴리오 README에서는 핵심 내용만 요약하고, 세부 검증/설계 내용은 문서로 분리했습니다.
+
+- [Windows Release Process](docs/windows_release_process.md)
+- [Windows Installer](docs/windows_installer.md)
+- [Desktop Launcher](docs/desktop_client_launcher.md)
+- [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)
+- [Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md)
+- [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md)
+- [Runtime Module Trace](docs/runtime_module_trace.md)
+- [Production Deployment Checklist](docs/production_deployment_checklist.md)
+
+---
+
+## 18. 프로젝트에서 보여주고자 한 역량
+
+FitRoute는 단순한 자세 분류 모델 구현에서 끝내지 않고 다음 범위까지 직접 연결한 프로젝트입니다.
+
+- Computer Vision / Pose / ML 모델을 실제 서비스 기능으로 연결
+- Web과 Windows Desktop application 간 연동
+- 인증과 사용자별 데이터 저장 구조 설계
+- FastAPI 기반 API와 Frontend 데이터 흐름 구현
+- AI runtime 패키징 및 Windows Installer 제작
+- 대용량 binary distribution 구조 설계
+- Production 배포 및 E2E 검증
+- versioned release / promote / rollback workflow 자동화
+- 문제 발생 시 로그와 runtime trace를 기반으로 원인을 분리하고 개선
+
+**모델 정확도만 보는 프로젝트가 아니라, 사용자가 설치하고 실행하고 기록을 다시 확인할 수 있는 End-to-End AI 서비스 구현을 목표로 했습니다.**
+
+---
+
+<div align="center">
+
+### FitRoute
+
+**작은 운동이 큰 변화를 만듭니다.**  
+AI와 함께 만드는 더 건강한 일상
+
+</div>
