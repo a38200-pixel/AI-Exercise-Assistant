@@ -454,12 +454,57 @@ Hosting Provider에는 `frontend/dist`를 배포하고, React Router 직접 접�
 
 Docker Desktop + WSL2 환경에서 실제 image build와 `8001:8000` Container 실행을 완료했으며 `/health`, `/docs`, `/openapi.json`의 200 응답을 확인했습니다. Dockerfile 정적 구성, Production entry point, 동적 PORT, CORS, Frontend production build와 SPA 직접 접근도 검증했습니다.
 
+## Known Issues
+
+### Windows AI Client v0.1.1 - 최초 실행 시 첫 운동 기록 저장 실패 가능성
+
+Windows AI Client v0.1.1의 별도 Windows PC E2E 테스트에서 설치 후 최초 실행 시 첫 번째 운동 세션의 저장이 정상 처리되지 않는 현상이 관찰되었습니다.
+
+현재 확인된 특징:
+
+- Installer 설치 및 `fitroute://` 프로토콜 호출 정상
+- FitRoute Launcher 실행 정상
+- Desktop 로그인 및 인증 정상
+- FitRoute AI Client 실행 정상
+- 카메라 및 AI 추론 정상
+- 이후 운동 세션의 Render Backend → Supabase 저장 정상
+- 웹 Dashboard 조회 정상
+- 최초 실행의 첫 운동 저장에서만 간헐적인 실패 관찰
+- 재시도 또는 이후 운동 세션에서는 정상 저장
+
+현재 v0.1.1은 전체 E2E 기능이 동작하는 것을 확인했지만, 이 문제를 해결 완료로 표시하지 않습니다. Known Issue로 기록하고 v0.1.2에서 원인을 재현·분석해 수정할 예정입니다.
+
+#### 우선 의심 순서
+
+1. Render Backend 최초 요청 시 cold start 또는 초기 응답 지연
+2. FitRoute Launcher의 Desktop 인증/access token 준비 시점과 AI Client 최초 저장 요청 사이의 timing issue
+3. AI Client의 최초 HTTP 연결 초기화(DNS, TLS, HTTPX connection 등)
+4. `--auto-start-session` 사용 시 최초 세션 상태 초기화와 운동 결과 저장 시점 사이의 race condition
+
+#### 후속 확인 항목
+
+문제 재현 시 다음 로그를 함께 비교합니다.
+
+- FitRoute Launcher 인증/token 복원 로그
+- AI Client `POST /api/workouts` 요청 결과 및 HTTP status
+- Render Backend 요청 로그
+- Supabase workout record 생성 여부
+
+판별 기준:
+
+- Render에 요청이 없음 → AI Client, 인증 또는 HTTP 요청 단계 확인
+- Render에서 `401`/`403` → access token 및 인증 timing 확인
+- Render에서 timeout/`5xx` → Render cold start 또는 네트워크 초기 연결 확인
+- Backend 요청 성공 후 Supabase에 데이터 없음 → Backend 저장 로직 확인
+- Supabase에는 저장됐지만 웹에 표시되지 않음 → Dashboard 조회 흐름 확인
+
 ## Next Steps
 
-1. 공개 Release용 code signing과 Installer SHA-256 게시 준비
-2. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
-3. 향후 필요하면 별도 모바일 inference architecture 검토
-4. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
+1. v0.1.2에서 최초 실행의 첫 운동 기록 저장 실패 현상 재현 및 수정
+2. 공개 Release용 code signing과 Installer SHA-256 게시 준비
+3. Cloudflare R2 versioned object와 Vercel download URL의 release 운영 절차 정리
+4. 향후 필요하면 별도 모바일 inference architecture 검토
+5. 필요할 경우 Launcher의 HTTPX/Rich 선택 의존성을 별도 최소 빌드 환경에서 최적화
 
 독립 실행형 Windows AI Client의 runtime dependency, frozen resource path, `fitroute_build` 환경, PyInstaller onedir 빌드와 Camera 검증 결과는 [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)에 정리되어 있습니다. Launcher는 Frozen EXE를 직접 실행하며 Web/Protocol/Auth/Camera/Cloud 저장 E2E까지 검증되었습니다. 최종 4.846573 GiB baseline은 Inno Setup Installer로 패키징되었고 Cloudflare R2를 통한 Web 다운로드까지 연결되었습니다.
 
