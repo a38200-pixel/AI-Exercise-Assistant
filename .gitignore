@@ -41,3 +41,6 @@ data/workout_logs/*.json
 !data/workout_logs/.gitkeep
 packaging/ai_client/build_ai_client_candidate_testing.ps1
 packaging/ai_client/FitRouteAIClient.optimized_testing.spec
+
+.vercel
+.env*
