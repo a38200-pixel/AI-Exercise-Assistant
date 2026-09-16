@@ -156,8 +156,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
   <img src="docs/FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
 </p>
 
-- **33 landmarks → 132 features → XGBoost**
-- **Temporal Smoothing 적용**
+[상세_파이프라인](docs/AI_client_Pipeline.md)
 
 ### 운동 세션 기록
 
@@ -174,57 +173,6 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 - 주간/월간 운동 통계
 - 프로필 관리
 
----
-## 6. AI Pipeline
-
-```text
-Webcam
-  ↓
-YOLO26n
-(Person Detection)
-  ↓
-TensorRT FP16 Inference
-  ↓
-Person ROI (+30% padding)
-  ↓
-MediaPipe PoseLandmarker
-(33 landmarks)
-  ↓
-132 Features
-  ↓
-XGBoost Classifier
-  ↓
-Temporal Smoothing
-  ↓
-Squat / Stretch Logic
-  ↓
-Workout Summary
-```
-
-### 설계 포인트
-
-**YOLO26n**  
-사람 영역을 먼저 탐지해 Pose 분석 영역을 제한하는 Person Detection 모델로 사용했습니다.
-
-**TensorRT**  
-YOLO26n 추론을 Windows NVIDIA 환경에서 가속하기 위해 FP16 TensorRT engine을 사용했습니다.
-
-**MediaPipe PoseLandmarker**  
-33개 landmark의 좌표 정보를 추출해 자세 분류의 입력 feature로 사용했습니다.
-
-**XGBoost**  
-landmark 기반 feature를 입력받아 9개 자세 class를 분류합니다. Frame 단위 예측의 흔들림을 줄이기 위해 smoothing을 적용한 뒤 실제 운동 로직과 연결했습니다.
-
-**Rule-based Exercise Logic**  
-모델의 class 결과 자체를 운동 횟수로 사용하지 않고 stable pose의 상태 전이를 기준으로 반복 동작을 기록합니다.
-
-| Type | Details |
-| --- | --- |
-| Deep Learning / Vision | YOLO26n 기반 Person Detection, MediaPipe PoseLandmarker 기반 Pose 추정 |
-| Inference Acceleration | TensorRT FP16 기반 YOLO26n 추론 가속 |
-| Machine Learning | 132차원 landmark feature를 입력으로 사용하는 XGBoost 9-class classifier |
-| Rule-based Logic | stable pose 상태 전이를 이용한 Squat count / Stretch duration 계산 |
-
 ### Runtime Performance
 
 최종 패키징 AI Client의 실제 Webcam 환경 측정 결과입니다.
@@ -236,7 +184,7 @@ landmark 기반 feature를 입력받아 9개 자세 class를 분류합니다. Fr
 End-to-End FPS는 Camera 입력, AI inference, 운동 로직, 화면 렌더링 등 실제 Client 전체 처리 흐름을 포함한 값이며, Inference FPS는 YOLO26n(TensorRT 추론) → MediaPipe → XGBoost AI pipeline 처리 기준 값입니다.
 
 ---
-## 7. Build & Release Engineering
+## 6. Build & Release Engineering
 
 AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적화·Installer 제작부터 버전별 배포·검증·Production 반영까지** 하나의 release workflow로 구성했습니다.
 
@@ -298,7 +246,7 @@ Production HTTP Verification
 
 ---
 
-## 8. 검증 결과
+## 7. 검증 결과
 
 현재 확인된 주요 검증 결과입니다.
 
@@ -313,7 +261,7 @@ Production HTTP Verification
 - Vercel Production deploy 및 HTTP **200** 확인
 
 ---
-## 9. Known Issues / Limitations
+## 8. Known Issues / Limitations
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
 
@@ -333,7 +281,7 @@ Production HTTP Verification
 - Android / iOS용 native AI Client는 현재 구현 범위에 포함하지 않음
 
 ---
-## 10. Version History
+## 9. Version History
 
 | Version | 내용 |
 | --- | --- |
@@ -352,7 +300,7 @@ Production HTTP Verification
 ```
 
 ---
-## 11. 문제 해결 경험
+## 10. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
 
@@ -391,7 +339,7 @@ Vercel native process의 Working Directory를 `frontend`로 고정하고 root `.
 Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 문제를 확인하고, `System.Diagnostics.Process` 기반 helper에서 StdOut / StdErr / ExitCode를 분리해 **ExitCode == 0**을 성공 기준으로 사용하도록 개선했습니다.
 
 ---
-## 12. Repository Structure
+## 11. Repository Structure
 
 ```text
 AI-Exercise-Assistant/
@@ -414,7 +362,7 @@ AI-Exercise-Assistant/
 ```
 
 ---
-## 13. 관련 기술 문서
+## 12. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
@@ -431,7 +379,7 @@ AI-Exercise-Assistant/
 - [Docs Index](docs/README.md)
 
 ---
-## 14. 프로젝트를 통해 얻은 경험
+## 13. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
 - Computer Vision / Pose / ML을 실제 운동 기능과 상태 기반 로직으로 연결한 경험
@@ -442,7 +390,7 @@ AI-Exercise-Assistant/
 - 오류를 단순 수정하는 데서 끝내지 않고 로그, runtime trace, deployment manifest를 기준으로 원인을 분리해 해결한 경험
 
 ---
-## 15. 향후 발전 방향
+## 14. 향후 발전 방향
 
 - **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
