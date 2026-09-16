@@ -46,6 +46,19 @@ AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼�
 | **Packaging** | PyInstaller, Inno Setup |
 | **Cloud / Deployment** | Vercel, Render, Cloudflare R2 |
 
+### 실행 환경 및 지원 범위
+
+| 영역 | 현재 지원 범위 |
+| --- | --- |
+| Web | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
+| AI Workout | Windows Desktop Client |
+| GPU Inference | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime |
+| 사용자 PC Python 환경 | 별도 Python / Conda / pip 설치 불필요 |
+| Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요 |
+
+Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함되어 있어 사용자 PC의 기존 Python 환경을 변경하지 않습니다.
+
+
 ---
 
 ## 2. 서비스 구조
@@ -230,20 +243,7 @@ landmark 기반 feature를 입력받아 9개 자세 class를 분류합니다. Fr
 End-to-End FPS는 Camera 입력, AI inference, 운동 로직, 화면 렌더링 등 실제 Client 전체 처리 흐름을 포함한 값이며, Inference FPS는 YOLO26n(TensorRT 추론) → MediaPipe → XGBoost AI pipeline 처리 기준 값입니다.
 
 ---
-## 7. 실행 환경 및 플랫폼 범위
-
-| 영역 | 현재 지원 범위 |
-| --- | --- |
-| Web | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
-| AI Workout | Windows Desktop Client |
-| GPU Inference | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime |
-| 사용자 PC Python 환경 | 별도 Python / Conda / pip 설치 불필요 |
-| Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요 |
-
-Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함되어 있어 사용자 PC의 기존 Python 환경을 변경하지 않습니다.
-
----
-## 8. Build & Release Engineering
+## 7. Build & Release Engineering
 
 AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적화·Installer 제작부터 버전별 배포·검증·Production 반영까지** 하나의 release workflow로 구성했습니다.
 
@@ -305,7 +305,7 @@ Production HTTP Verification
 
 ---
 
-## 9. 검증 결과
+## 8. 검증 결과
 
 현재 확인된 주요 검증 결과입니다.
 
@@ -320,7 +320,7 @@ Production HTTP Verification
 - Vercel Production deploy 및 HTTP **200** 확인
 
 ---
-## 10. Known Issues / Limitations
+## 9. Known Issues / Limitations
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
 
@@ -340,7 +340,7 @@ Production HTTP Verification
 - Android / iOS용 native AI Client는 현재 구현 범위에 포함하지 않음
 
 ---
-## 11. Version History
+## 10. Version History
 
 | Version | 내용 |
 | --- | --- |
@@ -359,7 +359,7 @@ Production HTTP Verification
 ```
 
 ---
-## 12. 문제 해결 경험
+## 11. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
 
@@ -398,7 +398,7 @@ Vercel native process의 Working Directory를 `frontend`로 고정하고 root `.
 Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 문제를 확인하고, `System.Diagnostics.Process` 기반 helper에서 StdOut / StdErr / ExitCode를 분리해 **ExitCode == 0**을 성공 기준으로 사용하도록 개선했습니다.
 
 ---
-## 13. Repository Structure
+## 12. Repository Structure
 
 ```text
 AI-Exercise-Assistant/
@@ -421,7 +421,7 @@ AI-Exercise-Assistant/
 ```
 
 ---
-## 14. 관련 기술 문서
+## 13. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
@@ -438,7 +438,7 @@ AI-Exercise-Assistant/
 - [Docs Index](docs/README.md)
 
 ---
-## 15. 프로젝트를 통해 얻은 경험
+## 14. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
 - Computer Vision / Pose / ML을 실제 운동 기능과 상태 기반 로직으로 연결한 경험
@@ -449,7 +449,7 @@ AI-Exercise-Assistant/
 - 오류를 단순 수정하는 데서 끝내지 않고 로그, runtime trace, deployment manifest를 기준으로 원인을 분리해 해결한 경험
 
 ---
-## 16. 향후 발전 방향
+## 15. 향후 발전 방향
 
 - **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
