@@ -8,37 +8,24 @@ AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 
 
 **개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
 
-[Production](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n' . 'TensorRT` · `MediaPipe` · `XGBoost`
+[Production](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n TensorRT` · `MediaPipe` · `XGBoost`
 
 </div>
 
 ---
 
-## 1. 프로젝트 요약
+## 1. 프로젝트 개요
 
-FitRoute는 **AI 운동 클라이언트를 하나의 사용자 흐름으로 연결한 운동 기록 서비스**입니다.
+FitRoute는 **AI 운동 클라이언트와 웹 서비스를 하나의 사용자 흐름으로 연결한 운동 기록 서비스**입니다.
 
-AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 DB에 저장되며, 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
+AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 Supabase PostgreSQL에 저장되며, 사용자는 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
 
-| 영역 | 구현 내용 |
+| 항목 | 내용 |
 | --- | --- |
-| Web | 로그인, 운동 선택, 대시보드, 운동 기록, 통계, 프로필 |
-| Desktop AI | Webcam 기반 실시간 자세 분석, 스쿼트 카운트, 스트레칭 시간 측정 |
-| Backend | 운동 결과 저장, 기록/통계 조회 API |
-| Data / Auth | Supabase Auth, PostgreSQL, RLS 기반 사용자 데이터 분리 |
-| Distribution | Windows Installer, Custom URI Scheme, Cloudflare R2 |
-| Release | Prepare → E2E Test → Promote → Rollback 가능한 버전별 배포 workflow |
-
----
-
-## 2. 프로젝트 개요
-
-| 항 목 | 내 용 |
-| --- | --- |
-| **문 제** | 자세 인식 모델만으로는 사용자가 직접 설치·실행하고 운동 결과를 저장·조회하는 완결된 서비스 경험을 제공하기 어려움 |
-| **목 표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
-| **기 간** | 2026.09.04 ~ 2026.09.16 (약 2주) |
-| **역 할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현 |
+| **문제** | 자세 인식 모델만으로는 사용자가 직접 설치·실행하고 운동 결과를 저장·조회하는 완결된 서비스 경험을 제공하기 어려움 |
+| **목표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
+| **기간** | 2026.09.04 ~ 2026.09.16 (약 2주) |
+| **역할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현 |
 
 ### Tech Stack
 
@@ -56,60 +43,7 @@ AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼�
 
 ---
 
-## 3. 실제 구현 화면
-
-### Web Service
-
-<p align="center">
-  <img src="docs/FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
-</p>
-
-### Real-time AI Workout
-
-Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
-
-<p align="center">
-  <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
-</p>
-
----
-
-## 4. 핵심 기능
-
-### 실시간 AI 운동 분석
-
-- Webcam 영상에서 YOLO26n으로 사람 영역 탐지
-- Person BBox에 **30% padding**을 적용한 ROI를 Pose 입력으로 사용
-- MediaPipe PoseLandmarker로 **33개 landmark** 추출
-- landmark를 **132개 feature**로 변환
-- XGBoost 기반 자세 분류 및 Temporal Smoothing 적용
-- 현재 자세와 Confidence 실시간 표시
-
-현재 사용자 기능은 다음 두 가지에 집중했습니다.
-
-- **Squat**: `Stand → Squat → Stand` 완료 시 1회로 기록
-- **Stretch**: Stretch 상태 유지 시간을 누적 기록
-
-> XGBoost 분류기는 `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`의 **9개 자세 class**를 내부적으로 분류합니다. 현재 서비스 기능은 이 중 `stand`, `squat`, `stretch`를 중심으로 운동 로직에 연결했습니다.
-
-### 운동 세션 기록
-
-- 운동 세션 시작/종료
-- 총 운동 시간, 스쿼트 횟수, 스트레칭 누적 시간 저장
-- 운동 종료 후 Backend API를 통해 저장
-- 저장 실패 시 pending/retry 흐름 지원
-
-### 웹 기록 및 통계
-
-- 오늘의 운동 요약
-- 최근 운동 세션 조회
-- 날짜별 운동 기록
-- 주간/월간 운동 통계
-- 프로필 관리
-
----
-
-## 5. 서비스 구조
+## 2. 서비스 구조
 
 FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
@@ -130,7 +64,9 @@ FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을
 
 ---
 
-## 6. 시스템 흐름도
+---
+
+## 3. 시스템 흐름도
 
 <p align="center">
   <img src="docs/FitRoute_시스템_흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
@@ -181,7 +117,66 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 ---
 
-## 7. AI Pipeline
+---
+
+## 4. 실제 구현 화면
+
+### Web Service
+
+<p align="center">
+  <img src="docs/FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
+</p>
+
+### Real-time AI Workout
+
+Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
+
+<p align="center">
+  <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
+</p>
+
+---
+
+---
+
+## 5. 핵심 기능
+
+### 실시간 AI 운동 분석
+
+- Webcam 영상에서 YOLO26n으로 사람 영역 탐지
+- Person BBox에 **30% padding**을 적용한 ROI를 Pose 입력으로 사용
+- MediaPipe PoseLandmarker로 **33개 landmark** 추출
+- landmark를 **132개 feature**로 변환
+- XGBoost 기반 자세 분류 및 Temporal Smoothing 적용
+- 현재 자세와 Confidence 실시간 표시
+
+현재 사용자 기능은 다음 두 가지에 집중했습니다.
+
+- **Squat**: `Stand → Squat → Stand` 완료 시 1회로 기록
+- **Stretch**: Stretch 상태 유지 시간을 누적 기록
+
+> XGBoost 분류기는 `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`의 **9개 자세 class**를 내부적으로 분류합니다. 현재 서비스 기능은 이 중 `stand`, `squat`, `stretch`를 중심으로 운동 로직에 연결했습니다.
+
+### 운동 세션 기록
+
+- 운동 세션 시작/종료
+- 총 운동 시간, 스쿼트 횟수, 스트레칭 누적 시간 저장
+- 운동 종료 후 Backend API를 통해 저장
+- 저장 실패 시 pending/retry 흐름 지원
+
+### 웹 기록 및 통계
+
+- 오늘의 운동 요약
+- 최근 운동 세션 조회
+- 날짜별 운동 기록
+- 주간/월간 운동 통계
+- 프로필 관리
+
+---
+
+---
+
+## 6. AI Pipeline
 
 ```text
 Webcam
@@ -237,7 +232,9 @@ End-to-End FPS는 Camera 입력, AI inference, 운동 로직, 화면 렌더링 �
 
 ---
 
-## 8. 실행 환경 및 플랫폼 범위
+---
+
+## 7. 실행 환경 및 플랫폼 범위
 
 | 영역 | 현재 지원 범위 |
 | --- | --- |
@@ -251,7 +248,9 @@ Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함
 
 ---
 
-## 9. Packaging & Optimization
+---
+
+## 8. Packaging & Optimization
 
 AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 inference runtime을 유지하면서 불필요한 dependency를 제거해 bundle 크기를 최적화했습니다.
 
@@ -273,7 +272,9 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 
 ---
 
-## 10. Release Engineering
+---
+
+## 9. Release Engineering
 
 v0.1.1부터 Windows 배포 과정을 **Prepare와 Promote 단계로 분리해 자동화**했습니다.
 
@@ -309,7 +310,9 @@ Production HTTP Verification
 
 ---
 
-## 11. 검증 결과
+---
+
+## 10. 검증 결과
 
 현재 확인된 주요 검증 결과입니다.
 
@@ -325,7 +328,9 @@ Production HTTP Verification
 
 ---
 
-## 12. Known Issues / Limitations
+---
+
+## 11. Known Issues / Limitations
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
 
@@ -346,7 +351,9 @@ Production HTTP Verification
 
 ---
 
-## 13. Version History
+---
+
+## 12. Version History
 
 | Version | 내용 |
 | --- | --- |
@@ -366,7 +373,9 @@ Production HTTP Verification
 
 ---
 
-## 14. 문제 해결 경험
+---
+
+## 13. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
 
@@ -406,7 +415,9 @@ Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 �
 
 ---
 
-## 15. Repository Structure
+---
+
+## 14. Repository Structure
 
 ```text
 AI-Exercise-Assistant/
@@ -430,7 +441,9 @@ AI-Exercise-Assistant/
 
 ---
 
-## 16. 관련 기술 문서
+---
+
+## 15. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
@@ -448,7 +461,9 @@ AI-Exercise-Assistant/
 
 ---
 
-## 17. 프로젝트를 통해 얻은 경험
+---
+
+## 16. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
 - Computer Vision / Pose / ML을 실제 운동 기능과 상태 기반 로직으로 연결한 경험
@@ -460,7 +475,9 @@ AI-Exercise-Assistant/
 
 ---
 
-## 18. 향후 발전 방향
+---
+
+## 17. 향후 발전 방향
 
 - **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
