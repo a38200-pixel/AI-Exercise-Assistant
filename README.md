@@ -32,7 +32,24 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ---
 
-## 2. 실제 구현 화면
+## 2. Tech Stack
+
+| Category | Stack |
+| --- | --- |
+| Frontend | React, Vite, JavaScript/TypeScript |
+| Backend | FastAPI, Python, HTTPX, Docker |
+| Database / Auth | Supabase Auth, PostgreSQL, RLS |
+| Computer Vision | OpenCV, Ultralytics YOLO26n, TensorRT |
+| Pose | MediaPipe PoseLandmarker Tasks API |
+| ML | XGBoost |
+| Desktop | Python, Windows Custom URI Scheme, Windows Credential Manager |
+| Packaging | PyInstaller, Inno Setup |
+| Deployment | Vercel, Render, Cloudflare R2 |
+| Release Automation | PowerShell, rclone, Vercel CLI |
+
+---
+
+## 3. 실제 구현 화면
 
 ### Web Service
 
@@ -52,7 +69,7 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ---
 
-## 3. 핵심 기능
+## 4. 핵심 기능
 
 ### 실시간 AI 운동 분석
 
@@ -90,7 +107,7 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ---
 
-## 4. 서비스 구조
+## 5. 서비스 구조
 
 FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
@@ -111,7 +128,7 @@ FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을
 
 ---
 
-## 5. 실제 Runtime 흐름
+## 6. 실제 Runtime 흐름
 
 <p align="center">
   <img src="docs/FitRoute_시스템_흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
@@ -157,7 +174,7 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 ---
 
-## 6. AI Pipeline
+## 7. AI Pipeline
 
 ```text
 Webcam
@@ -216,23 +233,6 @@ landmark 기반 feature를 입력받아 자세 class를 분류합니다. 영상 
 End-to-End FPS는 Camera 입력, AI inference, 운동 로직, 화면 렌더링 등 실제 Client 전체 처리 흐름을 포함한 값이며, Inference FPS는 YOLO26n → MediaPipe → XGBoost AI pipeline 처리 기준 값입니다.
 
 최종 패키징 및 bundle 최적화 이후에도 실제 Webcam 기반 운동 분석이 안정적으로 동작하는 처리 성능을 확인했습니다.
-
----
-
-## 7. Tech Stack
-
-| Category | Stack |
-| --- | --- |
-| Frontend | React, Vite, JavaScript/TypeScript |
-| Backend | FastAPI, Python, HTTPX, Docker |
-| Database / Auth | Supabase Auth, PostgreSQL, RLS |
-| Computer Vision | OpenCV, Ultralytics YOLO26n, TensorRT |
-| Pose | MediaPipe PoseLandmarker Tasks API |
-| ML | XGBoost |
-| Desktop | Python, Windows Custom URI Scheme, Windows Credential Manager |
-| Packaging | PyInstaller, Inno Setup |
-| Deployment | Vercel, Render, Cloudflare R2 |
-| Release Automation | PowerShell, rclone, Vercel CLI |
 
 ---
 
