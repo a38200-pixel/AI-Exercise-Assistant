@@ -26,8 +26,8 @@ AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼�
 
 | 항목 | 내용 |
 | --- | --- |
-| **문제** | 자세 인식 모델을 통해 운동 자세를 분석하고 운동 결과를 저장·조회하는 웹 서비스를 제공 |
-| **목표** | 실시간 자세 분석, 운동 기록, 서버 저장, 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
+| **문제** | 자세 인식 모델만으로는 사용자가 직접 설치·실행하고 운동 결과를 저장·조회하는 완결된 서비스 경험을 제공하기 어려움 |
+| **목표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
 | **기간** | 2026.09.04 ~ 2026.09.16 (약 2주) |
 | **역할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현 |
 
@@ -152,19 +152,12 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 
 ### 실시간 AI 운동 분석
 
-- Webcam 영상에서 YOLO26n으로 사람 영역 탐지
-- Person BBox에 **30% padding**을 적용한 ROI를 Pose 입력으로 사용
-- MediaPipe PoseLandmarker로 **33개 landmark** 추출
-- landmark를 **132개 feature**로 변환
-- XGBoost 기반 자세 분류 및 Temporal Smoothing 적용
-- 현재 자세와 Confidence 실시간 표시
+<p align="center">
+  <img src="docs/FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
+</p>
 
-현재 사용자 기능은 다음 두 가지에 집중했습니다.
-
-- **Squat**: `Stand → Squat → Stand` 완료 시 1회로 기록
-- **Stretch**: Stretch 상태 유지 시간을 누적 기록
-
-> XGBoost 분류기는 `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`의 **9개 자세 class**를 내부적으로 분류합니다. 현재 서비스 기능은 이 중 `stand`, `squat`, `stretch`를 중심으로 운동 로직에 연결했습니다.
+- **33 landmarks → 132 features → XGBoost**
+- **Temporal Smoothing 적용**
 
 ### 운동 세션 기록
 
