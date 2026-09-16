@@ -244,6 +244,23 @@ Production HTTP Verification
 - 이전 version metadata와 R2 object를 이용해 rollback 가능
 - 성공한 deploy와 HTTP 검증 이후에만 `production.json` 갱신
 
+### Version History
+
+| Version | 내용 |
+| --- | --- |
+| `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포 |
+| `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
+
+### v0.1.1 Release
+
+- Release date: **2026-09-15**
+- Installer: `FitRoute-AI-Client-Setup-0.1.1.exe`
+- Size: **2,379,641,099 bytes (2.216213 GiB)**
+- SHA-256:
+
+```text
+748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD
+```
 ---
 
 ## 7. 검증 결과
@@ -281,26 +298,7 @@ Production HTTP Verification
 - Android / iOS용 native AI Client는 현재 구현 범위에 포함하지 않음
 
 ---
-## 9. Version History
-
-| Version | 내용 |
-| --- | --- |
-| `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포 |
-| `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
-
-### v0.1.1 Release
-
-- Release date: **2026-09-15**
-- Installer: `FitRoute-AI-Client-Setup-0.1.1.exe`
-- Size: **2,379,641,099 bytes (2.216213 GiB)**
-- SHA-256:
-
-```text
-748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD
-```
-
----
-## 10. 문제 해결 경험
+## 9. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
 
@@ -339,7 +337,7 @@ Vercel native process의 Working Directory를 `frontend`로 고정하고 root `.
 Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 문제를 확인하고, `System.Diagnostics.Process` 기반 helper에서 StdOut / StdErr / ExitCode를 분리해 **ExitCode == 0**을 성공 기준으로 사용하도록 개선했습니다.
 
 ---
-## 11. Repository Structure
+## 10. Repository Structure
 
 ```text
 AI-Exercise-Assistant/
@@ -362,7 +360,7 @@ AI-Exercise-Assistant/
 ```
 
 ---
-## 12. 관련 기술 문서
+## 11. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
@@ -379,7 +377,7 @@ AI-Exercise-Assistant/
 - [Docs Index](docs/README.md)
 
 ---
-## 13. 프로젝트를 통해 얻은 경험
+## 12. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
 - Computer Vision / Pose / ML을 실제 운동 기능과 상태 기반 로직으로 연결한 경험
@@ -390,7 +388,7 @@ AI-Exercise-Assistant/
 - 오류를 단순 수정하는 데서 끝내지 않고 로그, runtime trace, deployment manifest를 기준으로 원인을 분리해 해결한 경험
 
 ---
-## 14. 향후 발전 방향
+## 13. 향후 발전 방향
 
 - **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
