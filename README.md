@@ -32,20 +32,28 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ---
 
-## 2. Tech Stack
+## 2. 프로젝트 개요
 
-| Category | Stack |
+| 항목 | 내용 |
 | --- | --- |
-| Frontend | React, Vite, JavaScript/TypeScript |
-| Backend | FastAPI, Python, HTTPX, Docker |
-| Database / Auth | Supabase Auth, PostgreSQL, RLS |
-| Computer Vision | OpenCV, Ultralytics YOLO26n, TensorRT |
-| Pose | MediaPipe PoseLandmarker Tasks API |
-| ML | XGBoost |
-| Desktop | Python, Windows Custom URI Scheme, Windows Credential Manager |
-| Packaging | PyInstaller, Inno Setup |
-| Deployment | Vercel, Render, Cloudflare R2 |
-| Release Automation | PowerShell, rclone, Vercel CLI |
+| **문제** | 자세 인식 모델만으로는 사용자가 직접 설치·실행하고 운동 결과를 저장·조회하는 완결된 서비스 경험을 제공하기 어려움 |
+| **목표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
+| **기간** | 2026.09.04 ~ 2026.09.16 (약 2주) |
+| **역할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현 |
+
+### Tech Stack
+
+| 영역 | 기술 |
+| --- | --- |
+| **Languages** | Python, JavaScript / TypeScript |
+| **Frontend** | React, Vite |
+| **Backend / API** | FastAPI |
+| **AI / Computer Vision** | OpenCV, Ultralytics YOLO26n, TensorRT, MediaPipe PoseLandmarker, XGBoost |
+| **Database / Auth** | Supabase Auth, PostgreSQL, RLS |
+| **Desktop Integration** | Windows Custom URI Scheme, Windows Credential Manager |
+| **Packaging** | PyInstaller, Inno Setup |
+| **Infrastructure / Deployment** | Docker, Vercel, Render, Cloudflare R2 |
+| **Release Automation** | PowerShell, rclone, Vercel CLI |
 
 ---
 
