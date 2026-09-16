@@ -156,7 +156,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
   <img src="docs/FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
 </p>
 
-[상세_파이프라인](docs/AI_client_Pipeline.md)
+[[상세_파이프라인]](docs/AI_client_Pipeline.md)
 
 ### 운동 세션 기록
 
@@ -173,7 +173,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 - 주간/월간 운동 통계
 - 프로필 관리
 
-[실시간 처리 성능](docs/Runtime_Performance.md)
+[[실시간 처리 성능]](docs/Runtime_Performance.md)
 
 ---
 ## 6. Build & Release Engineering
