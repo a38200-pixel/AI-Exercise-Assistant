@@ -2,14 +2,13 @@
 
 # FitRoute
 
-### AI 기반 실시간 운동 자세 분석 · 운동 기록 관리 서비스
+### AI 기반 실시간 운동 자세 분석 · 운동 기록 관리 웹 서비스
 
-웹에서 운동을 시작하면 Windows AI Client가 실행되어 실시간 자세를 분석하고,  
-운동 결과를 Backend와 Supabase에 저장해 대시보드·운동 기록·통계로 연결합니다.
+AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 대시보드·운동 기록·통계를 사용자에게 보여주는 서비스입니다.
 
 **개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
 
-[Production](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n TensorRT` · `MediaPipe` · `XGBoost`
+[Production](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n' . 'TensorRT` · `MediaPipe` · `XGBoost`
 
 </div>
 
@@ -17,9 +16,9 @@
 
 ## 1. 프로젝트 요약
 
-FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하나의 사용자 흐름으로 연결한 운동 기록 서비스**입니다.
+FitRoute는 **AI 운동 클라이언트를 하나의 사용자 흐름으로 연결한 운동 기록 서비스**입니다.
 
-사용자는 웹에서 로그인한 뒤 운동을 시작할 수 있고, `fitroute://` Custom URI Scheme을 통해 Windows Launcher와 AI Client가 실행됩니다. AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 Supabase에 저장되며, 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
+AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 DB에 저장되며, 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
 
 | 영역 | 구현 내용 |
 | --- | --- |
@@ -61,15 +60,13 @@ FitRoute는 **웹 서비스와 Windows 기반 AI 운동 클라이언트를 하�
 
 ### Web Service
 
-랜딩 페이지부터 운동 선택, 대시보드, 운동 기록, 통계 분석까지 실제 구현한 주요 화면입니다.
-
 <p align="center">
   <img src="docs/FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
 </p>
 
 ### Real-time AI Workout
 
-실제 Webcam 입력에서 Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
+Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
 
 <p align="center">
   <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
