@@ -10,6 +10,10 @@ AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 
 
 [Demo](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n` · `TensorRT` · `MediaPipe` · `XGBoost`
 
+<br />
+
+<img src="docs/FitRoute_랜딩페이지.png" alt="FitRoute 랜딩 페이지" width="88%" />
+
 </div>
 
 ---
