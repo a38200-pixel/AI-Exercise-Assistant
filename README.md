@@ -205,6 +205,18 @@ landmark 기반 feature를 입력받아 자세 class를 분류합니다. 영상 
 
 분류 대상 9개 class: `squat`, `run`, `sit`, `stretch`, `walk`, `jump`, `bendover`, `stand`, `lying`
 
+### Runtime Performance
+
+최종 패키징 AI Client의 실제 Webcam 환경 측정 결과입니다.
+
+- End-to-End: **15.84 FPS**
+- AI Inference: **21.20 FPS**
+- 평균 Inference Latency: **47.18 ms**
+
+End-to-End FPS는 Camera 입력, AI inference, 운동 로직, 화면 렌더링 등 실제 Client 전체 처리 흐름을 포함한 값이며, Inference FPS는 YOLO26n → MediaPipe → XGBoost AI pipeline 처리 기준 값입니다.
+
+최종 패키징 및 bundle 최적화 이후에도 실제 Webcam 기반 운동 분석이 안정적으로 동작하는 처리 성능을 확인했습니다.
+
 ---
 
 ## 7. Tech Stack
@@ -428,6 +440,7 @@ Vercel CLI의 정상적인 stderr 배너가 Windows PowerShell에서 `NativeComm
 - Web Dashboard 기록 조회 성공
 - Windows uninstall 및 protocol/credential 정리 확인
 - Python test suite **122 passed**
+- 최종 AI Client 실측 성능: **15.84 FPS End-to-End / 21.20 FPS Inference**
 - Production deploy 성공
 - Production HTTP **200** 확인
 
