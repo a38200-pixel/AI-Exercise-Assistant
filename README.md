@@ -242,7 +242,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 - Vercel Production 배포 후 HTTP **200** 응답 확인
 
 ---
-## 8. Known Issues / Limitations
+## 8. Known Issues
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
 
@@ -254,12 +254,6 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 - 이후 Render → Supabase 저장 및 Dashboard 조회 정상
 
 현재 원인은 확정하지 않았으며 Render cold start, Desktop 인증/access token 준비 시점, 최초 HTTP connection 초기화, `--auto-start-session`의 초기 session timing을 후속 분석 대상으로 두고 있습니다.
-
-### 현재 플랫폼 제한
-
-- 실시간 AI Workout은 Windows Desktop Client에서 제공
-- TensorRT inference는 호환 NVIDIA GPU 환경을 전제로 함
-- Android / iOS용 native AI Client는 현재 구현 범위에 포함하지 않음
 
 ---
 ## 9. 문제 해결 경험
