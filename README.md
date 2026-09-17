@@ -71,7 +71,7 @@ FitRoute는 **Web / Windows Client / API / Database**를 분리하고, 각 역�
 | Component | Role |
 | --- | --- |
 | Vercel Frontend | React + Vite 기반 웹 UI |
-| FitRoute Launcher | `웹의 운동 시작 요청을 받아 Windows AI Client 실행, 사용자 인증 상태 확인 및 로그인 토큰 복원, AI Client 실행 |
+| FitRoute Launcher | 웹 요청 처리, 인증 상태 확인, AI Client 실행 |
 | FitRoute AI Client | 실시간 Webcam inference 및 운동 로직 |
 | Render Backend | FastAPI 기반 운동 저장/조회 API |
 | Supabase | Auth + PostgreSQL + RLS |
@@ -124,7 +124,7 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 - Launcher는 허용된 허용된 명령어와 운동 종류만 실행되도록 제한
 - 하위 프로그램 실행 시 shell=False를 사용해 불필요한 명령 해석을 방지
-- 사용자 비밀번는 저장하지 않음
+- 사용자 비밀번호는 저장하지 않음
 - refresh token은 Windows 자격 증명 관리자에 저장에 저장
 - access token은 URL / argv / config / log에 기록하지 않고 실행 중인 AI Client에만 전달에 전달
 - 동시에 여러 카메라가 실행되지 않도록 중복 실행 방지 처리
