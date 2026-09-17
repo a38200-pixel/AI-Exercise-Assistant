@@ -53,7 +53,6 @@ AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼�
 | Web | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
 | AI Workout | Windows Desktop Client |
 | GPU Inference | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime |
-| 사용자 PC Python 환경 | 별도 Python / Conda / pip 설치 불필요 |
 | Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요 |
 
 Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함되어 있어 사용자 PC의 기존 Python 환경을 변경하지 않습니다.
@@ -63,7 +62,7 @@ Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함
 
 ## 2. 서비스 구조
 
-FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
+FitRoute는 **Web / Windows Client / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
 <p align="center">
   <img src="docs/FitRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
@@ -72,7 +71,7 @@ FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을
 | Component | Role |
 | --- | --- |
 | Vercel Frontend | React + Vite 기반 웹 UI |
-| FitRoute Launcher | `fitroute://` 요청 처리, Desktop 인증, AI Client 실행 |
+| FitRoute Launcher | `웹의 운동 시작 요청을 받아 Windows AI Client 실행, 사용자 인증 상태 확인 및 로그인 토큰 복원, AI Client 실행 |
 | FitRoute AI Client | 실시간 Webcam inference 및 운동 로직 |
 | Render Backend | FastAPI 기반 운동 저장/조회 API |
 | Supabase | Auth + PostgreSQL + RLS |
@@ -123,12 +122,12 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 ### Desktop 연동 및 인증
 
-- Launcher는 허용된 command / exercise 값만 whitelist로 처리
-- child process 실행 시 `shell=False` 사용
-- 사용자 password는 저장하지 않음
-- refresh token은 Windows Credential Manager에 저장
-- access token은 URL / argv / config / log에 기록하지 않고 child environment로 전달
-- 중복 카메라 실행 방지를 위한 mutex 적용
+- Launcher는 허용된 허용된 명령어와 운동 종류만 실행되도록 제한
+- 하위 프로그램 실행 시 shell=False를 사용해 불필요한 명령 해석을 방지
+- 사용자 비밀번는 저장하지 않음
+- refresh token은 Windows 자격 증명 관리자에 저장에 저장
+- access token은 URL / argv / config / log에 기록하지 않고 실행 중인 AI Client에만 전달에 전달
+- 동시에 여러 카메라가 실행되지 않도록 중복 실행 방지 처리
 
 ---
 ## 4. 실제 구현 화면
@@ -178,11 +177,11 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 ---
 ## 6. Build & Release Engineering
 
-AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적화·Installer 제작부터 버전별 배포·검증·Production 반영까지** 하나의 release workflow로 구성했습니다.
+AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적화·Installer 제작부터 버전별 배포·검증·DEMO 반영까지** 하나의 release workflow로 구성했습니다.
 
 ### Packaging & Optimization
 
-AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 inference runtime을 유지하면서 불필요한 dependency를 제거해 bundle 크기를 최적화했습니다.
+AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 inference runtime을 유지하면서 불필요한 의존성을 제거해 bundle 크기를 최적화했습니다.
 
 | 단계 | 결과 |
 | --- | ---: |
@@ -225,17 +224,22 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 
 ## 7. 검증 결과
 
-현재 확인된 주요 검증 결과입니다.
+### 기능 및 통합 검증
 
-- Windows Installer build 성공
-- 별도 Windows PC에서 웹 다운로드 → 설치 → 실행 → 운동 기록 저장 E2E 검증
-- `fitroute://` → Launcher → AI Client 실행 확인
-- Webcam / TensorRT / MediaPipe / XGBoost runtime 확인
-- Render Backend 운동 결과 저장 및 Supabase 반영 확인
-- Web Dashboard 기록 조회 확인
-- Python test suite **122 passed**
-- 최종 AI Client 실측 성능: **15.84 FPS End-to-End / 21.20 FPS Inference**
-- Vercel Production deploy 및 HTTP **200** 확인
+- `fitroute://`를 통한 Web → Launcher → AI Client 실행 확인
+- Webcam 입력부터 TensorRT → MediaPipe → XGBoost까지 AI runtime 동작 확인
+- 운동 종료 후 Render Backend → Supabase 저장 및 Web Dashboard 조회 흐름 확인
+- 별도 Windows PC에서 Installer 다운로드 → 설치 → 실행 → 운동 기록 확인까지 E2E 테스트 수행
+  - 최초 실행의 첫 세션 저장 이슈는 `Known Issues / Limitations`에 별도 기록
+
+### 자동화 테스트
+
+- Python test suite **122 tests passed**
+
+### 배포 검증
+
+- Windows Installer build 및 설치 확인
+- Vercel Production 배포 후 HTTP **200** 응답 확인
 
 ---
 ## 8. Known Issues / Limitations
