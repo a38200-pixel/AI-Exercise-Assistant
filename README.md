@@ -7,7 +7,8 @@
 AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 대시보드·운동 기록·통계 기능을 제공하는 서비스입니다.
 
 **개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
-**[포트폴리오 PPT]**
+
+**[포트폴리오 PPT](docs/FitRoute-AI-Exercise-Assistant.pptx)**
 
 [Demo](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n` · `TensorRT` · `MediaPipe` · `XGBoost`
 
@@ -25,39 +26,38 @@ FitRoute는 **AI 운동 클라이언트와 웹 서비스를 하나의 사용자 
 
 AI Client는 Webcam 영상을 실시간 분석해 자세를 분류하고 스쿼트 반복 횟수와 스트레칭 시간을 기록합니다. 운동 종료 후 결과는 Render FastAPI를 거쳐 Supabase PostgreSQL에 저장되며, 사용자는 웹에서 일별 기록과 통계를 다시 확인할 수 있습니다.
 
-| 항목 | 내용 |
-| --- | --- |
+| 항목     | 내용                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------- |
 | **문제** | 자세 인식 모델만으로는 사용자가 직접 설치·실행하고 운동 결과를 저장·조회하는 완결된 서비스 경험을 제공하기 어려움 |
-| **목표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결 |
-| **기간** | 2026.09.04 ~ 2026.09.16 (약 2주) |
-| **역할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현 |
+| **목표** | 실시간 자세 분석 → 운동 기록 → 서버 저장 → 대시보드 조회까지 하나의 End-to-End 서비스 흐름으로 연결               |
+| **기간** | 2026.09.04 ~ 2026.09.16 (약 2주)                                                                                  |
+| **역할** | 개인 프로젝트 — 기획 · AI · Web/API · Desktop · 배포 전 과정 구현                                                 |
 
 ### Tech Stack
 
-| 영역 | 기술 |
-| --- | --- |
-| **Languages** | Python, JavaScript / TypeScript |
-| **Frontend** | React, Vite |
-| **Backend / API** | FastAPI |
-| **AI / Computer Vision** | OpenCV, Ultralytics YOLO26n, MediaPipe PoseLandmarker, XGBoost |
-| **Inference Acceleration** | TensorRT |
-| **Database / Auth** | Supabase Auth, PostgreSQL, RLS |
-| **Desktop Integration** | Windows Custom URI Scheme, Windows Credential Manager |
-| **Containerization** | Docker |
-| **Packaging** | PyInstaller, Inno Setup |
-| **Cloud / Deployment** | Vercel, Render, Cloudflare R2 |
+| 영역                       | 기술                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| **Languages**              | Python, JavaScript / TypeScript                                |
+| **Frontend**               | React, Vite                                                    |
+| **Backend / API**          | FastAPI                                                        |
+| **AI / Computer Vision**   | OpenCV, Ultralytics YOLO26n, MediaPipe PoseLandmarker, XGBoost |
+| **Inference Acceleration** | TensorRT                                                       |
+| **Database / Auth**        | Supabase Auth, PostgreSQL, RLS                                 |
+| **Desktop Integration**    | Windows Custom URI Scheme, Windows Credential Manager          |
+| **Containerization**       | Docker                                                         |
+| **Packaging**              | PyInstaller, Inno Setup                                        |
+| **Cloud / Deployment**     | Vercel, Render, Cloudflare R2                                  |
 
 ### 실행 환경 및 지원 범위
 
-| 영역 | 현재 지원 범위 |
-| --- | --- |
-| Web | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
-| AI Workout | Windows Desktop Client |
-| GPU Inference | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime |
-| Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요 |
+| 영역              | 현재 지원 범위                                                  |
+| ----------------- | --------------------------------------------------------------- |
+| Web               | Desktop / Mobile 브라우저에서 로그인, 대시보드, 기록, 통계 조회 |
+| AI Workout        | Windows Desktop Client                                          |
+| GPU Inference     | NVIDIA GPU + 호환 Driver 기반 TensorRT runtime                  |
+| Mobile AI Runtime | 현재 미지원 — 별도 native/mobile inference backend 필요         |
 
 Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함되어 있어 사용자 PC의 기존 Python 환경을 변경하지 않습니다.
-
 
 ---
 
@@ -69,18 +69,19 @@ FitRoute는 **Web / Windows Client / API / Database**를 분리하고, 각 역�
   <img src="docs/FitRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
 </p>
 
-| Component | Role |
-| --- | --- |
-| Vercel Frontend | React + Vite 기반 웹 UI |
-| FitRoute Launcher | 웹 요청 처리, 인증 상태 확인, AI Client 실행 |
-| FitRoute AI Client | 실시간 Webcam inference 및 운동 로직 |
-| Render Backend | FastAPI 기반 운동 저장/조회 API |
-| Supabase | Auth + PostgreSQL + RLS |
-| Cloudflare R2 | Windows Installer 배포 |
+| Component          | Role                                         |
+| ------------------ | -------------------------------------------- |
+| Vercel Frontend    | React + Vite 기반 웹 UI                      |
+| FitRoute Launcher  | 웹 요청 처리, 인증 상태 확인, AI Client 실행 |
+| FitRoute AI Client | 실시간 Webcam inference 및 운동 로직         |
+| Render Backend     | FastAPI 기반 운동 저장/조회 API              |
+| Supabase           | Auth + PostgreSQL + RLS                      |
+| Cloudflare R2      | Windows Installer 배포                       |
 
 운동 세션과 일별 요약 데이터는 Supabase PostgreSQL에 저장하며, 사용자별 데이터 접근은 RLS 기반으로 분리합니다.
 
 ---
+
 ## 3. 시스템 흐름도
 
 <p align="center">
@@ -131,6 +132,7 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 - 동시에 여러 카메라가 실행되지 않도록 중복 실행 방지 처리
 
 ---
+
 ## 4. 실제 구현 화면
 
 ### Web Service
@@ -148,6 +150,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 </p>
 
 ---
+
 ## 5. 핵심 기능
 
 ### 실시간 AI 운동 분석
@@ -176,6 +179,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 [[실시간 처리 성능]](docs/Runtime_Performance.md)
 
 ---
+
 ## 6. Build & Release Engineering
 
 AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적화·Installer 제작부터 버전별 배포·검증·DEMO 반영까지** 하나의 release workflow로 구성했습니다.
@@ -184,12 +188,12 @@ AI Client를 실제 사용자 환경에 전달하기 위해 **패키징·최적�
 
 AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 inference runtime을 유지하면서 불필요한 의존성을 제거해 bundle 크기를 최적화했습니다.
 
-| 단계 | 결과 |
-| --- | ---: |
+| 단계                  |        결과 |
+| --------------------- | ----------: |
 | 초기 AI Client bundle | 약 6.79 GiB |
 | 최종 AI Client bundle | 약 4.85 GiB |
-| Bundle 감소 | 약 28.7% |
-| 최종 Installer | 2.216 GiB |
+| Bundle 감소           |    약 28.7% |
+| 최종 Installer        |   2.216 GiB |
 
 주요 최적화:
 
@@ -206,9 +210,9 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 
 ### Version History
 
-| Version | 내용 |
-| --- | --- |
-| `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포 |
+| Version  | 내용                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포                                                                             |
 | `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
 
 ### v0.1.1 Release
@@ -221,6 +225,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 ```text
 748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD
 ```
+
 ---
 
 ## 7. 검증 결과
@@ -243,6 +248,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 - Vercel Production 배포 후 HTTP **200** 응답 확인
 
 ---
+
 ## 8. Known Issues
 
 ### 최초 실행 후 첫 운동 저장 실패 가능성
@@ -257,6 +263,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 현재 원인은 확정하지 않았으며 Render cold start, Desktop 인증/access token 준비 시점, 최초 HTTP connection 초기화, `--auto-start-session`의 초기 session timing을 후속 분석 대상으로 두고 있습니다.
 
 ---
+
 ## 9. 문제 해결 경험
 
 ### 1) Windows AI bundle 과대화
@@ -296,6 +303,7 @@ Vercel native process의 Working Directory를 `frontend`로 고정하고 root `.
 Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 문제를 확인하고, `System.Diagnostics.Process` 기반 helper에서 StdOut / StdErr / ExitCode를 분리해 **ExitCode == 0**을 성공 기준으로 사용하도록 개선했습니다.
 
 ---
+
 ## 10. Repository Structure
 
 ```text
@@ -319,6 +327,7 @@ AI-Exercise-Assistant/
 ```
 
 ---
+
 ## 11. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
@@ -336,6 +345,7 @@ AI-Exercise-Assistant/
 - [Docs Index](docs/README.md)
 
 ---
+
 ## 12. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
@@ -347,6 +357,7 @@ AI-Exercise-Assistant/
 - 오류를 단순 수정하는 데서 끝내지 않고 로그, runtime trace, deployment manifest를 기준으로 원인을 분리해 해결한 경험
 
 ---
+
 ## 13. 향후 발전 방향
 
 - **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
