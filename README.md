@@ -8,7 +8,7 @@ AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 
 
 **개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
 
-**[포트폴리오 PPT](docs/FitRoute-AI-Exercise-Assistant.pptx)**
+**[포트폴리오 PPT](docs/FitRoute-AI-Exercise-Assistant.pdf)**
 
 [Demo](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n` · `TensorRT` · `MediaPipe` · `XGBoost`
 
