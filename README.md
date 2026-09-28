@@ -7,6 +7,7 @@
 AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 대시보드·운동 기록·통계 기능을 제공하는 서비스입니다.
 
 **개인 프로젝트 · Full-stack / AI / Desktop / Deployment**
+**[포트폴리오 PPT]**
 
 [Demo](https://fitroute-ivory.vercel.app) · `React + Vite` · `FastAPI` · `Supabase` · `YOLO26n` · `TensorRT` · `MediaPipe` · `XGBoost`
 
