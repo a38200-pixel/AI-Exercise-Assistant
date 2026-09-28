@@ -360,7 +360,7 @@ AI-Exercise-Assistant/
 
 ## 13. 향후 발전 방향
 
-- **첫 운동 저장 안정화**: 최초 실행 시 첫 세션 저장 실패 현상을 재현하고 인증·HTTP connection·Backend cold start 구간을 분석
+- **서비스 확장**: AI 서비스 외에 실제 트레이너와의 소통이 가능하도록 확장
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
 - **실시간 추론 최적화**: AI Pipeline latency와 실제 End-to-End 처리 시간을 기반으로 runtime 성능 개선
 - **Desktop Client 경량화**: PyInstaller bundle 및 Torch / CUDA runtime dependency를 추가 분석해 Installer 크기 감소 검토
