@@ -304,34 +304,11 @@ Vercel CLI의 정상 stderr 배너가 PowerShell에서 오류로 처리되는 �
 
 ---
 
-## 10. Repository Structure
-
-```text
-AI-Exercise-Assistant/
-├─ frontend/                 # React + Vite Web application
-├─ backend/                  # FastAPI API, Supabase integration, SQL, tests
-├─ src/                      # AI Client runtime source
-├─ desktop_launcher/         # Windows Launcher and Desktop Auth
-├─ packaging/ai_client/      # PyInstaller specs, build and analysis tools
-├─ installer/                # Inno Setup definition and input validation
-├─ models/                   # Detector, pose and classifier assets
-├─ config/                   # AI runtime settings
-├─ scripts/                  # Environment and Windows release automation
-├─ tests/                    # AI Client and Launcher test suite
-├─ releases/windows/         # Version metadata and current Production state
-├─ data/workout_logs/        # Local runtime output placeholder
-├─ docs/                     # Architecture, deployment and engineering records
-├─ requirements.txt
-├─ .vercelignore
-└─ README.md
-```
-
----
-
-## 11. 관련 기술 문서
+## 10. 관련 기술 문서
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
+- [Repository Structure](docs/Repository_Structure.md)
 - [Windows Release Process](docs/windows_release_process.md)
 - [Windows Installer](docs/windows_installer.md)
 - [Desktop Launcher](docs/desktop_client_launcher.md)
@@ -346,7 +323,7 @@ AI-Exercise-Assistant/
 
 ---
 
-## 12. 프로젝트를 통해 얻은 경험
+## 11. 프로젝트를 통해 얻은 경험
 
 - AI 모델을 단독으로 실행하는 것에서 그치지 않고 **사용자가 실제로 설치·실행·기록 조회까지 할 수 있는 End-to-End AI 서비스**로 연결한 경험
 - Computer Vision / Pose / ML을 실제 운동 기능과 상태 기반 로직으로 연결한 경험
@@ -358,7 +335,7 @@ AI-Exercise-Assistant/
 
 ---
 
-## 13. 향후 발전 방향
+## 12. 향후 발전 방향
 
 - **서비스 확장**: AI 서비스 외에 실제 트레이너와의 소통이 가능하도록 확장
 - **운동 종류 확장**: 현재 Squat / Stretch 중심의 기능을 추가 운동과 반복 동작 로직으로 확장
