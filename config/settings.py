@@ -88,3 +88,11 @@ REP_BOTTOM_PLATEAU_DEGREES = 10.0
 # 최고점보다 REP_MERGE_DROP_DEGREES 이상 다시 내려가면(STANDING 복귀 각도에 닿지 못한 채) 이벤트로 남긴다.
 REP_MERGE_RISE_DEGREES = 20.0
 REP_MERGE_DROP_DEGREES = 10.0
+
+# Landmark 시퀀스 로깅(진단용): 기본은 꺼져 있고 CLI --log-sequence로만 켠다. 영상은 저장하지 않는다.
+SEQUENCE_LOGGING_ENABLED = False
+# 얼굴 landmark(0~10번)의 좌표는 기본으로 저장하지 않는다. 코(0번)의 visibility만 시점 신호용으로 남긴다.
+SEQUENCE_LOG_FACE_LANDMARKS = False
+LANDMARK_SEQUENCE_DIR = PROJECT_ROOT / "data" / "landmark_sequences"
+SEQUENCE_LOG_FLUSH_INTERVAL_SECONDS = 1.0
+SEQUENCE_LOG_QUEUE_SIZE = 4096
