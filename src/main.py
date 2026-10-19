@@ -13,7 +13,12 @@ if __package__ in (None, ""):
 import cv2
 import numpy as np
 
-from config.settings import BBOX_PADDING
+from config.settings import (
+    BBOX_PADDING,
+    LANDMARK_SEQUENCE_DIR,
+    SEQUENCE_LOG_FACE_LANDMARKS,
+    SEQUENCE_LOGGING_ENABLED,
+)
 from src.api_client import WorkoutUploader, create_api_client_from_environment
 from src.camera import Camera
 from src.exercise_counter import (
@@ -22,11 +27,20 @@ from src.exercise_counter import (
     STRETCH_MODE,
     ExerciseCounter,
 )
+from src.geometry_tracker import GeometryTracker
 from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.rep_tracker import RepTracker, track_primary_person
 from src.runtime_diagnostic import run_runtime_diagnostic
+from src.sequence_logger import (
+    CAMERA_VIEWS,
+    INTENDED_POSTURES,
+    SequenceLogger,
+    SequenceRecorder,
+    session_metadata,
+)
 from src.workout_session import WorkoutSession
 
 
@@ -99,8 +113,12 @@ def classify_detected_people(
         person_crop = frame[padded_y1:padded_y2, padded_x1:padded_x2]
 
         mediapipe_started = time.perf_counter()
-        landmarks = pose_estimator.extract(person_crop)
+        extraction = pose_estimator.extract(person_crop)
         mediapipe_seconds += time.perf_counter() - mediapipe_started
+
+        # 분류기에는 이전과 같은 정규화 landmark만 넘긴다. world landmarks는 진단 로그 전용이다.
+        landmarks = extraction.landmarks if extraction is not None else None
+        world_landmarks = extraction.world_landmarks if extraction is not None else None
 
         prediction = None
         if landmarks is not None:
@@ -114,6 +132,7 @@ def classify_detected_people(
                 "padded_bbox": padded_bbox,
                 "person_confidence": detection["confidence"],
                 "landmarks": landmarks,
+                "world_landmarks": world_landmarks,
                 "prediction": prediction,
             }
         )
@@ -542,6 +561,8 @@ def print_benchmark(benchmark: dict[str, Any]) -> None:
     print(f"Average Smoothing:{np.mean(benchmark['smoothing']) * 1000:9.2f} ms")
     print(f"Average Exercise Logic:{np.mean(benchmark['exercise']) * 1000:7.2f} ms")
     print(f"Average Draw:     {np.mean(benchmark['draw']) * 1000:.2f} ms")
+    if any(benchmark.get("sequence", ())):
+        print(f"Average Sequence Log: {np.mean(benchmark['sequence']) * 1000:.3f} ms")
     print(f"Average Inference Time:{average_inference_seconds * 1000:8.2f} ms")
     print(f"\nYOLO26n TensorRT only: {YOLO_ONLY_BASELINE_FPS:.2f} FPS")
     print(f"Previous End-to-End:   {PREVIOUS_END_TO_END_FPS:.2f} FPS")
@@ -572,10 +593,114 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Camera와 network 없이 frozen runtime과 모델 파일을 검증합니다.",
     )
+    parser.add_argument(
+        "--log-sequence",
+        action="store_true",
+        default=SEQUENCE_LOGGING_ENABLED,
+        help="(진단용) landmark 시퀀스를 data/landmark_sequences/에 JSONL로 기록합니다. 영상은 저장하지 않으며 기본은 꺼져 있습니다.",
+    )
+    parser.add_argument(
+        "--session-posture",
+        choices=INTENDED_POSTURES,
+        default=None,
+        help="--log-sequence 세션의 의도한 자세: normal(정상), shallow(얕음), torso_lean(상체 숙임), heel_lift(뒤꿈치 들림).",
+    )
+    parser.add_argument(
+        "--session-view",
+        choices=CAMERA_VIEWS,
+        default=None,
+        help="--log-sequence 세션의 카메라 시점: side(측면), oblique(사선), front(정면).",
+    )
+    parser.add_argument(
+        "--session-note",
+        default=None,
+        help="--log-sequence 세션에 남길 자유 메모.",
+    )
+    parser.add_argument(
+        "--log-face-landmarks",
+        action="store_true",
+        default=SEQUENCE_LOG_FACE_LANDMARKS,
+        help="--log-sequence에서 얼굴 landmark(0~10번)의 좌표까지 저장합니다. 기본은 저장하지 않으며(코의 visibility만 남김) 꺼져 있습니다.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.benchmark_seconds is not None and arguments.benchmark_seconds <= 0:
         parser.error("--benchmark-seconds must be greater than 0")
+    session_options = (arguments.session_posture, arguments.session_view, arguments.session_note)
+    if not arguments.log_sequence and (
+        any(option is not None for option in session_options) or arguments.log_face_landmarks
+    ):
+        parser.error(
+            "--session-posture, --session-view, --session-note and --log-face-landmarks "
+            "require --log-sequence"
+        )
     return arguments
+
+
+def start_sequence_recording(
+    arguments: argparse.Namespace,
+    detector: PersonDetector,
+    pose_classifier: PoseClassifier,
+    geometry_tracker: GeometryTracker | None = None,
+) -> SequenceRecorder:
+    """--log-sequence가 켜졌을 때만 호출한다. 기록 파일을 만들고 헤더(메타데이터, 임계값)를 남긴다.
+
+    geometry_tracker는 RepTracker와 공유하는 추적기다. 없으면 기록기가 자기 것을 만든다.
+    """
+    logger = SequenceLogger(
+        LANDMARK_SEQUENCE_DIR,
+        metadata=session_metadata(
+            arguments.session_posture,
+            arguments.session_view,
+            arguments.session_note,
+        ),
+        runtime={
+            "detector_backend": detector.backend,
+            "pose_classes": list(pose_classifier.classes),
+            "exercise_mode": arguments.exercise,
+        },
+        options={"face_landmarks": arguments.log_face_landmarks},
+    )
+    path = logger.start()
+    face_note = "face landmark coordinates INCLUDED" if arguments.log_face_landmarks else "face landmark coordinates not stored"
+    print(f"[Sequence] Recording landmark sequence (no video, {face_note}): {path}")
+    return SequenceRecorder(
+        logger,
+        geometry_tracker if geometry_tracker is not None else GeometryTracker(),
+        include_face_landmarks=arguments.log_face_landmarks,
+    )
+
+
+def create_exercise_counter() -> ExerciseCounter:
+    """settings.USE_REP_TRACKER가 True면 RepTracker로 스쿼트를 세고, False면 v0.1.x(stable 라벨 전이)로 센다."""
+    import config.settings as settings
+
+    return ExerciseCounter(rep_tracker=RepTracker() if settings.USE_REP_TRACKER else None)
+
+
+def run_geometry(
+    exercise_counter: ExerciseCounter,
+    geometry_tracker: GeometryTracker,
+    primary_person: dict[str, Any] | None,
+    frame_size: tuple[int, int],
+    timestamp: float,
+    *,
+    recording: bool,
+    was_active: bool,
+):
+    """한 프레임의 기하 분석(무릎각·BodyLock)을 필요할 때만 한다. 반환: (이번에 켜져 있었나, (TrackedFrame|None, LockState)|None, RepFrame|None).
+
+    RepTracker로 스쿼트를 세는 중(settings.USE_REP_TRACKER가 True이고 squat 모드)이거나 로깅 중일 때만 돌린다.
+    꺼져 있다 켜질 때는 오래된 잠금과 평활화를 버린다(reset). USE_REP_TRACKER가 False면 로깅이 아닐 때 분석하지 않는다(v0.1.x와 같음).
+    """
+    active = (
+        exercise_counter.uses_rep_tracker and exercise_counter.exercise_mode == SQUAT_MODE
+    ) or recording
+    if active and not was_active:
+        geometry_tracker.reset()
+    if not active:
+        return False, None, None
+    tracked, lock_state, rep_frame = track_primary_person(geometry_tracker, primary_person, frame_size, timestamp)
+    return True, (tracked, lock_state), rep_frame
 
 
 def main() -> int:
@@ -588,7 +713,8 @@ def main() -> int:
     pose_classifier = PoseClassifier()
     pose_estimator = PoseEstimator()
     prediction_smoother = PredictionSmoother()
-    exercise_counter = ExerciseCounter()
+    geometry_tracker = GeometryTracker()
+    exercise_counter = create_exercise_counter()
     exercise_counter.set_mode(arguments.exercise, time.perf_counter())
     workout_session = WorkoutSession()
     workout_uploader = WorkoutUploader(create_api_client_from_environment())
@@ -599,11 +725,18 @@ def main() -> int:
     else:
         print("[Cloud] Workout upload is ready.")
 
+    sequence_recorder = (
+        start_sequence_recording(arguments, detector, pose_classifier, geometry_tracker)
+        if arguments.log_sequence
+        else None
+    )
+
     frame_count = 0
     measurement_started: float | None = None
     display_pose = "ANALYZING"
     display_confidence = 0.0
     auto_start_completed = False
+    geometry_was_active = False
     benchmark: dict[str, Any] = {
         "yolo": [],
         "mediapipe": [],
@@ -611,6 +744,7 @@ def main() -> int:
         "smoothing": [],
         "exercise": [],
         "draw": [],
+        "sequence": [],
         "total": [],
         "elapsed": 0.0,
     }
@@ -643,7 +777,16 @@ def main() -> int:
             exercise_started = time.perf_counter()
             current_time = time.perf_counter()
             stable_pose = smoothing_state["stable_label"]
-            exercise_counter.update(stable_pose, current_time)
+            geometry_was_active, geometry, rep_frame = run_geometry(
+                exercise_counter,
+                geometry_tracker,
+                primary_person,
+                (frame.shape[1], frame.shape[0]),
+                pipeline_started,
+                recording=sequence_recorder is not None,
+                was_active=geometry_was_active,
+            )
+            exercise_counter.update(stable_pose, current_time, rep_frame)
             display_pose, display_confidence = update_display_pose(
                 stable_pose,
                 smoothing_state["stable_confidence"],
@@ -674,6 +817,22 @@ def main() -> int:
                 primary_person is not None and primary_person["landmarks"] is not None,
             )
             draw_seconds = time.perf_counter() - draw_started
+
+            # 진단 로깅(기본 꺼짐). 원래 stable 라벨(표시 필터 전)과 표시 라벨을 함께 남긴다.
+            sequence_started = time.perf_counter()
+            if sequence_recorder is not None:
+                sequence_recorder.record(
+                    frame_size=(frame.shape[1], frame.shape[0]),
+                    primary_person=primary_person,
+                    smoothing_state=smoothing_state,
+                    display_pose=display_pose,
+                    display_confidence=display_confidence,
+                    capture_time=pipeline_started,
+                    logic_time=current_time,
+                    geometry=geometry,
+                    rep=exercise_counter.rep_diagnostics(),
+                )
+            sequence_seconds = time.perf_counter() - sequence_started
             total_seconds = time.perf_counter() - pipeline_started
 
             frame_count += 1
@@ -686,6 +845,7 @@ def main() -> int:
                 benchmark["smoothing"].append(smoothing_seconds)
                 benchmark["exercise"].append(exercise_seconds)
                 benchmark["draw"].append(draw_seconds)
+                benchmark["sequence"].append(sequence_seconds)
                 benchmark["total"].append(total_seconds)
 
             cv2.imshow(WINDOW_NAME, display_frame)
@@ -715,6 +875,12 @@ def main() -> int:
                 workout_session,
                 workout_uploader,
                 time.perf_counter(),
+            )
+        if sequence_recorder is not None:
+            sequence_recorder.close()
+            print(
+                f"[Sequence] Saved: {sequence_recorder.logger.path} "
+                f"(dropped frames: {sequence_recorder.logger.frames_dropped})"
             )
         pose_estimator.close()
         camera.release()
