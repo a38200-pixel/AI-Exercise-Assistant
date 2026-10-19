@@ -14,17 +14,7 @@
 - 측면 stand 619개: |보정 후 − 보정 전| 중앙값 9.25°, p95 39.44°, 최대 65.57°
 - 측면 stand 무릎각 중앙값: 보정 후 170.5° / 보정 전 160.5°, p5: 114.0° / 85.4°
 
-contact sheet: `overlays/sheet_<bin>.jpg`, 개별 이미지: `overlays/<bin>_NN_*.jpg`, 목록: `overlay_samples.csv`
-
-![squat_lt30](overlays/sheet_squat_lt30.jpg)
-
-![squat_30_70](overlays/sheet_squat_30_70.jpg)
-
-![squat_90_150](overlays/sheet_squat_90_150.jpg)
-
-![squat_gt150](overlays/sheet_squat_gt150.jpg)
-
-![stand_lt158](overlays/sheet_stand_lt158.jpg)
+overlay 이미지는 POLAR 라이선스와 사진 속 인물 문제로 저장소에 포함하지 않음. `scripts/analysis/polar_phase05_verification.py`로 재생성 가능.
 
 ## 0.5-2. 90~150° 구간 비율
 
