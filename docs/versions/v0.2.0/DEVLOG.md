@@ -1331,3 +1331,38 @@
 - `D:\FitRoute_backup\landmark_sequences_20261019\`에 `session_20261019_171322_normal_side.jsonl`(continuous10)과 `session_20261019_171519_normal_side.jsonl`(continuous10_fast)을 복사했다(원본은 그대로, 기존 백업 파일은 덮어쓰지 않음).
 - 검증: 파일 18개, 총 42,915,075 bytes. manifest.csv의 모든 항목(기존 16 + 새 2)이 백업과 원본 양쪽의 크기·SHA-256과 일치(불일치 0). manifest.csv와 README.txt를 갱신했다(두 로그는 format_version 2, 정상 종료, `options.face_landmarks = false`, 얼굴 좌표 없음, footer 실제 횟수 10/10).
 - POLAR overlay·샘플 CSV는 위 정정 결정대로 백업하지 않는다.
+
+---
+
+## 2026-10-19 · 수정 후 실시간 확인, 랜드마크 공백 원인 분석, Phase 3 화면 연결
+
+### 1. 수정 후 실시간 확인 결과
+- 지시문의 "[파일명, actual N / screen N / detected N]" 칸이 비어 있어서, 새로 생긴 로그를 찾아 확인했다: `session_20261019_185616_normal_side.jsonl`(note `live_check_after_fix`, 18:56 시작). **실제 7 / 화면 7 / 검출 7.** 누락 없음.
+- FPS 중앙값 16.1(하위 5% 14.5), `rep_end` 7건 모두 확정(길이 2.0~2.3초, 엉덩이 하강 0.51~0.55), 합쳐짐 의심 0건, 잠금 이벤트 1건(획득만, 다리 바뀜 0), 반복 사이 봉우리 177~180°.
+- **이 세션도 진짜 휴지 없는 연속 세트는 아니다**: 서 있는 시간 1.20~1.50초(중앙값 1.33초). 따라서 어제 4·5번째 누락을 부른 조건(위에서 멈추지 않는 연속)이 재현된 것은 아니고, 이 확인은 수정이 정상 세트를 깨지 않았다는 근거다.
+- 로그를 D:\ 백업에 추가했다(아래 3절).
+
+### 2. 랜드마크 공백 원인 분석 (분석만, 구현 없음)
+상세: `analysis/landmark_gaps/report.md`, 스크립트 `python -m scripts.analysis.landmark_gap_analysis`.
+- **설정**: PoseLandmarker는 **IMAGE 모드**, `pose_landmarker_full`, `num_poses=1`, 검출·존재 신뢰도 0.20(기본 0.5보다 낮음), 입력은 YOLO bbox + 패딩 0.30 crop을 프레임마다 넣는다.
+- **로그 16개(프레임 18,417개)**: 공백(landmark 없음)은 대부분 **YOLO는 사람을 찾았는데 MediaPipe가 포즈를 못 찾은 경우(pose_miss)**다. 세트 안 공백률은 0.0~3.6%(첫 시험 세션만 20.8%), 세트 밖(자리 잡기·걷기·나가기)은 11.6~71.3%.
+- **원인은 모델 설정이 아니라 구도**: crop이 프레임에 전혀 안 잘리면 공백률 0.1%(세트 안 0.0%), 좌우로 잘리면 76%, 발 쪽이 잘리면 27%, bbox가 발 쪽 경계에 닿으면 62.5%(발 아래 여유 20px 이하 59~73%), bbox 높이가 프레임의 95% 이상이면 64.9%. 세트 안 공백 239개 중 237개가 bbox가 프레임 경계에 닿은 프레임.
+- 자세(서 있음 4.5%, 하강 2.2%, 최저점 부근 4.3%, 상승 3.6%)·무릎각·bbox 변화량과는 일관된 관계가 없다. 공백은 덩어리로 온다(직전이 공백이면 79.9%). 길이: 세트 안 80개 중 79개가 1.5초 이하(최대 2.18초), 세트 밖 최대 25초.
+- **제안(구현하지 않음)**: A. 구도 안내 강화(landmark가 없는 채 bbox가 발 쪽·좌우 경계에 닿으면 "뒤로 물러서 발끝이 화면에 들어오게", 로그로 재생 검증 가능), B. crop을 프레임 밖까지 검은색으로 패딩, C. 공백 프레임에서 한 번 재시도, D. 신뢰도 0.20 → 0.10, E. 모델 heavy, F. VIDEO/LIVE_STREAM. B~F는 **실제 추론이 필요해 로그 재생으로 검증할 수 없다**: 같은 카메라 입력을 두 설정으로 동시에 돌려(영상 저장 없이) 공백 여부·무릎각 차이·추론 시간을 기록하는 개발용 비교 도구를 제안했다.
+- **VIDEO 모드 의견: 권장하지 않음.** 추적은 직전 프레임 landmark로 ROI를 잡는데 지금은 프레임마다 crop의 원점·크기가 달라져 같은 좌표계가 유지되지 않는다. 쓰려면 전체 프레임을 넣고 landmark를 crop 좌표로 바꾸는 구조 변경과 분류기 재검증이 필요하고, 공백의 원인이 추적이 아니라 구도라 효과도 불확실하다.
+- 안내 경로: landmark가 없는 프레임은 RepTracker의 안내 사유(전신 무효·비측면) 판정 대상이 아니라서, 발이 잘려 landmark 자체가 없을 때는 "발끝까지 화면에 들어오게" 안내가 안 뜰 수 있다(제안 A의 배경).
+
+### 3. Phase 3 화면 연결
+- **점수 연결**: `RepResult.posture`(확정된 반복만; 탈락·중단은 None). `RepTracker._complete`가 `score_posture(최저 무릎각, 최저점 몸통각, 최저점 정강이각)`를 계산한다. 카운트 판정은 그대로다. `rep_end` 이벤트에 선택 키 `posture`를 추가했다(로그 형식 규칙에 따라 `format_version`은 2 유지, `log_format.md`에 기록).
+- **화면**(`src/rep_feedback.py`, `src/main.py`): 
+  - 확정 반복: "N점 · [worst_item 피드백]"(감점 없으면 "N점") + 오른쪽 작은 회색 "깊이·상체"(안 b). 3초(`REP_SCORE_DISPLAY_SECONDS`).
+  - 세션당 한 번 "자세 점수는 깊이와 상체 정렬만 봅니다"(안 a): 처음 잠금이 걸려 서 있을 때(`ready`) 5초(`POSTURE_SCORE_INTRO_DISPLAY_SECONDS`). 새 운동 세션이 시작되면(S 키 등) 다시 한 번 나온다. 그 전에 이미 반복 결과가 나왔다면 건너뛴다.
+  - **엉덩이 하강 부족 안내**: 탈락 사유가 `shallow_hip_drop` **하나뿐일 때만** "더 깊게 앉아야 1회로 셉니다"를 3초(`REP_SHALLOW_HINT_DISPLAY_SECONDS`) 보인다. 지시문은 "사유가 엉덩이 하강 부족이면"이었는데, 걷기 같은 이동 구간의 굽힘은 `too_short`·`other_exercise`와 `shallow_hip_drop`이 함께 붙으므로(8a에서 확인) 사유가 여러 개일 때까지 보이면 걷다가 "더 깊게 앉아야 한다"는 안내가 뜬다. 그래서 '뿐'으로 해석했다(바꾸려면 알려 주세요). 다른 탈락 사유는 화면에 안 보이고 로그(`rep_end`)에만 남는다.
+  - 영상 아래 띠를 안내(잠금)와 같은 자리에 쓰되 **잠금 안내가 있으면 안내가 우선**한다. 한글은 기존과 같은 캐시 레이어 합성 방식으로 그리고(문구가 바뀔 때만 렌더링), 한글 폰트·Pillow가 없으면 영어 문구로 대체한다("78 PTS - SQUAT DEEPER" 등). 한글 폰트 캐시를 크기별(22, 16)로 둬 서로 밀어내지 않게 했다(`lru_cache(maxsize=4)`). 렌더링 결과를 이미지로 눈으로 확인했다.
+  - **`USE_REP_TRACKER=False`에서는 점수·안내가 나오지 않는다**(`rep_guidance`가 None이고 `last_rep`이 없으므로; 테스트로 확인).
+- **로컬 기록**: `ExerciseCounter.rep_history`(이번 세션의 모든 반복 후보)에서 `WorkoutSession.end()`가 `last_local_record`를 만든다: 반복마다 `index`, `rep_number`(확정된 순번), `counted`, `reasons`, `seconds_from_start`, 길이, 최저 무릎각, 엉덩이 하강, 그리고 `posture`(`total_score`, `worst_item`, `capped`, 항목별 `item_status`·`item_scores`·`measures`). **업로드되는 summary(`last_summary`)는 키와 형식이 그대로**이고(테스트가 키 집합을 고정) 서버로 보내지 않는다. **파일로 저장하지는 않았다**: 지금은 메모리의 세션 기록이고, 파일로 남길지·어디에 둘지는 정해 주세요(새 세션 시작 시 비워진다).
+- **테스트**(`tests/test_rep_feedback.py` 27개): 항목 경계 직전·직후(80/81°, 96°)와 점수·worst_item이 반복 결과에 실리는지, `rep_end` 이벤트의 JSON 안전, 표시 규칙(점수 한 줄·태그·표시 시간·재표시 없음·새 반복이 대체, 얕음 안내와 다른 사유는 표시 안 함, 점수 범위 안내 한 번·리셋 뒤 다시, squat 모드가 아니면 없음, 설정 상수), `USE_REP_TRACKER=False`에서 표시 없음, 그리기(아래 띠 안에만, 오른쪽 작은 표기, 안내 우선, 캐시 1회 렌더링, 폰트 크기 캐시, 한글 폰트 없을 때 영어 대체, 종류별 색), 로컬 기록(반복별 결과·번호·탈락 사유·JSON 안전, 업로드 summary 불변, 새 세션이 기록을 비움, 반복 없음, v0.1.x 카운터는 빈 기록). 기존 3-4의 항목별 경계·상한·worst_item·템포 무관 테스트는 `tests/test_posture_score.py`(41개)가 계속 맡는다. 전체 테스트 593개 통과.
+- 실제 카메라로는 확인하지 않았다(실시간 확인은 사용자가 직접).
+
+### 4. 백업
+`live_check_after_fix` 로그를 `D:\FitRoute_backup\landmark_sequences_20261019\`에 추가했다. 파일 19개, 총 45,349,759 bytes, manifest.csv의 모든 항목이 백업·원본과 크기·SHA-256 일치(불일치 0). manifest.csv와 README.txt 갱신(format_version 2, 정상 종료, 얼굴 좌표 없음).
