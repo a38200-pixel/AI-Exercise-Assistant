@@ -313,22 +313,37 @@ def _korean_font(size: int = 22):
     return None
 
 
+@lru_cache(maxsize=8)
+def _notice_text_layer(notice: str, width: int, band_height: int, font: Any) -> tuple[np.ndarray, np.ndarray] | None:
+    """안내 문구를 한 번만 그려 둔 합성용 레이어. 문구(notice)·띠 크기·폰트가 바뀔 때만 다시 그린다.
+
+    반환: (255 - 알파, 문구색 x 알파)를 uint16 배열로 둔 쌍. 프레임마다 영상 위에 `(영상 x (255-알파) + 문구색 x 알파) // 255`로
+    합성만 하면 된다(PIL 변환·폰트 렌더링 없음). 폰트가 없으면 None(영어 문구로 대체).
+    """
+    if font is None:
+        return None
+    from PIL import Image, ImageDraw
+
+    mask_image = Image.new("L", (width, band_height), 0)
+    draw = ImageDraw.Draw(mask_image)
+    text_width = draw.textlength(NOTICE_TEXT[notice][0], font=font)
+    draw.text(((width - text_width) / 2, 9), NOTICE_TEXT[notice][0], font=font, fill=255)
+    alpha = np.asarray(mask_image, dtype=np.uint16)[:, :, None]
+    color = np.array(NOTICE_COLOR, dtype=np.uint16)  # BGR
+    return 255 - alpha, color * alpha
+
+
 def _draw_notice_band(canvas: np.ndarray, notice: str, left: int, right: int, bottom: int) -> None:
     """영상 영역 아래쪽에 반투명 띠를 깔고 안내 한 줄을 그린다. 안내가 있을 때만 호출한다."""
-    korean, english = NOTICE_TEXT[notice]
+    _, english = NOTICE_TEXT[notice]
     band_height = 44
     top = bottom - band_height - 10
     region = canvas[top:top + band_height, left:right]
     region[:] = cv2.addWeighted(region, 0.25, np.full_like(region, INK), 0.75, 0)
-    font = _korean_font()
-    if font is not None:
-        from PIL import Image, ImageDraw
-
-        image = Image.fromarray(region[:, :, ::-1])  # BGR → RGB
-        draw = ImageDraw.Draw(image)
-        width = draw.textlength(korean, font=font)
-        draw.text(((region.shape[1] - width) / 2, 9), korean, font=font, fill=NOTICE_COLOR[::-1])
-        region[:] = np.asarray(image)[:, :, ::-1]
+    layer = _notice_text_layer(notice, region.shape[1], band_height, _korean_font())
+    if layer is not None:
+        inverse_alpha, foreground = layer
+        region[:] = (region.astype(np.uint16) * inverse_alpha + foreground) // 255
         return
     scale = 0.62
     text_width = cv2.getTextSize(english, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]

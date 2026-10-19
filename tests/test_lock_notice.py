@@ -1,6 +1,7 @@
 """BodyLock 안내 문구, BodyLockPolicy, USE_REP_TRACKER 스위치, 엉덩이 하강 임계값, 안내 화면 표시."""
 
 import ast
+import builtins
 import json
 from pathlib import Path
 
@@ -400,3 +401,98 @@ def test_the_whole_per_frame_path_counts_a_rep_with_the_switch_on_and_not_off() 
             counter.update(label, t, rep_frame)
         # 같은 자세 사진을 계속 넣었으므로 무릎각은 그대로 180도다: RepTracker는 반복을 못 보고, v0.1.x는 라벨로 센다.
         assert counter.squat_count == (0 if use_rep_tracker else 1)
+
+
+# ---------------------------------------------------------------- 렌더링 캐시와 Pillow·폰트 대체
+
+
+@pytest.fixture
+def fresh_font_caches():
+    """폰트·안내 레이어 캐시를 비워 시작하고, 테스트가 만든 상태가 다른 테스트로 새지 않게 끝에서도 비운다."""
+    main_module._korean_font.cache_clear()
+    main_module._notice_text_layer.cache_clear()
+    yield
+    main_module._korean_font.cache_clear()
+    main_module._notice_text_layer.cache_clear()
+
+
+def test_the_notice_text_is_drawn_once_and_only_composited_on_the_next_frames(fresh_font_caches) -> None:
+    for _ in range(5):
+        hud(NOTICE_NOT_SIDE)
+    info = main_module._notice_text_layer.cache_info()
+    assert info.misses == 1 and info.hits == 4  # 문구는 한 번만 그리고 나머지 프레임은 합성만 한다
+    hud(NOTICE_FULL_BODY_INVALID)  # 문구가 바뀌면 그때 다시 그린다
+    assert main_module._notice_text_layer.cache_info().misses == 2
+    hud(NOTICE_NOT_SIDE)
+    assert main_module._notice_text_layer.cache_info().misses == 2  # 이미 그려 둔 문구는 다시 그리지 않는다
+
+
+def test_nothing_is_rendered_while_there_is_no_notice(fresh_font_caches) -> None:
+    hud(None)
+    info = main_module._notice_text_layer.cache_info()
+    assert info.hits == 0 and info.misses == 0
+
+
+def test_the_cached_layer_gives_the_same_picture_as_drawing_the_text_every_frame(fresh_font_caches) -> None:
+    from scripts.analysis.notice_render_benchmark import legacy_draw_notice_band
+
+    frame = np.random.default_rng(1).integers(30, 220, size=(480, 640, 3), dtype=np.uint8)
+    status = {"mode": "squat", "squat_count": 3}
+    session = {"status": "ACTIVE", "elapsed_seconds": 65}
+    cached = compose_workout_ui(frame, status, session, "READY", "STAND", 0.9, True, NOTICE_NOT_SIDE)
+    current_band = main_module._draw_notice_band
+    main_module._draw_notice_band = legacy_draw_notice_band
+    try:
+        legacy = compose_workout_ui(frame, status, session, "READY", "STAND", 0.9, True, NOTICE_NOT_SIDE)
+    finally:
+        main_module._draw_notice_band = current_band
+    assert np.abs(cached.astype(int) - legacy.astype(int)).max() <= 1  # 반올림 차이뿐이다
+
+
+def test_the_cached_layer_does_not_keep_the_video_of_the_frame_that_created_it(fresh_font_caches) -> None:
+    dark = np.full((480, 640, 3), 20, dtype=np.uint8)
+    bright = np.full((480, 640, 3), 230, dtype=np.uint8)
+    status = {"mode": "squat", "squat_count": 0}
+    session = {"status": "ACTIVE", "elapsed_seconds": 0}
+    first = compose_workout_ui(dark, status, session, "READY", "STAND", 0.9, True, NOTICE_NOT_SIDE)
+    second = compose_workout_ui(bright, status, session, "READY", "STAND", 0.9, True, NOTICE_NOT_SIDE)
+    band = (slice(64 + 480 - 54, 64 + 480 - 10), slice(12, 628))
+    assert second[band].mean() > first[band].mean() + 20  # 영상 밝기가 그대로 반영된다(첫 프레임이 굳어 있지 않다)
+
+
+def test_without_pillow_the_notice_falls_back_to_english_and_the_app_keeps_running(monkeypatch, fresh_font_caches) -> None:
+    real_import = builtins.__import__
+
+    def import_without_pillow(name, *args, **kwargs):
+        if name == "PIL" or name.startswith("PIL."):
+            raise ImportError("No module named 'PIL' (simulated)")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_pillow)
+    assert main_module._korean_font() is None
+    english = hud(NOTICE_NOT_SIDE)
+    monkeypatch.undo()
+    assert not np.array_equal(english, hud(None))  # 안내는 영어로 나온다
+    assert main_module._notice_text_layer(NOTICE_NOT_SIDE, 616, 44, None) is None  # 폰트가 없으면 레이어는 만들지 않는다
+
+
+def test_a_missing_font_file_falls_back_to_english(monkeypatch, fresh_font_caches) -> None:
+    monkeypatch.setattr(main_module, "_KOREAN_FONT_CANDIDATES", ("C:/no/such/font.ttf", "/no/such/font.ttc"))
+    main_module._korean_font.cache_clear()
+    assert main_module._korean_font() is None
+    english = hud(NOTICE_FULL_BODY_INVALID)
+    assert not np.array_equal(english, hud(None))
+    assert main_module._notice_text_layer(NOTICE_FULL_BODY_INVALID, 616, 44, None) is None
+
+
+def test_the_font_is_looked_up_once_even_when_it_is_missing(monkeypatch, fresh_font_caches) -> None:
+    calls = []
+
+    def fake_truetype(path, size):
+        calls.append(path)
+        raise OSError("missing")
+
+    monkeypatch.setattr("PIL.ImageFont.truetype", fake_truetype)
+    for _ in range(3):
+        assert main_module._korean_font() is None
+    assert len(calls) == len(main_module._KOREAN_FONT_CANDIDATES)  # 매 프레임 파일 시스템을 뒤지지 않는다
