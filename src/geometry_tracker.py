@@ -23,7 +23,6 @@ from config.settings import (
     ONE_EURO_D_CUTOFF,
     REP_BOUNDARY_LIGHT_MIN_CUTOFF,
     REP_BOUNDARY_SIGNAL,
-    REP_DESCENT_KNEE_ANGLE,
     STANDING_KNEE_ANGLE,
 )
 from src.pose_geometry import (
@@ -170,8 +169,7 @@ class GeometryTracker:
         self._other_leg_refresh = other_leg_refresh
         self._other_standing_hold = acquire_side_seconds
         self._leg_pref: str | None = None
-        self._descending = False  # 잠근 다리의 평활 무릎각이 내려가는 중(< REP_DESCENT_KNEE_ANGLE)이라 다리를 고정하는 중
-        self._other_standing_since: float | None = None
+        self._other_standing_since: float | None = None  # 잠근 다리는 무효인데 반대 다리가 유효하게 서 있는 상태가 이어진 시작 시각
         self._boundary_filter = OneEuroFilter(min_cutoff=boundary_light_min_cutoff, beta=ONE_EURO_BETA, d_cutoff=ONE_EURO_D_CUTOFF)
         self._standing_knee_angle = standing_knee_angle
         self._missing_release_seconds = missing_release_seconds
@@ -192,7 +190,6 @@ class GeometryTracker:
         self._lock.release()
         self._policy.reset()
         self._leg_pref = None
-        self._descending = False
         self._other_standing_since = None
 
     def lock_state(self, event: str | None = None, detail: dict[str, Any] | None = None) -> LockState:
@@ -293,16 +290,12 @@ class GeometryTracker:
         """잠금 정책에 넘길 '서 있음'. 기본은 잠근 다리의 평활 무릎각 >= STANDING_KNEE_ANGLE이다.
 
         잠근 다리가 전신 무효(평활값 없음)이면 이 값이 영원히 False라 잠금 갱신이 막힌다(교착). 그때 반대 다리가 유효하고 무릎각이
-        서 있음 기준 이상이면 서 있는 것으로 본다. 반복 중에는 다리를 고정한다: 잠근 다리가 내려가기 기준 아래로 내려간 뒤에는
-        반대 다리의 서 있음이 BODY_LOCK_ACQUIRE_SIDE_SECONDS 이어져야(= 반복이 끝나고 선 것이 확인돼야) 갱신을 허용한다.
+        서 있음 기준 이상인 상태가 BODY_LOCK_ACQUIRE_SIDE_SECONDS 동안 끊기지 않고 이어지면 서 있는 것으로 본다. 한두 프레임의
+        유효성 깜빡임으로 다리가 오가지 않고, 반복 중(무릎을 굽힌 동안)에는 반대 다리도 서 있지 않으므로 다리가 고정된다.
         """
         if not (self._other_leg_refresh and self._lock.is_locked):
             return standing
         if smoothed is not None:
-            if smoothed < REP_DESCENT_KNEE_ANGLE:
-                self._descending = True
-            elif smoothed >= self._standing_knee_angle:
-                self._descending = False
             self._other_standing_since = None
             return standing
         other_standing = (
@@ -316,10 +309,7 @@ class GeometryTracker:
             return False
         if self._other_standing_since is None:
             self._other_standing_since = timestamp
-        if self._descending and timestamp - self._other_standing_since < self._other_standing_hold:
-            return False
-        self._descending = False
-        return True
+        return timestamp - self._other_standing_since >= self._other_standing_hold
 
     def update_missing(self, timestamp: float) -> LockState:
         """사람이나 Pose를 놓친 프레임. 연속성이 끊기므로 시점 연속 시간을 지우고, 오래 놓치면 잠금을 풀고 평활화를 초기화한다."""
