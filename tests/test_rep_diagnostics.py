@@ -201,13 +201,13 @@ def test_rep_diagnostics_reports_state_notice_and_drains_the_events() -> None:
 
 def record_rep_session(directory, seconds=5.0):
     """로깅 중 main과 같은 순서(기하 분석 → ExerciseCounter → 기록)로 반복 한 번(1~3초)을 기록한다."""
-    logger = SequenceLogger(directory, metadata=session_metadata("normal", "side"), flush_interval=0.05)
+    base = 1000.0  # 가짜 시계: 부하와 상관없이 세션 시간이 프레임 시각과 정확히 같다
+    logger = SequenceLogger(directory, metadata=session_metadata("normal", "side"), flush_interval=0.05, clock=lambda: base)
     path = logger.start()
     tracker = GeometryTracker()
     recorder = SequenceRecorder(logger, tracker)
     counter = ExerciseCounter(rep_tracker=RepTracker())
     counter.set_mode(SQUAT_MODE, 0.0)
-    base = time.perf_counter()
     for index in range(int(seconds * PLOT_FPS)):
         second = index / PLOT_FPS
         weight = knee_weight(second)

@@ -445,13 +445,21 @@ def test_logging_never_blocks_the_pipeline_and_accounts_for_every_frame(tmp_path
     path = logger.start()
     payload = {"t": 0.0, "landmarks": [[0.5, 0.5, 0.0, 1.0]] * 33}
 
-    started = time.perf_counter()
+    real_put = logger._queue.put
+    blocking_calls = []
+
+    def watched_put(item, block=True, timeout=None):
+        if block:
+            blocking_calls.append(item)  # 기다릴 수 있는 put
+        return real_put(item, block, timeout)
+
+    logger._queue.put = watched_put  # 실제 시간을 재는 대신, 기다릴 수 있는 호출을 쓰지 않는지로 확인한다
     for _ in range(2000):
-        logger.log_frame(payload)
-    elapsed = time.perf_counter() - started
+        logger.log_frame(payload)  # 큐가 가득 차도 호출 쪽은 기다리지 않는다
+    del logger._queue.put
+    assert blocking_calls == []
     logger.close()
 
-    assert elapsed < 2.0  # 큐가 가득 차도 호출 쪽은 기다리지 않는다
     end = read_records(path)[-1]
     assert end["frames_offered"] == 2000
     assert end["frames_written"] + end["frames_dropped"] + end["frames_invalid"] == 2000
@@ -501,10 +509,10 @@ def test_close_is_safe_to_call_twice_or_before_start(tmp_path) -> None:
 
 
 def test_recorder_logs_labels_lock_and_geometry_per_frame(tmp_path) -> None:
-    logger = SequenceLogger(tmp_path, metadata=session_metadata("normal", "side"), flush_interval=0.05)
+    base = 1000.0  # 가짜 시계
+    logger = SequenceLogger(tmp_path, metadata=session_metadata("normal", "side"), flush_interval=0.05, clock=lambda: base)
     path = logger.start()
     recorder = SequenceRecorder(logger, GeometryTracker())
-    base = time.perf_counter()
     world = build_world((0.0, 0.0, -0.1), (0.0, 0.0, 0.1))
 
     # 사람이 0.5초 동안 서 있어서(라벨 stand) 잠금이 걸리고, 그 뒤 사람이 사라진다.

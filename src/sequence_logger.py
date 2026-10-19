@@ -234,7 +234,9 @@ class SequenceLogger:
         options: dict[str, Any] | None = None,
         flush_interval: float = settings.SEQUENCE_LOG_FLUSH_INTERVAL_SECONDS,
         queue_size: int = settings.SEQUENCE_LOG_QUEUE_SIZE,
+        clock=time.perf_counter,
     ) -> None:
+        self._clock = clock  # 세션 시간의 0점을 정하는 시계. 테스트가 가짜 시계를 넣어 실제 시간 흐름에 기대지 않게 한다
         self._directory = Path(directory)
         self._metadata = metadata
         self._runtime = runtime or {}
@@ -294,7 +296,7 @@ class SequenceLogger:
         """파일을 만들고 헤더를 쓴 뒤 기록 스레드를 시작한다. 헤더는 즉시 flush되어 남는다."""
         started_at = datetime.now().astimezone()
         self._open_file(started_at)
-        self._start_perf = time.perf_counter()
+        self._start_perf = self._clock()
         header = {
             "type": "session",
             "format_version": FORMAT_VERSION,

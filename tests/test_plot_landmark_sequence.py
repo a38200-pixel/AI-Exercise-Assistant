@@ -41,10 +41,10 @@ def knee_weight(second: float) -> float:
 
 
 def record_session(directory: Path, seconds: float = 4.0) -> Path:
-    logger = SequenceLogger(directory, metadata=session_metadata("normal", "side"), flush_interval=0.05)
+    base = 1000.0
+    logger = SequenceLogger(directory, metadata=session_metadata("normal", "side"), flush_interval=0.05, clock=lambda: base)
     path = logger.start()
     recorder = SequenceRecorder(logger, GeometryTracker())
-    base = time.perf_counter()
     for index in range(int(seconds * FPS)):
         second = index / FPS
         weight = knee_weight(second)
