@@ -23,6 +23,8 @@ class ExerciseCounter:
         self.last_stable_pose: str | None = None
         self._rep_tracker = rep_tracker
         self.last_rep_result: RepResult | None = None
+        # 이번 세션(마지막 reset 이후)에 끝난 반복 후보 전부(확정·탈락·중단). WorkoutSession의 로컬 기록용이며 서버 업로드 형식과 무관하다.
+        self.rep_history: list[RepResult] = []
 
         self.squat_count = 0
         self.squat_state = SQUAT_WAITING_STAND
@@ -160,11 +162,13 @@ class ExerciseCounter:
         if result is None:
             return
         self.last_rep_result = result
+        self.rep_history.append(result)
         if result.counted:
             self.squat_count += 1
 
     def _reset_rep_tracker(self) -> None:
         self.last_rep_result = None
+        self.rep_history = []
         if self._rep_tracker is not None:
             self._rep_tracker.reset()
 

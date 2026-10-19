@@ -32,6 +32,7 @@ from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.rep_feedback import KIND_INTRO, KIND_SCORE, KIND_SHALLOW, FeedbackLine, RepFeedback
 from src.rep_tracker import NOTICE_FULL_BODY_INVALID, NOTICE_NOT_SIDE, RepTracker, track_primary_person
 from src.runtime_diagnostic import run_runtime_diagnostic
 from src.sequence_logger import (
@@ -299,7 +300,7 @@ _KOREAN_FONT_CANDIDATES = (
 )
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=4)  # 안내 문구(22)와 점수 옆 작은 표기(16)가 서로 밀어내지 않게 크기별로 둔다
 def _korean_font(size: int = 22):
     """한글을 그릴 수 있는 폰트. Pillow나 폰트 파일이 없으면 None(그러면 영어 문구로 대체한다)."""
     try:
@@ -332,6 +333,59 @@ def _notice_text_layer(notice: str, width: int, band_height: int, font: Any) -> 
     alpha = np.asarray(mask_image, dtype=np.uint16)[:, :, None]
     color = np.array(NOTICE_COLOR, dtype=np.uint16)  # BGR
     return 255 - alpha, color * alpha
+
+
+FEEDBACK_COLORS = {KIND_SCORE: LIME, KIND_SHALLOW: NOTICE_COLOR, KIND_INTRO: WHITE}
+FEEDBACK_MAIN_FONT_SIZE = 22
+FEEDBACK_TAG_FONT_SIZE = 16
+
+
+@lru_cache(maxsize=16)
+def _feedback_text_layer(
+    line: FeedbackLine, width: int, band_height: int, fonts: tuple[Any, Any]
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """반복 결과 한 줄(문구 + 오른쪽 작은 회색 표기)을 한 번만 그려 둔 합성용 레이어. 문구가 바뀔 때만 다시 그린다.
+    반환: (255 - 알파, 색 x 알파)를 uint16 배열로 둔 쌍. 한글 폰트가 없으면 None(영어 문구로 대체)."""
+    main_font, tag_font = fonts
+    if main_font is None:
+        return None
+    from PIL import Image, ImageDraw
+
+    main_mask = Image.new("L", (width, band_height), 0)
+    draw = ImageDraw.Draw(main_mask)
+    text_width = draw.textlength(line.korean, font=main_font)
+    draw.text(((width - text_width) / 2, 9), line.korean, font=main_font, fill=255)
+    alpha_main = np.asarray(main_mask, dtype=np.uint16)[:, :, None]
+    alpha_tag = np.zeros_like(alpha_main)
+    if line.tag_korean and tag_font is not None:
+        tag_mask = Image.new("L", (width, band_height), 0)
+        tag_draw = ImageDraw.Draw(tag_mask)
+        tag_width = tag_draw.textlength(line.tag_korean, font=tag_font)
+        tag_draw.text((width - tag_width - 14, 15), line.tag_korean, font=tag_font, fill=255)
+        alpha_tag = np.asarray(tag_mask, dtype=np.uint16)[:, :, None]
+    alpha = np.minimum(alpha_main + alpha_tag, 255)
+    foreground = np.array(FEEDBACK_COLORS[line.kind], dtype=np.uint16) * alpha_main + np.array(MUTED_TEXT, dtype=np.uint16) * alpha_tag
+    return 255 - alpha, foreground
+
+
+def _draw_feedback_band(canvas: np.ndarray, line: FeedbackLine, left: int, right: int, bottom: int) -> None:
+    """영상 아래쪽 띠에 반복 결과 한 줄을 그린다(안내 띠와 같은 자리, 안내가 있으면 안내가 우선이라 이 함수는 안 불린다)."""
+    band_height = 44
+    top = bottom - band_height - 10
+    region = canvas[top:top + band_height, left:right]
+    region[:] = cv2.addWeighted(region, 0.25, np.full_like(region, INK), 0.75, 0)
+    fonts = (_korean_font(FEEDBACK_MAIN_FONT_SIZE), _korean_font(FEEDBACK_TAG_FONT_SIZE))
+    layer = _feedback_text_layer(line, region.shape[1], band_height, fonts)
+    if layer is not None:
+        inverse_alpha, foreground = layer
+        region[:] = (region.astype(np.uint16) * inverse_alpha + foreground) // 255
+        return
+    scale = 0.62
+    text_width = cv2.getTextSize(line.english, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]
+    _put_ui_text(canvas, line.english, (left + (right - left - text_width) // 2, top + 30), scale, FEEDBACK_COLORS[line.kind], 2)
+    if line.tag_english:
+        tag_width = cv2.getTextSize(line.tag_english, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)[0][0]
+        _put_ui_text(canvas, line.tag_english, (right - tag_width - 14, top + 28), 0.42, MUTED_TEXT, 1)
 
 
 def _draw_notice_band(canvas: np.ndarray, notice: str, left: int, right: int, bottom: int) -> None:
@@ -419,8 +473,10 @@ def compose_workout_ui(
     display_confidence: float,
     tracking_active: bool,
     notice: str | None = None,
+    feedback: FeedbackLine | None = None,
 ) -> np.ndarray:
-    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다. notice가 있으면 영상 아래쪽에 안내 한 줄을 보인다."""
+    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다. notice가 있으면 영상 아래쪽에 안내 한 줄을 보이고,
+    없으면 feedback(반복 결과 한 줄: 자세 점수, 얕음 안내, 점수 범위 안내)을 같은 자리에 보인다."""
     frame_height, frame_width = frame.shape[:2]
     header_height = 64
     footer_height = 54
@@ -435,6 +491,8 @@ def compose_workout_ui(
     canvas[header_height:header_height + frame_height, :frame_width] = frame
     if notice in NOTICE_TEXT:
         _draw_notice_band(canvas, notice, 12, frame_width - 12, header_height + frame_height)
+    elif feedback is not None:
+        _draw_feedback_band(canvas, feedback, 12, frame_width - 12, header_height + frame_height)
 
     panel_x = frame_width
 
@@ -829,6 +887,8 @@ def main() -> int:
         else None
     )
 
+    rep_feedback = RepFeedback()
+    session_was_active = False
     frame_count = 0
     quit_requested = False  # Q/ESC로 직접 종료했는가(벤치마크 시간 종료·예외 종료와 구분)
     measurement_started: float | None = None
@@ -902,6 +962,10 @@ def main() -> int:
             exercise_status = exercise_counter.get_status(current_time)
             workout_session.update(current_time)
             session_status = workout_session.get_status(current_time)
+            if workout_session.is_active and not session_was_active:
+                rep_feedback.reset()  # 새 세션: 표시 중인 문구를 지우고 점수 범위 안내를 다시 한 번 보인다
+            session_was_active = workout_session.is_active
+            feedback_line = rep_feedback.update(exercise_status, current_time)
             exercise_seconds = time.perf_counter() - exercise_started
 
             draw_started = time.perf_counter()
@@ -915,6 +979,7 @@ def main() -> int:
                 display_confidence,
                 primary_person is not None and primary_person["landmarks"] is not None,
                 exercise_status["rep_notice"],
+                feedback_line,
             )
             draw_seconds = time.perf_counter() - draw_started
 

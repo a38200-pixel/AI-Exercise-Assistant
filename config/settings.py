@@ -134,6 +134,11 @@ POSTURE_WEIGHT_TORSO_SHIN = 0.5
 # 교정 항목이 하나라도 있으면 총점이 이 값을 넘지 못한다. (가중치가 같으면 교정 항목이 0점이라 자연 최댓값과 같고, 가중치를 바꿔도 지켜지게 하는 안전장치다.)
 POSTURE_SCORE_CAP_WITH_CORRECTION = 50.0
 
+# 화면 표시 시간(초, v0.2.0 Phase 3): 확정된 반복의 "N점 · 피드백" 한 줄, 엉덩이 하강 부족으로 탈락했을 때의 안내, 세션당 한 번 보이는 점수 범위 안내.
+REP_SCORE_DISPLAY_SECONDS = 3.0
+REP_SHALLOW_HINT_DISPLAY_SECONDS = 3.0
+POSTURE_SCORE_INTRO_DISPLAY_SECONDS = 5.0
+
 # Landmark 시퀀스 로깅(진단용): 기본은 꺼져 있고 CLI --log-sequence로만 켠다. 영상은 저장하지 않는다.
 SEQUENCE_LOGGING_ENABLED = False
 # 얼굴 landmark(0~10번)의 좌표는 기본으로 저장하지 않는다. 코(0번)의 visibility만 시점 신호용으로 남긴다.

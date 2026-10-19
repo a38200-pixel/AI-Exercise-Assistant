@@ -45,6 +45,7 @@ from config.settings import (
     STANDING_KNEE_ANGLE,
 )
 from src.geometry_tracker import GeometryTracker, LockState, TrackedFrame
+from src.posture_score import PostureScore, score_posture
 from src.pose_geometry import LANDMARK_INDEX, landmarks_to_array, to_pixel_points
 
 
@@ -207,6 +208,8 @@ class RepResult:
     other_exercise_ratio: float = _NAN
     pose_missing_ratio: float = _NAN
     label_seconds: dict[str, float] = field(default_factory=dict)
+    # 확정된 반복의 자세 점수(깊이, 상체 정렬). 탈락·중단된 반복은 None. 표시와 로컬 기록용이며 카운트에는 쓰이지 않는다.
+    posture: PostureScore | None = None
 
 
 # ---------------------------------------------------------------- RepTracker
@@ -242,6 +245,20 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     array = np.asarray(values, dtype=float)
     array = array[~np.isnan(array)]
     return float(np.percentile(array, percentile)) if len(array) else _NAN
+
+
+def _posture_event(score: PostureScore | None) -> dict[str, Any] | None:
+    """로그용 자세 점수(확정된 반복만). JSON에 쓸 수 있게 NaN/None을 정리한다."""
+    if score is None:
+        return None
+    return {
+        "total": _json_number(score.total_score),
+        "worst_item": score.worst_item,
+        "capped": score.capped,
+        "item_status": dict(score.item_status),
+        "item_scores": {k: _json_number(v) for k, v in score.item_scores.items()},
+        "measures": {k: _json_number(v) for k, v in score.measures.items()},
+    }
 
 
 def _or_nan(value: float | None) -> float:
@@ -383,6 +400,7 @@ class RepTracker:
             "pose_missing_ratio": _json_number(result.pose_missing_ratio),
             "label_seconds": result.label_seconds,
             "merge_suspects": self._merge_count,
+            "posture": _posture_event(result.posture),
             "limits": {
                 "min_seconds": self._min_seconds,
                 "min_hip_drop": self._min_hip_drop,
@@ -652,6 +670,9 @@ class RepTracker:
             other_exercise_ratio=other_ratio,
             pose_missing_ratio=missing_seconds / total_label_seconds if total_label_seconds > 0 else 0.0,
             label_seconds={k: round(v, 4) for k, v in label_seconds.items()},
+            posture=(
+                score_posture(float(knees[bottom]), torso_bottom, shin_bottom) if not reasons else None
+            ),
         )
 
         # 서 있음으로 돌아왔으므로 다음 반복의 기준값을 지금부터 다시 모은다.
