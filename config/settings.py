@@ -110,10 +110,13 @@ REP_BOUNDARY_LIGHT_MIN_CUTOFF = 4.0
 BODY_LOCK_RELEASE_GRACE_SECONDS = 0.0
 
 # 자세 점수(v0.2.0 Phase 3, 표시용): 판정 항목은 depth(최저점 무릎각)와 torso_shin(최저점의 |몸통각 - 정강이각|) 두 개뿐이다.
-# 정상 경계 이내 = 100점, 교정 경계 이상 = 0점, 사이는 선형. 뒤꿈치(heel)와 템포는 판정·점수에 쓰지 않는다(원자료만 기록).
+# 정상 경계 이내 = 100점, 교정 경계 = 50점(depth), 사이는 선형. torso_shin은 교정 경계 = 0점. depth는 교정 경계 이후 POSTURE_DEPTH_ZERO_AT에서 0점이 되는 2단 선형이다. 뒤꿈치(heel)와 템포는 판정·점수에 쓰지 않는다(원자료만 기록).
 # 교정선은 가정이고 정상선은 field_test_1 분포(depth AUC 1.00, torso_shin AUC 0.997)로 잡았다. 2차 실측으로 검증한 뒤 확정한다.
 POSTURE_DEPTH_NORMAL_MAX = 80.0
 POSTURE_DEPTH_CORRECT_MIN = 95.0
+# depth 0점 지점(임시값, 외삽): 반복으로 세어지는 가장 얕은 지점으로 본다. 엉덩이 하강 0.20(REP_MIN_HIP_DROP)에 해당하는 최저 무릎각 약 120도를
+# 쿼터 스쿼트 데이터 없이 외삽한 값이다. 2차 실측의 쿼터 스쿼트 분포로 확정한다.
+POSTURE_DEPTH_ZERO_AT = 120.0
 POSTURE_TORSO_SHIN_NORMAL_MAX = 25.0
 POSTURE_TORSO_SHIN_CORRECT_MIN = 35.0
 # 총점 = 판정된 항목 점수의 가중 평균. 두 항목 모두 분리도가 거의 1.0이라 우열을 가릴 근거가 없어 같은 가중치로 시작한다.

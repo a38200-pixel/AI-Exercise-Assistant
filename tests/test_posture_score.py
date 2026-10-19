@@ -51,7 +51,23 @@ def test_only_depth_and_torso_shin_are_judged_and_tempo_or_heel_are_not_inputs()
     assert parameters == {"min_knee_angle", "torso_signed", "shin_signed", "limits", "weights", "cap"}
 
 
+def test_the_depth_zero_point_is_a_provisional_extrapolation_above_the_correct_line() -> None:
+    assert settings.POSTURE_DEPTH_ZERO_AT == 120.0 > settings.POSTURE_DEPTH_CORRECT_MIN
+    assert posture_score.DEFAULT_LIMITS[ITEM_DEPTH].zero_at == settings.POSTURE_DEPTH_ZERO_AT
+    assert posture_score.DEFAULT_LIMITS[ITEM_TORSO_SHIN].zero_at is None  # torso_shin은 교정 경계에서 0점(1단 선형)
+
+
+def test_a_half_squat_in_the_correct_range_no_longer_scores_zero_and_improvement_stays_visible() -> None:
+    scores = [posture(depth).total_score for depth in (96.0, 100.0, 105.0, 110.0, 115.0)]
+    assert all(score > 0 for score in scores)
+    assert scores == sorted(scores, reverse=True)  # 깊이가 나아질수록(각도가 작을수록) 점수가 오른다
+    assert posture(94.99).item_scores[ITEM_DEPTH] == pytest.approx(50.0, abs=0.1)  # 교정 경계에서 점수가 끊기지 않는다
+    assert posture(95.0).item_scores[ITEM_DEPTH] == pytest.approx(50.0)
+
+
 def test_limits_must_be_ordered() -> None:
+    with pytest.raises(ValueError):
+        ItemLimits(80.0, 95.0, zero_at=95.0)
     with pytest.raises(ValueError):
         ItemLimits(95.0, 80.0)
     with pytest.raises(ValueError):
@@ -64,10 +80,12 @@ DEPTH_CASES = [
     (60.0, STATUS_NORMAL, 100.0),
     (80.0, STATUS_NORMAL, 100.0),  # 정상 경계 위
     (80.01, STATUS_CAUTION, None),  # 직후
-    (87.5, STATUS_CAUTION, 50.0),  # 선형 중간
+    (87.5, STATUS_CAUTION, 75.0),  # 정상 경계(100)와 교정 경계(50)의 중간
     (94.99, STATUS_CAUTION, None),  # 교정 직전
-    (95.0, STATUS_CORRECT, 0.0),  # 교정 경계 위
-    (120.0, STATUS_CORRECT, 0.0),
+    (95.0, STATUS_CORRECT, 50.0),  # 교정 경계는 50점(0점이 아니다)
+    (107.5, STATUS_CORRECT, 25.0),  # 교정 경계(50)와 0점 지점(120)의 중간
+    (120.0, STATUS_CORRECT, 0.0),  # 0점 지점
+    (150.0, STATUS_CORRECT, 0.0),
 ]
 
 
@@ -127,12 +145,12 @@ def test_a_perfect_rep_scores_100_with_no_worst_item() -> None:
 
 
 def test_the_total_is_the_weighted_average_of_the_item_scores() -> None:
-    result = posture(87.5, 30.0)  # 두 항목 모두 50점
-    assert result.total_score == pytest.approx(50.0)
-    result = posture(87.5, 10.0)  # depth 50점, torso_shin 100점, 가중치 같음
-    assert result.total_score == pytest.approx(75.0)
+    result = posture(87.5, 30.0)  # depth 75점, torso_shin 50점
+    assert result.total_score == pytest.approx(62.5)
+    result = posture(87.5, 10.0)  # depth 75점, torso_shin 100점, 가중치 같음
+    assert result.total_score == pytest.approx(87.5)
     weighted = posture(87.5, 10.0, weights={ITEM_DEPTH: 0.8, ITEM_TORSO_SHIN: 0.2})
-    assert weighted.total_score == pytest.approx(0.8 * 50.0 + 0.2 * 100.0)
+    assert weighted.total_score == pytest.approx(0.8 * 75.0 + 0.2 * 100.0)
 
 
 def test_depth_in_the_correct_range_leaves_torso_shin_recorded_but_not_judged() -> None:
@@ -142,7 +160,7 @@ def test_depth_in_the_correct_range_leaves_torso_shin_recorded_but_not_judged() 
     assert result.item_scores[ITEM_TORSO_SHIN] is None
     assert result.measures[ITEM_TORSO_SHIN] == pytest.approx(50.0)  # 값은 남는다
     assert result.worst_item == ITEM_DEPTH
-    assert result.total_score == pytest.approx(0.0)  # depth 하나로만 계산한다
+    assert result.total_score == pytest.approx(20.0)  # depth 하나로만 계산한다(110도: 교정 경계 50점과 0점 지점 120도 사이)
 
 
 def test_a_shallow_rep_is_not_penalised_twice_for_the_lean() -> None:
@@ -193,8 +211,8 @@ def test_worst_item_is_the_item_with_the_largest_deduction(depth, difference, wo
 
 
 def test_a_tie_goes_to_depth_and_the_weights_can_change_the_winner() -> None:
-    assert posture(87.5, 30.0).worst_item == ITEM_DEPTH  # 둘 다 50점: 동점은 depth
-    heavy_torso = posture(87.5, 30.0, weights={ITEM_DEPTH: 0.2, ITEM_TORSO_SHIN: 0.8})
+    assert posture(87.5, 27.5).worst_item == ITEM_DEPTH  # 둘 다 75점: 동점은 depth
+    heavy_torso = posture(87.5, 27.5, weights={ITEM_DEPTH: 0.2, ITEM_TORSO_SHIN: 0.8})
     assert heavy_torso.worst_item == ITEM_TORSO_SHIN  # 가중 감점이 더 큰 쪽
 
 
@@ -206,7 +224,7 @@ def test_a_missing_torso_or_shin_is_unavailable_and_the_total_uses_depth_alone()
         result = score_posture(87.5, torso, shin)
         assert result.item_status[ITEM_TORSO_SHIN] == STATUS_UNAVAILABLE
         assert result.item_scores[ITEM_TORSO_SHIN] is None
-        assert result.total_score == pytest.approx(50.0)
+        assert result.total_score == pytest.approx(75.0)
         assert result.worst_item == ITEM_DEPTH
 
 
@@ -227,7 +245,7 @@ def test_without_any_measure_there_is_no_score() -> None:
 
 
 def test_the_feedback_line_shows_the_score_and_the_advice_for_the_worst_item() -> None:
-    result = score_posture(86.6, 40.0, 30.0)  # depth 약 56점, torso_shin 100점
+    result = score_posture(86.6, None, None)  # depth 78점, torso_shin 없음
     assert result.total_score == pytest.approx(78.0, abs=0.1)
     assert feedback_line(result) == "78점 · 더 깊게 앉아보세요"
     lean = posture(70.0, 32.0)  # depth 100점, torso_shin 30점 -> 65점

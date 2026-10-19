@@ -2,11 +2,12 @@
 
 판정 항목은 두 개뿐이다.
 - depth: 최저점 무릎각(작을수록 깊다). 정상 <= POSTURE_DEPTH_NORMAL_MAX, 교정 >= POSTURE_DEPTH_CORRECT_MIN.
+  점수는 2단 선형: 정상 경계 100 -> 교정 경계 50 -> POSTURE_DEPTH_ZERO_AT(임시 외삽값)에서 0. 교정 구간에서도 개선이 점수에 보인다.
 - torso_shin: 최저점의 |몸통각 - 정강이각|(둘 다 앞으로 숙이면 양수인 부호 있는 각도). 정상 <= POSTURE_TORSO_SHIN_NORMAL_MAX,
   교정 >= POSTURE_TORSO_SHIN_CORRECT_MIN. 절대 몸통각은 쓰지 않는다.
 뒤꿈치(heel)와 템포(하강·상승 시간)는 판정·점수에 쓰지 않는다(원자료는 RepResult에만 남긴다).
 
-점수 규칙: 항목 점수는 정상 경계 이내 100, 교정 경계 이상 0, 사이는 선형. 총점은 판정된 항목의 가중 평균(가중치는 설정)이고,
+점수 규칙: 항목 점수는 정상 경계 이내 100, 교정 경계 이상 0(depth는 위 2단 선형), 사이는 선형. 총점은 판정된 항목의 가중 평균(가중치는 설정)이고,
 교정 항목이 하나라도 있으면 POSTURE_SCORE_CAP_WITH_CORRECTION을 넘지 못한다. **depth가 교정이면 torso_shin은 판정하지 않고
 기록만 한다**(얕은 반복의 이중 감점 방지). worst_item은 가중 감점(가중치 x (100 - 점수))이 가장 큰 항목이다.
 
@@ -21,6 +22,7 @@ from dataclasses import dataclass, field
 from config.settings import (
     POSTURE_DEPTH_CORRECT_MIN,
     POSTURE_DEPTH_NORMAL_MAX,
+    POSTURE_DEPTH_ZERO_AT,
     POSTURE_SCORE_CAP_WITH_CORRECTION,
     POSTURE_TORSO_SHIN_CORRECT_MIN,
     POSTURE_TORSO_SHIN_NORMAL_MAX,
@@ -29,6 +31,7 @@ from config.settings import (
 )
 
 SCORE_LABEL = "자세 점수"
+CORRECT_BOUNDARY_SCORE = 50.0  # 2단 선형 항목(depth)의 교정 경계 점수
 
 ITEM_DEPTH = "depth"
 ITEM_TORSO_SHIN = "torso_shin"
@@ -52,14 +55,24 @@ class ItemLimits:
 
     normal_max: float
     correct_min: float
+    # None이면 교정 경계에서 바로 0점. 값이 있으면 교정 경계에서 CORRECT_BOUNDARY_SCORE점, 그 뒤 zero_at에서 0점(2단 선형).
+    zero_at: float | None = None
 
     def __post_init__(self) -> None:
         if not self.normal_max < self.correct_min:
             raise ValueError("normal_max must be below correct_min.")
+        if self.zero_at is not None and not self.zero_at > self.correct_min:
+            raise ValueError("zero_at must be above correct_min.")
 
     def score(self, value: float) -> float:
         if value <= self.normal_max:
             return 100.0
+        if self.zero_at is not None:
+            if value >= self.zero_at:
+                return 0.0
+            if value >= self.correct_min:
+                return CORRECT_BOUNDARY_SCORE * (self.zero_at - value) / (self.zero_at - self.correct_min)
+            return 100.0 - (100.0 - CORRECT_BOUNDARY_SCORE) * (value - self.normal_max) / (self.correct_min - self.normal_max)
         if value >= self.correct_min:
             return 0.0
         return 100.0 * (self.correct_min - value) / (self.correct_min - self.normal_max)
@@ -73,7 +86,7 @@ class ItemLimits:
 
 
 DEFAULT_LIMITS = {
-    ITEM_DEPTH: ItemLimits(POSTURE_DEPTH_NORMAL_MAX, POSTURE_DEPTH_CORRECT_MIN),
+    ITEM_DEPTH: ItemLimits(POSTURE_DEPTH_NORMAL_MAX, POSTURE_DEPTH_CORRECT_MIN, POSTURE_DEPTH_ZERO_AT),
     ITEM_TORSO_SHIN: ItemLimits(POSTURE_TORSO_SHIN_NORMAL_MAX, POSTURE_TORSO_SHIN_CORRECT_MIN),
 }
 DEFAULT_WEIGHTS = {ITEM_DEPTH: POSTURE_WEIGHT_DEPTH, ITEM_TORSO_SHIN: POSTURE_WEIGHT_TORSO_SHIN}
