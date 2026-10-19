@@ -1,15 +1,30 @@
 """Workout Session의 시간과 운동 결과 summary를 관리한다."""
 
+import json
+import logging
 import math
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+import config.settings as settings
 from src.exercise_counter import ExerciseCounter
+from src.paths import get_workout_log_dir
 from src.rep_tracker import RepResult
+
+LOCAL_RECORD_SCHEMA_VERSION = 1
+logger = logging.getLogger(__name__)
 
 
 class WorkoutSession:
-    def __init__(self) -> None:
+    def __init__(self, log_dir: Path | None = None, save_local_record: bool = True) -> None:
+        """log_dir을 주지 않으면 src.paths.get_workout_log_dir()(개발: data/workout_logs/, 패키징: %LOCALAPPDATA%/FitRoute/workout_logs)를 쓴다.
+        세션이 끝날 때 저장하며, 저장 실패는 세션 종료와 서버 업로드를 막지 않는다."""
+        self._log_dir = log_dir
+        self._save_local_record = save_local_record
+        self.last_record_path: Path | None = None
+        self.last_save_error: str | None = None
         # 현재 Workout Session이 진행 중인지 나타낸다.
         self.is_active = False
 
@@ -86,6 +101,7 @@ class WorkoutSession:
         self.session_end_datetime = ended_at
         self.last_summary = summary
         self.last_local_record = self._build_local_record(summary, exercise_counter)
+        self._write_local_record(self.last_local_record)
         return summary
 
     def _build_local_record(self, summary: dict[str, Any], exercise_counter: ExerciseCounter) -> dict[str, Any]:
@@ -95,12 +111,35 @@ class WorkoutSession:
                 number += 1
             reps.append(rep_record(result, index, number if result.counted else None, self.session_start_perf))
         return {
-            "workout_date": summary["workout_date"],
-            "started_at": summary["started_at"],
-            "ended_at": summary["ended_at"],
-            "squat_count": summary["squat_count"],
+            "schema_version": LOCAL_RECORD_SCHEMA_VERSION,
+            **summary,  # 서버로 업로드하는 summary와 같은 필드·값
             "reps": reps,
+            "settings": _decision_settings(),
         }
+
+    def _write_local_record(self, record: dict[str, Any]) -> None:
+        """세션별 JSON(workout_<시작시각>.json)을 저장한다. 어떤 오류도 밖으로 내보내지 않는다(세션 종료와 업로드가 먼저다)."""
+        self.last_record_path = None
+        self.last_save_error = None
+        if not self._save_local_record:
+            return
+        try:
+            directory = Path(self._log_dir) if self._log_dir is not None else get_workout_log_dir()
+            directory.mkdir(parents=True, exist_ok=True)
+            stamp = self.session_start_datetime.strftime("%Y%m%d_%H%M%S")
+            path = directory / f"workout_{stamp}.json"
+            serial = 1
+            while path.exists():  # 같은 초에 끝난 세션이 앞의 파일을 덮어쓰지 않게 한다
+                serial += 1
+                path = directory / f"workout_{stamp}_{serial}.json"
+            temporary = path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+            os.replace(temporary, path)
+            self.last_record_path = path
+        except Exception as exc:  # noqa: BLE001 - 저장 실패가 운동 기록 종료·업로드를 막으면 안 된다
+            self.last_save_error = repr(exc)
+            logger.warning("Could not save the local workout record: %r", exc)
+            print(f"[Local] Could not save the workout record: {exc}")
 
     def get_elapsed_seconds(self, current_time: float) -> float:
         if not self.is_active or self.session_start_perf is None:
@@ -150,3 +189,14 @@ def rep_record(result: RepResult, index: int, rep_number: int | None, session_st
             "measures": {key: _number(value) for key, value in posture.measures.items()},
         },
     }
+
+
+def _decision_settings() -> dict[str, Any]:
+    """기록 시점의 판정 기준(임계값은 2차 실측 뒤 바뀔 수 있어, 점수를 나중에 해석할 수 있게 함께 남긴다)."""
+    names = (
+        "REP_MIN_SECONDS", "REP_MIN_HIP_DROP", "REP_MAX_ANKLE_GAP", "REP_OTHER_EXERCISE_MAX_RATIO",
+        "POSTURE_DEPTH_NORMAL_MAX", "POSTURE_DEPTH_CORRECT_MIN", "POSTURE_DEPTH_ZERO_AT",
+        "POSTURE_TORSO_SHIN_NORMAL_MAX", "POSTURE_TORSO_SHIN_CORRECT_MIN",
+        "POSTURE_WEIGHT_DEPTH", "POSTURE_WEIGHT_TORSO_SHIN", "POSTURE_SCORE_CAP_WITH_CORRECTION",
+    )
+    return {name: getattr(settings, name) for name in names}

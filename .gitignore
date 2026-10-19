@@ -38,6 +38,7 @@ desktop_launcher/config.json
 
 data/workout_logs/*.csv
 data/workout_logs/*.json
+data/workout_logs/*.tmp
 !data/workout_logs/.gitkeep
 
 # Landmark 시퀀스 로그(진단용, 로컬 전용). 얼굴 landmark가 포함되므로 저장소에 올리지 않는다.
