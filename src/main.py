@@ -32,6 +32,7 @@ from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.framing_guide import NOTICE_MOVE_BACK, NOTICE_MOVE_CENTER, FramingGuide
 from src.rep_feedback import KIND_INTRO, KIND_SCORE, KIND_SHALLOW, FeedbackLine, RepFeedback
 from src.rep_tracker import NOTICE_FULL_BODY_INVALID, NOTICE_NOT_SIDE, RepTracker, track_primary_person
 from src.runtime_diagnostic import run_runtime_diagnostic
@@ -291,6 +292,8 @@ def _put_ui_text(
 NOTICE_TEXT = {
     NOTICE_NOT_SIDE: ("카메라 쪽으로 옆모습이 보이게 서주세요", "TURN SIDEWAYS TO THE CAMERA"),
     NOTICE_FULL_BODY_INVALID: ("발끝까지 화면에 들어오게 서주세요", "STAND SO YOUR FEET ARE IN VIEW"),
+    NOTICE_MOVE_BACK: ("뒤로 물러서 주세요", "STEP BACK FROM THE CAMERA"),
+    NOTICE_MOVE_CENTER: ("화면 가운데로 이동해 주세요", "MOVE TO THE CENTER OF THE VIEW"),
 }
 NOTICE_COLOR = (94, 190, 255)
 _KOREAN_FONT_CANDIDATES = (
@@ -826,6 +829,39 @@ def finish_sequence_log(
         )
 
 
+def update_framing(
+    framing_guide: FramingGuide,
+    exercise_counter: ExerciseCounter,
+    exercise_status: dict[str, Any],
+    primary_person: dict[str, Any] | None,
+    frame_size: tuple[int, int],
+    current_time: float,
+) -> str | None:
+    """구도 안내(YOLO bbox만 사용, 랜드마크 유무와 무관). RepTracker로 스쿼트를 세는 중에만 쓰고(그 밖에는 상태를 비운다), 반복 중에는 보이지 않는다."""
+    if not (exercise_counter.uses_rep_tracker and exercise_counter.exercise_mode == SQUAT_MODE):
+        framing_guide.reset()
+        return None
+    return framing_guide.update(
+        primary_person["bbox"] if primary_person is not None else None,
+        frame_size,
+        current_time,
+        in_rep=exercise_status["rep_guidance"] == "in_rep",
+    )
+
+
+def pick_notice(framing_notice: str | None, lock_notice: str | None) -> str | None:
+    """화면에 보일 안내 한 줄의 우선순위: 구도 안내 > 잠금 안내(전신 무효·비측면). 구도(너무 가깝거나 가장자리)가 풀려야 나머지 판정이 가능하고,
+    전신 무효의 흔한 원인이기도 하다."""
+    return framing_notice or lock_notice
+
+
+def with_framing(diagnostics: dict[str, Any] | None, framing_notice: str | None) -> dict[str, Any] | None:
+    """로그의 rep 진단에 이 프레임의 구도 안내 코드를 붙인다(RepTracker를 안 쓰면 진단이 없으므로 None 그대로)."""
+    if diagnostics is not None:
+        diagnostics["framing"] = framing_notice
+    return diagnostics
+
+
 def create_exercise_counter() -> ExerciseCounter:
     """settings.USE_REP_TRACKER가 True면 RepTracker로 스쿼트를 세고, False면 v0.1.x(stable 라벨 전이)로 센다."""
     import config.settings as settings
@@ -888,6 +924,7 @@ def main() -> int:
     )
 
     rep_feedback = RepFeedback()
+    framing_guide = FramingGuide()
     session_was_active = False
     frame_count = 0
     quit_requested = False  # Q/ESC로 직접 종료했는가(벤치마크 시간 종료·예외 종료와 구분)
@@ -966,6 +1003,11 @@ def main() -> int:
                 rep_feedback.reset()  # 새 세션: 표시 중인 문구를 지우고 점수 범위 안내를 다시 한 번 보인다
             session_was_active = workout_session.is_active
             feedback_line = rep_feedback.update(exercise_status, current_time)
+            # 구도 안내(YOLO bbox만 사용, 랜드마크 유무와 무관): 너무 가깝거나 가장자리에 걸렸을 때. 다른 안내(전신 무효, 비측면)보다 우선하고, 반복 중에는 보이지 않는다.
+            framing_notice = update_framing(
+                framing_guide, exercise_counter, exercise_status, primary_person, (frame.shape[1], frame.shape[0]), current_time
+            )
+            screen_notice = pick_notice(framing_notice, exercise_status["rep_notice"])
             exercise_seconds = time.perf_counter() - exercise_started
 
             draw_started = time.perf_counter()
@@ -978,7 +1020,7 @@ def main() -> int:
                 display_pose,
                 display_confidence,
                 primary_person is not None and primary_person["landmarks"] is not None,
-                exercise_status["rep_notice"],
+                screen_notice,
                 feedback_line,
             )
             draw_seconds = time.perf_counter() - draw_started
@@ -995,7 +1037,7 @@ def main() -> int:
                     capture_time=pipeline_started,
                     logic_time=current_time,
                     geometry=geometry,
-                    rep=exercise_counter.rep_diagnostics(),
+                    rep=with_framing(exercise_counter.rep_diagnostics(), framing_notice),
                 )
             sequence_seconds = time.perf_counter() - sequence_started
             total_seconds = time.perf_counter() - pipeline_started

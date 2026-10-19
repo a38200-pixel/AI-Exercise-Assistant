@@ -134,6 +134,15 @@ POSTURE_WEIGHT_TORSO_SHIN = 0.5
 # 교정 항목이 하나라도 있으면 총점이 이 값을 넘지 못한다. (가중치가 같으면 교정 항목이 0점이라 자연 최댓값과 같고, 가중치를 바꿔도 지켜지게 하는 안전장치다.)
 POSTURE_SCORE_CAP_WITH_CORRECTION = 50.0
 
+# 구도 안내(v0.2.0): YOLO bbox만으로 판단한다. 근거는 analysis/landmark_gaps/report.md(공백 분석): bbox 높이 95% 이상 공백률 64.9%, 발 아래 여유 20px(프레임 높이 480의 약 4%)
+# 이하 59~73%, crop이 좌우로 잘리면 76%, 안 잘리면 0.1%. 위쪽(머리) 경계 접촉은 조건이 아니다. 지속 시간 초기값은 analysis/framing_guide/report.md의 로그 재생으로 정했다.
+FRAMING_EDGE_TOUCH_PX = 2  # bbox가 프레임 경계에 닿은 것으로 보는 거리(px)
+FRAMING_FEET_MARGIN_RATIO = 0.04  # 발 아래 여유가 프레임 높이의 이 비율 이하이면 너무 가깝다
+FRAMING_MAX_HEIGHT_RATIO = 0.95  # bbox 높이가 프레임 높이의 이 비율 이상이면 너무 가깝다
+FRAMING_NOTICE_DELAY_SECONDS = 1.5  # 이 시간 이상 이어질 때만 안내
+FRAMING_NOTICE_CLEAR_SECONDS = 0.5  # 조건이 풀려도 이 시간 이어져야 해제(깜빡임 방지)
+FRAMING_ABSENT_RESET_SECONDS = 2.0  # 사람이 이 시간 넘게 안 보이면 상태를 처음부터
+
 # 화면 표시 시간(초, v0.2.0 Phase 3): 확정된 반복의 "N점 · 피드백" 한 줄, 엉덩이 하강 부족으로 탈락했을 때의 안내, 세션당 한 번 보이는 점수 범위 안내.
 REP_SCORE_DISPLAY_SECONDS = 3.0
 REP_SHALLOW_HINT_DISPLAY_SECONDS = 3.0

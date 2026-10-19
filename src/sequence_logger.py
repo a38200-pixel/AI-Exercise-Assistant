@@ -211,7 +211,7 @@ def build_frame_record(
         "lock": lock_record(lock),
         "labels": labels,
         # v2: RepTracker 상태(WAITING_LOCK / STANDING / IN_REP)와 안내 사유. RepTracker를 안 쓰면 None.
-        "rep": {"state": rep["state"], "notice": rep["notice"]} if rep is not None else None,
+        "rep": {"state": rep["state"], "notice": rep["notice"], "framing": rep.get("framing")} if rep is not None else None,
     }
 
 
