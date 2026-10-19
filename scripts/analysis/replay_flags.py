@@ -82,6 +82,7 @@ class Replay:
     lock_releases: int  # 세트 중간 포함, 잠금이 풀린 횟수
     merge_suspects: int
     frames: int
+    results: list = None  # 반복마다의 RepResult(확정·탈락 모두)
 
 
 # ---------------------------------------------------------------- 입력
@@ -178,6 +179,7 @@ def replay(payload: dict[str, Any], flags: Flags) -> Replay:
         lock_releases=releases,
         merge_suspects=merge_suspects,
         frames=len(payload["frames"]),
+        results=results,
     )
 
 
