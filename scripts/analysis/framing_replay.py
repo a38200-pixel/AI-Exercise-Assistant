@@ -52,11 +52,56 @@ def intervals(states: list[dict[str, Any]]) -> list[tuple[float, float, str]]:
     return result
 
 
+SIDE_THRESHOLDS = (0.25, 0.5, 0.75, 0.95)  # crop 잘림 정도 후보. 0.95는 이전 기준(bbox가 경계 2px 이내, 여유 약 41px 기준 잘림 0.95)과 거의 같다
+
+
+def side_states(frames, spans, threshold, delay):
+    """좌우 기준만(아래·높이 조건 없이) 재생한다."""
+    guide = FramingGuide(delay_seconds=delay, side_cut_ratio=threshold, vertical=False)
+    out = []
+    for f in frames:
+        in_rep = any(s <= f["t"] <= e for s, e in spans)
+        bbox = f.get("yolo_bbox") if f.get("person") else None
+        out.append({"t": f["t"], "shown": guide.update(bbox, tuple(f["frame_size"]), f["t"], in_rep=in_rep)})
+    return out
+
+
+def compare_side(logs, delay: float) -> None:
+    """좌우 기준 후보별로: 켜진 프레임 중 공백 비율, (세로 조건이 정상인 프레임의) 공백 포착 비율, 세트 안 켜진 구간."""
+    print("\n## 좌우 기준 비교(좌우 조건만, 세로 조건이 정상인 프레임 기준)")
+    print("| 기준 | 켜진 프레임 | 그중 공백 비율 | 공백 프레임 중 포착 | 세트 안 켜진 구간 수 | 길이 중앙값/최대 |")
+    print("|---|---|---|---|---|---|")
+    for threshold in SIDE_THRESHOLDS:
+        shown = shown_gap = gap_total = gap_caught = 0
+        lengths = []
+        for path, frames, span, spans in logs:
+            states = side_states(frames, spans, threshold, delay)
+            for f, s in zip(frames, states):
+                bbox = f.get("yolo_bbox") if f.get("person") else None
+                if bbox is None or classify_framing(bbox, tuple(f["frame_size"]), side_cut_ratio=9.0) is not None:
+                    continue  # 세로 조건(아래·높이)이 이미 문제인 프레임은 제외해 좌우 효과만 본다
+                gap = f["_gap"] == "pose_miss"
+                gap_total += gap
+                gap_caught += gap and bool(s["shown"])
+                shown += bool(s["shown"])
+                shown_gap += gap and bool(s["shown"])
+            for start, end, _ in intervals(states):
+                if span is not None and span[0] <= start <= span[1]:
+                    lengths.append(end - start)
+        lengths.sort()
+        mid = f"{lengths[len(lengths) // 2]:.1f}s / {lengths[-1]:.1f}s" if lengths else "-"
+        print(
+            f"| crop 잘림 ≥ {threshold:g} | {shown} | {shown_gap / max(1, shown) * 100:.0f}% ({shown_gap}/{shown}) "
+            f"| {gap_caught / max(1, gap_total) * 100:.0f}% ({gap_caught}/{gap_total}) | {len(lengths)} | {mid} |"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--log", nargs="+", type=Path, required=True)
     parser.add_argument("--delays", nargs="+", type=float, default=[1.0, 1.5, 2.0])
     parser.add_argument("--list", action="store_true", help="세트 안에서 안내가 켜진 구간을 나열")
+    parser.add_argument("--compare-side", action="store_true", help="좌우 기준 후보(crop 잘림 0.25~0.95) 비교")
     args = parser.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -103,6 +148,8 @@ def main() -> int:
             f"| {delay:g}초 | {count} | {shown_gap / max(1, shown_total) * 100:.1f}% ({shown_gap}/{shown_total}) "
             f"| {gap_shown / max(1, gap_total) * 100:.1f}% ({gap_shown}/{gap_total}) | {in_set_shown}/{in_set_total} | {in_set_intervals} |"
         )
+    if args.compare_side:
+        compare_side(logs, args.delays[0] if len(args.delays) == 1 else 1.5)
     if args.list:
         for delay, lines in detail.items():
             print(f"\n세트 안에서 켜진 구간(지속 {delay:g}초):")

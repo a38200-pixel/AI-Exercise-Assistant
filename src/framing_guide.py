@@ -17,26 +17,49 @@ from __future__ import annotations
 from typing import Sequence
 
 from config.settings import (
+    BBOX_PADDING,
     FRAMING_ABSENT_RESET_SECONDS,
     FRAMING_EDGE_TOUCH_PX,
     FRAMING_FEET_MARGIN_RATIO,
     FRAMING_MAX_HEIGHT_RATIO,
     FRAMING_NOTICE_CLEAR_SECONDS,
     FRAMING_NOTICE_DELAY_SECONDS,
+    FRAMING_SIDE_CROP_CUT_RATIO,
 )
 
 NOTICE_MOVE_BACK = "move_back"
 NOTICE_MOVE_CENTER = "move_center"
 
 
-def classify_framing(bbox: Sequence[float], frame_size: tuple[int, int]) -> str | None:
-    """bbox 한 개의 구도 문제. 없으면 None. 반환: NOTICE_MOVE_BACK / NOTICE_MOVE_CENTER."""
+def side_crop_cut(bbox: Sequence[float], frame_size: tuple[int, int]) -> float:
+    """판정용 crop(bbox 양옆 BBOX_PADDING 만큼 여유)이 왼쪽·오른쪽 경계에서 잘린 정도: 여유 중 프레임 밖으로 나간 비율의 큰 쪽(0 = 여유가 다 있음, 1 = bbox가 경계에 닿음)."""
+    width, _ = frame_size
+    x1, _, x2, _ = bbox
+    margin = BBOX_PADDING * (x2 - x1)
+    if margin <= 0:
+        return 0.0
+    left = (margin - x1) / margin
+    right = (x2 + margin - width) / margin
+    return min(1.0, max(0.0, left, right))
+
+
+def classify_framing(
+    bbox: Sequence[float],
+    frame_size: tuple[int, int],
+    *,
+    side_cut_ratio: float = FRAMING_SIDE_CROP_CUT_RATIO,
+    vertical: bool = True,
+) -> str | None:
+    """bbox 한 개의 구도 문제. 없으면 None. 반환: NOTICE_MOVE_BACK / NOTICE_MOVE_CENTER.
+    vertical=False면 아래·높이 조건을 보지 않는다(좌우 기준만 따로 검증할 때)."""
     width, height = frame_size
     x1, y1, x2, y2 = bbox
     feet_margin = height - y2
-    if feet_margin <= max(FRAMING_EDGE_TOUCH_PX, FRAMING_FEET_MARGIN_RATIO * height) or (y2 - y1) >= FRAMING_MAX_HEIGHT_RATIO * height:
+    if vertical and (
+        feet_margin <= max(FRAMING_EDGE_TOUCH_PX, FRAMING_FEET_MARGIN_RATIO * height) or (y2 - y1) >= FRAMING_MAX_HEIGHT_RATIO * height
+    ):
         return NOTICE_MOVE_BACK
-    if x1 <= FRAMING_EDGE_TOUCH_PX or x2 >= width - FRAMING_EDGE_TOUCH_PX:
+    if side_crop_cut(bbox, frame_size) >= side_cut_ratio:
         return NOTICE_MOVE_CENTER
     return None
 
@@ -48,7 +71,11 @@ class FramingGuide:
         delay_seconds: float = FRAMING_NOTICE_DELAY_SECONDS,
         clear_seconds: float = FRAMING_NOTICE_CLEAR_SECONDS,
         absent_reset_seconds: float = FRAMING_ABSENT_RESET_SECONDS,
+        side_cut_ratio: float = FRAMING_SIDE_CROP_CUT_RATIO,
+        vertical: bool = True,
     ) -> None:
+        self._side_cut_ratio = side_cut_ratio
+        self._vertical = vertical
         self._delay = delay_seconds
         self._clear = clear_seconds
         self._absent_reset = absent_reset_seconds
@@ -70,15 +97,18 @@ class FramingGuide:
     ) -> str | None:
         """프레임마다 부른다. bbox는 YOLO 주 사용자 bbox(없으면 None). 지금 보일 안내 코드(없으면 None)를 돌려준다."""
         if bbox is None:
+            # 사람을 놓친 프레임은 상태를 바꾸지 않고 안내도 그대로 이어서 보인다(YOLO가 한두 프레임 놓칠 때 안내가 깜빡이지 않게).
+            # 오래(FRAMING_ABSENT_RESET_SECONDS 초과) 안 보이면 처음부터.
             if self._absent_since is None:
                 self._absent_since = timestamp
             if timestamp - self._absent_since > self._absent_reset:
                 self.reset()
                 self._absent_since = timestamp
-            return None
+                return None
+            return None if in_rep else self._shown(timestamp)
         self._absent_since = None
 
-        problem = classify_framing(bbox, frame_size)
+        problem = classify_framing(bbox, frame_size, side_cut_ratio=self._side_cut_ratio, vertical=self._vertical)
         if problem is not None:
             if self._kind is None:
                 self._since = timestamp
@@ -90,6 +120,9 @@ class FramingGuide:
             if timestamp - self._good_since >= self._clear:
                 self.reset()
 
-        if in_rep or self._kind is None or timestamp - self._since < self._delay:
+        return None if in_rep else self._shown(timestamp)
+
+    def _shown(self, timestamp: float) -> str | None:
+        if self._kind is None or timestamp - self._since < self._delay:
             return None
         return self._kind

@@ -5,7 +5,7 @@ import pytest
 
 import config.settings as settings
 from src.exercise_counter import SQUAT_MODE, STRETCH_MODE, ExerciseCounter
-from src.framing_guide import NOTICE_MOVE_BACK, NOTICE_MOVE_CENTER, FramingGuide, classify_framing
+from src.framing_guide import NOTICE_MOVE_BACK, NOTICE_MOVE_CENTER, FramingGuide, classify_framing, side_crop_cut
 from src.geometry_tracker import GeometryTracker
 from src.main import NOTICE_TEXT, compose_workout_ui, pick_notice, update_framing, with_framing
 from src.rep_tracker import NOTICE_NOT_SIDE, RepTracker
@@ -44,8 +44,13 @@ def feed(guide, bbox, start, seconds, step=0.06, in_rep=False):
         ((250, 50, 390, 450), None),  # 여유 30px: 괜찮다
         ((0, 60, 140, 420), NOTICE_MOVE_CENTER),  # 왼쪽 경계
         ((500, 60, 640, 420), NOTICE_MOVE_CENTER),  # 오른쪽 경계
-        ((1, 60, 140, 420), NOTICE_MOVE_CENTER),  # 허용 오차 2px 이내
-        ((3, 60, 140, 420), None),
+        ((1, 60, 140, 420), NOTICE_MOVE_CENTER),
+        ((3, 60, 140, 420), NOTICE_MOVE_CENTER),  # 이전 기준(경계 2px 이내)이면 놓쳤을 위치: crop 여유(42px)의 93%가 잘림
+        ((20, 60, 160, 420), NOTICE_MOVE_CENTER),  # crop 여유 42px 중 22px(52%)가 프레임 밖
+        ((22, 60, 162, 420), None),  # 20px(48%)만 잘림: 기준 0.5 미만
+        ((30, 60, 170, 420), None),
+        ((470, 60, 610, 420), None),  # 오른쪽: 여유 42px 중 12px(29%)만 프레임 밖
+        ((480, 60, 620, 420), NOTICE_MOVE_CENTER),  # 22px(52%)가 프레임 밖
         ((250, 0, 390, 420), None),  # 위(머리) 경계 접촉만으로는 조건이 아니다
         ((250, 0, 390, 300), None),
         ((0, 60, 140, 479), NOTICE_MOVE_BACK),  # 아래와 왼쪽이 함께면 뒤로 물러서기가 먼저
@@ -53,6 +58,21 @@ def feed(guide, bbox, start, seconds, step=0.06, in_rep=False):
 )
 def test_the_bbox_conditions(bbox, expected) -> None:
     assert classify_framing(bbox, SIZE) == expected
+
+
+def test_the_side_crop_cut_measures_how_much_of_the_padding_is_outside_the_frame() -> None:
+    assert side_crop_cut((250, 60, 390, 420), SIZE) == 0.0  # 여유가 다 있다
+    assert side_crop_cut((0, 60, 140, 420), SIZE) == 1.0  # bbox가 경계에 닿음
+    assert side_crop_cut((21, 60, 161, 420), SIZE) == pytest.approx(0.5)  # 여유 42px 중 21px
+    assert side_crop_cut((500, 60, 640, 420), SIZE) == 1.0
+    assert side_crop_cut((480, 60, 620, 420), SIZE) == pytest.approx(22 / 42)  # 여유 중 오른쪽 22px가 프레임 밖
+    assert side_crop_cut((-30, 0, 100, 10), SIZE) == 1.0  # 경계 밖으로 나가도 1을 넘지 않는다
+
+
+def test_the_vertical_conditions_can_be_switched_off_to_check_the_side_rule_alone() -> None:
+    assert classify_framing(TOUCHING, SIZE, vertical=False) is None
+    assert classify_framing((0, 60, 140, 479), SIZE, vertical=False) == NOTICE_MOVE_CENTER
+    assert classify_framing((22, 60, 162, 420), SIZE, side_cut_ratio=0.25) == NOTICE_MOVE_CENTER  # 임계값을 낮추면 더 일찍
 
 
 def test_the_height_ratio_alone_triggers_move_back_even_with_room_below() -> None:
@@ -115,8 +135,8 @@ def test_switching_between_the_two_problems_keeps_the_timer() -> None:
 def test_missing_person_frames_do_not_reset_the_state_until_the_absent_limit() -> None:
     guide = FramingGuide()
     feed(guide, TOUCHING, 0.0, 1.0)
-    for i in range(10):
-        assert guide.update(None, SIZE, 1.06 + i * 0.1) is None  # 사람 없음 1초: 상태는 유지, 안내는 없다
+    during = [guide.update(None, SIZE, 1.06 + i * 0.1) for i in range(10)]  # 사람 없음 1초
+    assert during[0] is None and during[-1] == NOTICE_MOVE_BACK  # 상태는 유지되어 지속 시간(1.5초)을 넘으면 사람이 안 보여도 안내가 이어진다
     last, _ = feed(guide, TOUCHING, 2.2, 0.3)
     assert last == NOTICE_MOVE_BACK  # 이어서 센 시간이 지속 시간을 넘었다
     reset = FramingGuide()
@@ -124,6 +144,19 @@ def test_missing_person_frames_do_not_reset_the_state_until_the_absent_limit() -
     for i in range(int((settings.FRAMING_ABSENT_RESET_SECONDS + 1.0) / 0.1)):
         reset.update(None, SIZE, 1.06 + i * 0.1)
     assert feed(reset, TOUCHING, 4.5, 0.3)[0] is None  # 오래 사라졌다 돌아오면 처음부터
+
+
+def test_a_shown_notice_does_not_flicker_when_the_detector_misses_a_few_frames() -> None:
+    guide = FramingGuide()
+    feed(guide, TOUCHING, 0.0, DELAY + 0.5)
+    shown = []
+    for i in range(6):  # YOLO가 사람을 연달아 놓침(0.36초)
+        shown.append(guide.update(None, SIZE, 3.0 + i * 0.06))
+    assert shown == [NOTICE_MOVE_BACK] * 6
+    assert guide.update(TOUCHING, SIZE, 3.4) == NOTICE_MOVE_BACK
+    for i in range(int((settings.FRAMING_ABSENT_RESET_SECONDS + 0.5) / 0.1)):
+        last = guide.update(None, SIZE, 4.0 + i * 0.1)
+    assert last is None  # 오래 안 보이면 안내를 거둔다
 
 
 # ---------------------------------------------------------------- 반복 중 미표시
@@ -188,6 +221,7 @@ def test_the_framing_notice_is_drawn_in_the_band_at_the_bottom_of_the_video(code
 def test_the_settings_are_the_values_from_the_gap_analysis() -> None:
     assert settings.FRAMING_FEET_MARGIN_RATIO == 0.04 and settings.FRAMING_MAX_HEIGHT_RATIO == 0.95
     assert settings.FRAMING_EDGE_TOUCH_PX == 2 and settings.FRAMING_NOTICE_DELAY_SECONDS == 1.5
+    assert settings.FRAMING_SIDE_CROP_CUT_RATIO == 0.5
 
 
 # ---------------------------------------------------------------- 로그

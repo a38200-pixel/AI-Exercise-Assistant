@@ -139,6 +139,9 @@ POSTURE_SCORE_CAP_WITH_CORRECTION = 50.0
 FRAMING_EDGE_TOUCH_PX = 2  # bbox가 프레임 경계에 닿은 것으로 보는 거리(px)
 FRAMING_FEET_MARGIN_RATIO = 0.04  # 발 아래 여유가 프레임 높이의 이 비율 이하이면 너무 가깝다
 FRAMING_MAX_HEIGHT_RATIO = 0.95  # bbox 높이가 프레임 높이의 이 비율 이상이면 너무 가깝다
+# 좌우: 판정용 crop(bbox 양옆 BBOX_PADDING 여유)이 왼쪽·오른쪽 경계에서 잘린 정도(여유 중 프레임 밖으로 나간 비율, 0~1)가 이 값 이상이면 "화면 가운데로 이동".
+# 값은 analysis/framing_guide/side_report.md(공백 분석 데이터 재집계)로 정했다. 1.0은 bbox가 경계에 닿는 것과 같다(이전 기준 2px).
+FRAMING_SIDE_CROP_CUT_RATIO = 0.5
 FRAMING_NOTICE_DELAY_SECONDS = 1.5  # 이 시간 이상 이어질 때만 안내
 FRAMING_NOTICE_CLEAR_SECONDS = 0.5  # 조건이 풀려도 이 시간 이어져야 해제(깜빡임 방지)
 FRAMING_ABSENT_RESET_SECONDS = 2.0  # 사람이 이 시간 넘게 안 보이면 상태를 처음부터
