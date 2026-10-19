@@ -3,6 +3,7 @@
 import argparse
 import sys
 import time
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -575,9 +576,19 @@ def handle_keyboard_input(
     workout_session: WorkoutSession,
     workout_uploader: WorkoutUploader,
     current_time: float,
+    key_logger: Callable[..., Any] | None = None,
 ) -> bool:
-    """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다."""
+    """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다.
+
+    key_logger(key, current_time, **details)를 주면 카운트·세션에 영향을 주는 키(종료, 세션 시작·종료, 모드 전환, reset)를
+    누른 순간의 모드와 화면 카운트(누르기 전 값)와 함께 넘긴다. 로깅이 꺼져 있으면 None이다."""
+
+    def note(key: str, **details: Any) -> None:
+        if key_logger is not None:
+            key_logger(key, current_time, mode=exercise_counter.exercise_mode, squat_count=exercise_counter.squat_count, **details)
+
     if pressed_key in (27, ord("q"), ord("Q")):
+        note("quit", session_active=workout_session.is_active)
         if workout_session.is_active:
             complete_session(
                 exercise_counter,
@@ -594,11 +605,14 @@ def handle_keyboard_input(
     if pressed_key in (ord("s"), ord("S")):
         if workout_uploader.pending_summary is not None:
             print("[Cloud] Retry the pending workout with P before starting a new session.")
+            note("session_start", applied=False)
             return False
+        note("session_start", applied=not workout_session.is_active)  # 시작되면 운동 기록(화면 카운트)이 0으로 돌아간다
         workout_session.start(exercise_counter, current_time)
         return False
 
     if pressed_key in (ord("e"), ord("E")):
+        note("session_end", applied=workout_session.is_active)
         complete_session(
             exercise_counter,
             workout_session,
@@ -613,8 +627,10 @@ def handle_keyboard_input(
         ord("2"): STRETCH_MODE,
     }
     if pressed_key in mode_by_key:
+        note("mode", to=mode_by_key[pressed_key])
         exercise_counter.set_mode(mode_by_key[pressed_key], current_time)
     elif pressed_key in (ord("r"), ord("R")):
+        note("reset")
         exercise_counter.reset_current_exercise(current_time)
 
     return False
@@ -1063,6 +1079,7 @@ def main() -> int:
                 workout_session,
                 workout_uploader,
                 time.perf_counter(),
+                key_logger=sequence_recorder.log_key if sequence_recorder is not None else None,
             )
             if should_quit:
                 quit_requested = True

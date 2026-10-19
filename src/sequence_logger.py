@@ -7,7 +7,7 @@
 일은 바로 뒤에 `event` 줄), 정상 종료 시 마지막 줄 `end`. 중간에 프로세스가 죽어도 이미 flush된 줄은 읽을 수 있다.
 
 format_version 2(RepTracker 진단): `frame`에 `rep`(RepTracker 상태·안내 사유)와 `lock.detail`이 생기고 `event` 줄이 생겼다.
-event의 kind: `rep_end`(반복 후보가 끝날 때: 측정값·기준값·탈락 사유), `rep_merge_suspect`(반복 중 올라왔다가 복귀 각도에 닿지
+event의 kind: `key`(카운트·세션에 영향을 주는 키 입력: quit, session_start, session_end, mode, reset. 누르기 전 mode·squat_count와 함께), `rep_end`(반복 후보가 끝날 때: 측정값·기준값·탈락 사유), `rep_merge_suspect`(반복 중 올라왔다가 복귀 각도에 닿지
 못하고 다시 내려감), `lock`(BodyLock 획득·갱신·해제와 해제 사유·지속 시간). 버전 1 로그는 `rep`와 `event`가 없을 뿐 같은 형식이라
 읽는 쪽이 둘 다 읽는다.
 footer(선택): 대화형으로 Q/ESC 종료한 직후 사용자가 입력한 실제 반복 횟수·특이사항과 화면 카운트를 마지막 `end` 바로 앞에 한 줄 남긴다.
@@ -590,6 +590,13 @@ class SequenceRecorder:
         self.logger.log_frame(record)
         for event in self._events(lock, rep, times["t"]):
             self.logger.log_event(event)
+
+    def log_key(self, key: str, perf_time: float, **details: Any) -> bool:
+        """카운트·세션에 영향을 주는 키 입력을 event 줄로 남긴다(kind "key"). 예외는 삼킨다."""
+        try:
+            return self.logger.log_event({"kind": "key", "key": key, "t": _round(self.logger.to_session_time(perf_time)), **details})
+        except Exception:  # noqa: BLE001 - 로깅 문제로 키 처리가 멈추면 안 된다
+            return False
 
     def _events(self, lock: LockState, rep: dict[str, Any] | None, session_time: float) -> list[dict[str, Any]]:
         """이 프레임에서 일어난 진단 이벤트: BodyLock 변화와 RepTracker 이벤트(시각을 세션 기준 초로 바꾼다)."""
