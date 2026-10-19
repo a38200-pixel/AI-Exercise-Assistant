@@ -39,6 +39,7 @@ from src.sequence_logger import (
     INTENDED_POSTURES,
     SequenceLogger,
     SequenceRecorder,
+    collect_session_footer,
     session_metadata,
 )
 from src.workout_session import WorkoutSession
@@ -738,6 +739,35 @@ def start_sequence_recording(
     )
 
 
+def finish_sequence_log(
+    sequence_recorder: SequenceRecorder | None,
+    exercise_counter: ExerciseCounter,
+    *,
+    ask_actual_reps: bool,
+    input_fn=input,
+    interactive: bool | None = None,
+) -> None:
+    """로깅을 끝낸다. 대화형으로 Q/ESC 종료한 --log-sequence 실행이면 먼저 실제 반복 횟수를 묻고 footer로 남긴다.
+
+    로깅을 켜지 않았으면(recorder가 None) 아무것도 묻지 않는다. 패키징 빌드·비대화형 입력에서는 묻지 않는다(미입력으로 기록).
+    """
+    if sequence_recorder is None:
+        return
+    try:
+        if ask_actual_reps:
+            footer = collect_session_footer(
+                exercise_counter.squat_count, mode=exercise_counter.exercise_mode, input_fn=input_fn, interactive=interactive
+            )
+            if footer["prompt"] != "unavailable" or not getattr(sys, "frozen", False):
+                sequence_recorder.logger.log_footer(footer)
+    finally:
+        sequence_recorder.close()
+        print(
+            f"[Sequence] Saved: {sequence_recorder.logger.path} "
+            f"(dropped frames: {sequence_recorder.logger.frames_dropped})"
+        )
+
+
 def create_exercise_counter() -> ExerciseCounter:
     """settings.USE_REP_TRACKER가 True면 RepTracker로 스쿼트를 세고, False면 v0.1.x(stable 라벨 전이)로 센다."""
     import config.settings as settings
@@ -800,6 +830,7 @@ def main() -> int:
     )
 
     frame_count = 0
+    quit_requested = False  # Q/ESC로 직접 종료했는가(벤치마크 시간 종료·예외 종료와 구분)
     measurement_started: float | None = None
     display_pose = "ANALYZING"
     display_confidence = 0.0
@@ -927,6 +958,7 @@ def main() -> int:
                 time.perf_counter(),
             )
             if should_quit:
+                quit_requested = True
                 break
 
             if (
@@ -945,12 +977,14 @@ def main() -> int:
                 workout_uploader,
                 time.perf_counter(),
             )
-        if sequence_recorder is not None:
-            sequence_recorder.close()
-            print(
-                f"[Sequence] Saved: {sequence_recorder.logger.path} "
-                f"(dropped frames: {sequence_recorder.logger.frames_dropped})"
-            )
+        if sequence_recorder is not None and quit_requested:
+            camera.release()
+            cv2.destroyAllWindows()  # 터미널 입력을 받는 동안 멈춘 영상 창이 남지 않게 한다
+        finish_sequence_log(
+            sequence_recorder,
+            exercise_counter,
+            ask_actual_reps=quit_requested,
+        )
         pose_estimator.close()
         camera.release()
         cv2.destroyAllWindows()

@@ -10,6 +10,9 @@ format_version 2(RepTracker 진단): `frame`에 `rep`(RepTracker 상태·안내 
 event의 kind: `rep_end`(반복 후보가 끝날 때: 측정값·기준값·탈락 사유), `rep_merge_suspect`(반복 중 올라왔다가 복귀 각도에 닿지
 못하고 다시 내려감), `lock`(BodyLock 획득·갱신·해제와 해제 사유·지속 시간). 버전 1 로그는 `rep`와 `event`가 없을 뿐 같은 형식이라
 읽는 쪽이 둘 다 읽는다.
+footer(선택): 대화형으로 Q/ESC 종료한 직후 사용자가 입력한 실제 반복 횟수·특이사항과 화면 카운트를 마지막 `end` 바로 앞에 한 줄 남긴다.
+없으면(입력을 받지 못한 종료, 이전에 만든 로그) 실제 횟수를 모르는 로그다. footer는 새 줄 종류일 뿐이라 format_version은 올리지 않았다:
+읽는 쪽은 줄 종류가 없는 줄을 건너뛰고, footer가 있는지는 줄 자체로 알 수 있다.
 시간 값은 모두 로깅 시작 시점을 0으로 하는 time.perf_counter() 초다.
 """
 
@@ -32,6 +35,11 @@ FORMAT_VERSION = 2
 SUPPORTED_FORMAT_VERSIONS = (1, 2)  # 읽는 쪽(분석·그래프 스크립트)이 받아들이는 버전
 # event 안에서 RepTracker가 time.perf_counter() 값으로 넣은 시각 키. 기록할 때 세션 시작 기준 초로 바꾼다.
 EVENT_TIME_KEYS = ("t", "t_start", "t_bottom", "t_end", "t_min", "t_peak", "rep_t_start")
+FOOTER_ENTERED = "entered"  # 사용자가 실제 횟수를 입력함
+FOOTER_NOT_ENTERED = "not_entered"  # 미입력(건너뜀, 입력 불가). 분석 도구는 "미입력"으로 보여 준다
+FOOTER_MAX_ATTEMPTS = 3
+FOOTER_MAX_REPS = 1000
+FOOTER_NOTE_MAX_CHARS = 500
 INTENDED_POSTURES = ("normal", "shallow", "torso_lean", "heel_lift")
 CAMERA_VIEWS = ("side", "oblique", "front")
 # MediaPipe landmark 0~10번은 얼굴(코, 눈, 귀, 입)이다. 기본으로 좌표를 저장하지 않는다.
@@ -337,6 +345,17 @@ class SequenceLogger:
             return False
         return True
 
+    def log_footer(self, footer: dict[str, Any], timeout: float = 2.0) -> bool:
+        """종료 직전 사용자 입력(실제 횟수 등)을 footer 줄로 남긴다. 한 번만, close() 전에 부른다.
+        프레임·이벤트와 달리 버리면 안 되는 한 줄이라 큐가 가득 차 있어도 잠깐 기다린다."""
+        if self._closed or self._error is not None or self._thread is None:
+            return False
+        try:
+            self._queue.put({"type": "footer", "i": self._index, **footer}, timeout=timeout)
+        except queue.Full:
+            return False
+        return True
+
     def _run(self) -> None:
         last_flush = time.monotonic()
         try:
@@ -354,9 +373,10 @@ class SequenceLogger:
                         self._invalid += 1  # 직렬화할 수 없는 프레임 하나만 건너뛴다
                         continue
                     self._file.write(line + "\n")
-                    if item.get("type") == "event":
+                    kind = item.get("type")
+                    if kind == "event":
                         self._events_written += 1
-                    else:
+                    elif kind != "footer":
                         self._written += 1
                 if time.monotonic() - last_flush >= self._flush_interval:
                     self._file.flush()
@@ -398,6 +418,67 @@ class SequenceLogger:
                 self._file.close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+# ---------------------------------------------------------------- 종료 시 실제 횟수 입력
+
+
+def stdin_is_interactive() -> bool:
+    """터미널에서 사람이 입력할 수 있는 상태인가. 패키징(frozen) 빌드는 항상 아니다."""
+    if getattr(sys, "frozen", False):
+        return False
+    stdin = sys.stdin
+    try:
+        return stdin is not None and stdin.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
+def collect_session_footer(
+    app_reps: int,
+    *,
+    mode: str | None = None,
+    input_fn=input,
+    output_fn=print,
+    interactive: bool | None = None,
+) -> dict[str, Any]:
+    """종료 직후 터미널에서 실제 반복 횟수와 특이사항(선택)을 묻고 footer 내용을 돌려준다. --log-sequence 실행에서만 부른다.
+
+    횟수를 건너뛰면(빈 입력, 잘못된 입력 FOOTER_MAX_ATTEMPTS번, 입력 스트림 종료, Ctrl+C) actual_reps는 None이고
+    actual_status는 not_entered("미입력")다. 터미널이 아니면 묻지 않고 같은 미입력으로 기록한다(prompt = unavailable).
+    """
+    footer: dict[str, Any] = {
+        "app_reps": int(app_reps),
+        "mode": mode,
+        "actual_reps": None,
+        "actual_status": FOOTER_NOT_ENTERED,
+        "note": None,
+        "prompt": "unavailable",
+    }
+    if interactive is None:
+        interactive = stdin_is_interactive()
+    if not interactive:
+        return footer
+    footer["prompt"] = "skipped"
+    try:
+        output_fn(f"[Sequence] 화면 카운트: {int(app_reps)}회")
+        for _ in range(FOOTER_MAX_ATTEMPTS):
+            answer = input_fn("[Sequence] 실제 반복 횟수 (건너뛰려면 Enter): ").strip()
+            if not answer:
+                break
+            try:
+                count = int(answer)
+            except ValueError:
+                count = -1
+            if 0 <= count <= FOOTER_MAX_REPS:
+                footer.update(actual_reps=count, actual_status=FOOTER_ENTERED, prompt="answered")
+                break
+            output_fn(f"[Sequence] 0~{FOOTER_MAX_REPS} 사이의 정수만 입력하세요.")
+        note = input_fn("[Sequence] 특이사항 (선택, Enter로 건너뛰기): ").strip()
+        footer["note"] = note[:FOOTER_NOTE_MAX_CHARS] or None
+    except (EOFError, KeyboardInterrupt):
+        pass  # 입력이 끊기면 지금까지 받은 것만 남긴다
+    return footer
 
 
 # ---------------------------------------------------------------- 파이프라인 연결

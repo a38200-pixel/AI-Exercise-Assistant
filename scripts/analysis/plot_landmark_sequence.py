@@ -72,6 +72,58 @@ def load_events(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def load_footer(path: Path) -> dict[str, Any] | None:
+    """종료 시 입력한 실제 반복 횟수·특이사항(footer 줄). 입력을 받지 못한 종료나 이전 로그에는 없으므로 None이다."""
+    footer = None
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("type") == "footer":
+                footer = record
+    return footer
+
+
+def count_summary(footer: dict[str, Any] | None, events: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """실제 횟수(사용자 입력)와 검출 횟수(화면 카운트, rep_end에서 확정된 반복)를 나란히 놓을 값.
+
+    actual: 입력값 또는 None(미입력·footer 없음), screen: footer의 화면 카운트, detected: 로그의 확정된 rep_end 수(RepTracker를 안 썼으면 None).
+    """
+    rep_ends = [e for e in (events or []) if e.get("kind") == "rep_end"]
+    status = "no_footer" if footer is None else footer.get("actual_status", "no_footer")
+    return {
+        "actual": None if footer is None else footer.get("actual_reps"),
+        "status": status,
+        "screen": None if footer is None else footer.get("app_reps"),
+        "detected": sum(1 for e in rep_ends if e.get("counted")) if rep_ends else None,
+        "note": None if footer is None else footer.get("note"),
+    }
+
+
+def format_counts(footer: dict[str, Any] | None, events: list[dict[str, Any]] | None, include_note: bool = True) -> str:
+    """"actual 7 | screen 5 | detected 5" 한 줄(터미널용). 입력하지 않았으면 actual 자리에 미입력, footer 자체가 없으면 그렇게 적는다."""
+    counts = count_summary(footer, events)
+    if counts["status"] == "entered":
+        actual = f"actual {counts['actual']}"
+    elif counts["status"] == "no_footer":
+        actual = "actual - (no footer: not entered at exit, or an older log)"
+    else:
+        actual = "actual 미입력"
+    screen = "-" if counts["screen"] is None else counts["screen"]
+    detected = "-" if counts["detected"] is None else counts["detected"]
+    text = f"{actual} | screen {screen} | detected {detected}"
+    if counts["status"] == "entered" and counts["detected"] is not None and counts["actual"] != counts["detected"]:
+        text += f"  (differs by {counts['detected'] - counts['actual']:+d})"
+    if include_note and counts["note"]:
+        text += f"  note: {counts['note']}"
+    return text
+
+
 def load_session(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None, int]:
     """(헤더, 프레임 목록, 끝 줄 또는 None, 읽을 수 없어 건너뛴 줄 수). 비정상 종료로 잘린 마지막 줄을 견딘다."""
     header: dict[str, Any] | None = None
@@ -174,7 +226,14 @@ def label_seconds(labels: np.ndarray, durations: np.ndarray, mask: np.ndarray | 
     return dict(totals)
 
 
-def summarize(header: dict[str, Any], series: dict[str, np.ndarray], end: dict[str, Any] | None, skipped: int, max_gap: float) -> str:
+def summarize(
+    header: dict[str, Any],
+    series: dict[str, np.ndarray],
+    end: dict[str, Any] | None,
+    skipped: int,
+    max_gap: float,
+    counts_line: str | None = None,
+) -> str:
     t = series["t"]
     durations = frame_durations(t, max_gap)
     total = float(durations.sum())
@@ -183,6 +242,8 @@ def summarize(header: dict[str, Any], series: dict[str, np.ndarray], end: dict[s
         f"metadata        : {header['metadata']}",
         f"frames          : {len(t)}" + (f" (offered {end['frames_offered']}, dropped {end['frames_dropped']})" if end else " (no end line: the session did not close normally)"),
     ]
+    if counts_line is not None:
+        lines.append(f"counts          : {counts_line}")
     if skipped:
         lines.append(f"skipped lines   : {skipped} (unreadable, probably cut off)")
     if len(t) > 1 and t[-1] > t[0]:
@@ -294,6 +355,7 @@ def plot_timeline(
     out_path: Path,
     max_gap: float,
     events: list[dict[str, Any]] | None = None,
+    footer: dict[str, Any] | None = None,
 ) -> None:
     t = series["t"]
     settings = header.get("settings", {})
@@ -330,6 +392,8 @@ def plot_timeline(
     rep_axis.set_yticks([0], ["RepTracker"], fontsize=8)
     rep_axis.set_ylim(-1, 1)
     title = f"{header['metadata'].get('intended_posture')} / {header['metadata'].get('camera_view')}  ({header['started_at']})"
+    if footer is not None or events:
+        title += "   |   " + format_counts(footer, events, include_note=False)
     knee_axis.set_title(title + "   [red = person but full body invalid, gray = no person]", fontsize=10)
 
     lean_axis.axhline(0, color="black", linewidth=0.6)
@@ -411,7 +475,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit("ERROR: the session has no frames.")
     series = build_series(header, frames)
     events = load_events(session_path)
-    print(summarize(header, series, end, skipped, arguments.max_gap))
+    footer = load_footer(session_path)
+    print(summarize(header, series, end, skipped, arguments.max_gap, format_counts(footer, events)))
     if events:
         kinds = {kind: sum(1 for e in events if e.get("kind") == kind) for kind in sorted({e.get("kind") for e in events})}
         print(f"events          : {kinds}")
@@ -422,7 +487,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     timeline_path = out_dir / f"{session_path.stem}_timeline.png"
     labels_path = out_dir / f"{session_path.stem}_labels.png"
-    plot_timeline(header, series, timeline_path, arguments.max_gap, events)
+    plot_timeline(header, series, timeline_path, arguments.max_gap, events, footer)
     plot_label_distribution(series, labels_path, arguments.max_gap)
     print(f"saved: {timeline_path}\nsaved: {labels_path}")
     return 0

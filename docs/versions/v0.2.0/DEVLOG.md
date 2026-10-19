@@ -1112,3 +1112,19 @@
 - `feedback_line()`: "78점 · 더 깊게 앉아보세요" 형식의 한 줄. 점수가 없으면 None(안내 문구만 보이는 경우), 감점이 없으면 점수만. 문구는 임시다. 명칭은 코드·화면·문서 모두 "자세 점수"(`SCORE_LABEL`)이고 "정확도"는 쓰지 않는다(테스트가 소스를 확인).
 - 테스트 37개: 경계값 직전·직후(80/80.01, 94.99/95, 25/25.01, 34.99/35), 선형 중간·단조 감소, 가중 평균, depth 교정 시 torso_shin 기록만, 얕은 반복의 이중 감점 없음, 상한 적용·비적용, worst_item 선택·동점·가중치에 따른 변화, 결측 처리, 한 줄 피드백, 입력에 템포·heel이 없음, 설정값 확인.
 - 아직 안 한 것: RepTracker가 반복 확정 시 점수를 계산해 `RepResult`에 `total_score`/`item_scores`/`worst_item`을 담는 일, 화면의 한 줄 피드백(3-3), 점수·상태의 로그 기록. 반복 경계(대응안)가 정해진 뒤 사용자 지시로 진행한다.
+
+---
+
+## 2026-10-19 · 종료 시 실제 반복 횟수 입력 (footer), `--log-sequence` 전용
+
+2차 실측의 정답 기록용이다. 소리 내어 세기는 쓰지 않는다(실측 환경 제약). **카운트 판정과 화면 동작은 바뀌지 않는다.**
+
+- **동작**: `--log-sequence`로 실행해 **Q/ESC로 종료했을 때만**, 창을 닫은 뒤 터미널에서 "실제 반복 횟수"(Enter로 건너뛰기)와 "특이사항(선택)"을 묻는다. 정수 0~1000만 받고 잘못 입력하면 3번까지 다시 묻는다. 입력은 로그의 `end` 바로 앞 `footer` 줄로 남는다: `app_reps`(화면 카운트), `mode`, `actual_reps`, `actual_status`(`entered` / `not_entered`), `note`, `prompt`(`answered` / `skipped` / `unavailable`).
+- **미입력**: 건너뜀·잘못된 입력 3회·입력 스트림 종료·Ctrl+C는 `actual_reps = null`, `actual_status = not_entered`. 분석 도구는 이를 "미입력"으로 보여 준다. 횟수를 받은 뒤 입력이 끊기면 받은 것은 남긴다.
+- **묻지 않는 경우**: 로깅을 켜지 않은 일반 실행(recorder가 None, `main()` 안에 `input()` 호출이 없음을 AST로 테스트), 벤치마크 시간 종료·예외 종료(Q/ESC가 아님), **패키징(frozen) 빌드**(묻지도 footer를 쓰지도 않음), 터미널이 아닌 입력(IDE 등: 묻지 않고 화면 카운트만 담은 `not_entered` footer를 남김).
+- **읽는 쪽**: `plot_landmark_sequence.py`가 footer를 읽어 터미널 요약에 `counts : actual 7 | screen 5 | detected 5 (differs by -2)` 한 줄, 그래프 제목에 같은 내용(메모 제외)을 보인다. actual은 사용자 입력, screen은 앱이 센 횟수(footer), detected는 로그의 확정된 `rep_end` 수다. `replay_flags.py`는 footer의 `actual_reps`/`note`를 정답으로 쓴다.
+- **format_version 판단: 2를 유지했다.**
+  - 이유: footer는 새 **줄 종류**일 뿐 기존 줄(session/frame/event/end)의 필드와 의미를 바꾸지 않는다. 읽는 쪽은 알 수 없는 줄 종류를 건너뛰고(`plot_landmark_sequence`, `field_test_1_lib`, `extract_rep_fixtures` 모두 확인), footer 유무는 줄 자체로 알 수 있다. 값은 선택 사항(없으면 "실제 횟수를 모르는 로그")이라 판독 규칙이 달라지는 것이 아니다.
+  - 버전을 올리면 현재 v2만 받는 읽는 쪽 도구를 전부 고쳐야 하고 얻는 것이 없다. v1→v2를 올린 이유는 `frame`의 필드 추가와 `event` 줄이 로그 해석(상태 띠, 잠금 이벤트)에 필요했기 때문이다.
+  - `end`의 집계(`frames_written`, `events_written`)에는 footer가 들어가지 않는다(테스트). 형식이 더 바뀌어 읽는 쪽 규칙이 달라지면 그때 3으로 올린다.
+- 테스트(`tests/test_session_footer.py` 26개): 입력값·메모 기록, 0 허용, 건너뜀(메모는 유지), 잘못된 입력 재질문·3회 포기, 메모 길이 제한, EOF/Ctrl+C, 비대화형·패키징에서 묻지 않음, footer가 `end` 앞에 오고 프레임 집계에 안 들어감, 버전 유지, close 뒤 footer 거부, `finish_sequence_log`(기록·미입력·로깅 꺼짐·Q/ESC 아님·패키징·터미널 아님·질문 중 예외에도 로그는 닫힘), `main()`이 `input()`을 직접 쓰지 않고 `quit_requested`로만 호출, 그래프 스크립트의 footer 읽기·표시, `replay_flags`의 정답 읽기.
