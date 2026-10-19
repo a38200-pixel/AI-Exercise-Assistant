@@ -169,12 +169,18 @@ def signed_shin_angle(points: np.ndarray, leg: Leg, facing: Facing | None) -> fl
     return signed_angle_from_vertical(_joint(points, leg, "ankle"), _joint(points, leg, "knee"), facing)
 
 
-def select_near_leg(landmarks: np.ndarray) -> Leg:
-    """hip, knee, ankle visibility 합이 큰 쪽 다리를 고른다. 같으면 왼쪽."""
+def select_near_leg(landmarks: np.ndarray, previous: Leg | None = None, margin: float = 0.0) -> Leg:
+    """hip, knee, ankle visibility 합이 큰 쪽 다리를 고른다. 같으면 왼쪽.
+
+    previous(직전에 쓰던 다리)를 주면 히스테리시스를 건다: 반대쪽 합이 previous 쪽보다 margin보다 더 클 때만 바꾼다.
+    """
     scores = {
         leg: sum(landmarks[LANDMARK_INDEX[f"{leg}_{joint}"], 3] for joint in ("hip", "knee", "ankle"))
         for leg in ("left", "right")
     }
+    if previous in ("left", "right"):
+        other = "right" if previous == "left" else "left"
+        return other if scores[other] - scores[previous] > margin else previous
     return "left" if scores["left"] >= scores["right"] else "right"
 
 

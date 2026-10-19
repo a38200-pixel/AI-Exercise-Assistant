@@ -156,7 +156,7 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
                 light.reset()
                 if smoother is not None:
                     smoother.reset()
-            result = tracker.update(RepFrame.missing(t), v["label"])
+            result = tracker.update(RepFrame.missing(t, locked=policy.locked), v["label"])
         else:
             knee = v["knee_smoothed"]
             if smoother is not None and knee is not None and v.get("knee_raw") is not None:

@@ -18,10 +18,12 @@ from config.settings import (
     BODY_LOCK_MISSING_RELEASE_SECONDS,
     BODY_LOCK_RELEASE_GRACE_SECONDS,
     BODY_LOCK_RELEASE_NONSIDE_SECONDS,
+    LEG_SWITCH_VISIBILITY_MARGIN,
     ONE_EURO_BETA,
     ONE_EURO_D_CUTOFF,
     REP_BOUNDARY_LIGHT_MIN_CUTOFF,
     REP_BOUNDARY_SIGNAL,
+    REP_DESCENT_KNEE_ANGLE,
     STANDING_KNEE_ANGLE,
 )
 from src.pose_geometry import (
@@ -34,6 +36,8 @@ from src.pose_geometry import (
     ViewClassifier,
     ViewJudgement,
     analyze_frame,
+    landmarks_to_array,
+    select_near_leg,
 )
 
 
@@ -153,12 +157,21 @@ class GeometryTracker:
         release_grace_seconds: float = BODY_LOCK_RELEASE_GRACE_SECONDS,
         boundary_signal: str = REP_BOUNDARY_SIGNAL,
         boundary_light_min_cutoff: float = REP_BOUNDARY_LIGHT_MIN_CUTOFF,
+        leg_switch_margin: float = LEG_SWITCH_VISIBILITY_MARGIN,
+        other_leg_refresh: bool = True,
         view_classifier: ViewClassifier | None = None,
         knee_filter: OneEuroFilter | None = None,
     ) -> None:
         if boundary_signal not in BOUNDARY_SIGNALS:
             raise ValueError(f"boundary_signal must be one of {BOUNDARY_SIGNALS}.")
         self._boundary_signal = boundary_signal
+        # 다리 선택 히스테리시스와 '잠근 다리가 무효여도 반대 다리로 갱신' 규칙. False/0은 수정 전 동작(비교·진단용)이다.
+        self._leg_margin = leg_switch_margin
+        self._other_leg_refresh = other_leg_refresh
+        self._other_standing_hold = acquire_side_seconds
+        self._leg_pref: str | None = None
+        self._descending = False  # 잠근 다리의 평활 무릎각이 내려가는 중(< REP_DESCENT_KNEE_ANGLE)이라 다리를 고정하는 중
+        self._other_standing_since: float | None = None
         self._boundary_filter = OneEuroFilter(min_cutoff=boundary_light_min_cutoff, beta=ONE_EURO_BETA, d_cutoff=ONE_EURO_D_CUTOFF)
         self._standing_knee_angle = standing_knee_angle
         self._missing_release_seconds = missing_release_seconds
@@ -178,6 +191,9 @@ class GeometryTracker:
         self._boundary_filter.reset()
         self._lock.release()
         self._policy.reset()
+        self._leg_pref = None
+        self._descending = False
+        self._other_standing_since = None
 
     def lock_state(self, event: str | None = None, detail: dict[str, Any] | None = None) -> LockState:
         if not self._lock.is_locked:
@@ -209,7 +225,7 @@ class GeometryTracker:
             "world_landmarks": world_landmarks,
             "view_classifier": self._view_classifier,
         }
-        geometry_now = analyze_frame(landmarks, **common)
+        geometry_now = self._geometry_now(landmarks, common)
         if self._lock.is_locked:
             geometry = analyze_frame(landmarks, leg=self._lock.leg, facing=self._lock.facing, **common)
         else:
@@ -225,10 +241,11 @@ class GeometryTracker:
             else:
                 boundary = smoothed
         standing = smoothed is not None and smoothed >= self._standing_knee_angle
+        lock_standing = self._lock_standing(standing, smoothed, geometry_now, timestamp)
 
         lockable = geometry_now.full_body.valid and geometry_now.facing is not None
         decision = self._policy.step(
-            timestamp, standing=standing, side_now=geometry_now.view.is_side, lockable=lockable
+            timestamp, standing=lock_standing, side_now=geometry_now.view.is_side, lockable=lockable
         )
 
         event = None
@@ -257,6 +274,53 @@ class GeometryTracker:
             knee_angle_boundary=boundary,
         )
 
+    def _geometry_now(self, landmarks: Sequence[Any], common: dict[str, Any]) -> FrameGeometry:
+        """잠금과 무관하게 이 프레임에서 쓸 다리로 계산한 기하. 다리는 가시성 히스테리시스로 고르고(직전 다리를 기준으로 margin 넘게
+        차이 날 때만 바꾼다), 고른 다리가 전신 무효인데 반대 다리가 유효하면 반대 다리를 쓴다."""
+        previous = self._lock.leg if self._lock.is_locked else self._leg_pref
+        preferred = select_near_leg(landmarks_to_array(landmarks), previous, self._leg_margin) if self._leg_margin > 0 else None
+        geometry = analyze_frame(landmarks, leg=preferred, **common)
+        if self._leg_margin > 0 and not geometry.full_body.valid:
+            alternative = analyze_frame(landmarks, leg="right" if geometry.leg == "left" else "left", **common)
+            if alternative.full_body.valid:
+                geometry = alternative
+        self._leg_pref = geometry.leg
+        return geometry
+
+    def _lock_standing(
+        self, standing: bool, smoothed: float | None, geometry_now: FrameGeometry, timestamp: float
+    ) -> bool:
+        """잠금 정책에 넘길 '서 있음'. 기본은 잠근 다리의 평활 무릎각 >= STANDING_KNEE_ANGLE이다.
+
+        잠근 다리가 전신 무효(평활값 없음)이면 이 값이 영원히 False라 잠금 갱신이 막힌다(교착). 그때 반대 다리가 유효하고 무릎각이
+        서 있음 기준 이상이면 서 있는 것으로 본다. 반복 중에는 다리를 고정한다: 잠근 다리가 내려가기 기준 아래로 내려간 뒤에는
+        반대 다리의 서 있음이 BODY_LOCK_ACQUIRE_SIDE_SECONDS 이어져야(= 반복이 끝나고 선 것이 확인돼야) 갱신을 허용한다.
+        """
+        if not (self._other_leg_refresh and self._lock.is_locked):
+            return standing
+        if smoothed is not None:
+            if smoothed < REP_DESCENT_KNEE_ANGLE:
+                self._descending = True
+            elif smoothed >= self._standing_knee_angle:
+                self._descending = False
+            self._other_standing_since = None
+            return standing
+        other_standing = (
+            geometry_now.leg != self._lock.leg
+            and geometry_now.full_body.valid
+            and geometry_now.knee_angle is not None
+            and geometry_now.knee_angle >= self._standing_knee_angle
+        )
+        if not other_standing:
+            self._other_standing_since = None
+            return False
+        if self._other_standing_since is None:
+            self._other_standing_since = timestamp
+        if self._descending and timestamp - self._other_standing_since < self._other_standing_hold:
+            return False
+        self._descending = False
+        return True
+
     def update_missing(self, timestamp: float) -> LockState:
         """사람이나 Pose를 놓친 프레임. 연속성이 끊기므로 시점 연속 시간을 지우고, 오래 놓치면 잠금을 풀고 평활화를 초기화한다."""
         event = None
@@ -268,4 +332,5 @@ class GeometryTracker:
         if self._policy.missing_long_enough(timestamp):
             self._knee_filter.reset()
             self._boundary_filter.reset()
+            self._other_standing_since = None
         return self.lock_state(event, detail)

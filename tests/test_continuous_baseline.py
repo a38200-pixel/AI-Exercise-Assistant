@@ -19,7 +19,11 @@ def test_the_continuous_set_baselines_are_counted_exactly_by_default(session) ->
     payload = rf.load_fixture(session)
     assert payload["actual_squats"] == 10
     result = rf.replay(payload, rf.PRESETS["off"])
-    assert result.counted == 10 and result.rejected == {} and result.merge_suspects == 0
+    assert result.counted == 10 and result.merge_suspects == 0
+    # 탈락한 후보는 세트 앞뒤의 이동 구간에만 있다(사람 없음 허용 뒤 세션 시작·끝의 짧은 굽힘이 후보가 되지만 길이·엉덩이·라벨 조건으로 탈락한다).
+    starts, ends = result.counted_starts, [r.t_end for r in result.results if r.counted]
+    for event in (e for e in result.events if e["kind"] == "rep_end" and not e["counted"]):
+        assert event["t_end"] <= starts[0] or event["t_start"] >= max(ends)
 
 
 @pytest.mark.parametrize("preset", PRESETS)
@@ -86,9 +90,10 @@ def test_the_continuous_baselines_survive_down_to_six_fps(session, fps, preset) 
 
 
 @pytest.mark.parametrize("session", CONTINUOUS)
-def test_known_limitation_a_dropout_covering_the_last_standing_frame_loses_the_rep(session) -> None:
-    """서 있다가 내려가기 시작하는 순간 사람 없음 프레임이 마지막 서 있는 프레임(무릎각 160도 이상)을 덮으면, 사람이 다시 보일 때
-    이미 160도 아래라 STANDING으로 돌아가지 못해 그 반복이 시작되지 않는다. 대응안을 구현하면 이 테스트를 의도적으로 바꾼다."""
+def test_a_dropout_covering_the_last_standing_frame_no_longer_loses_the_rep(session) -> None:
+    """수정 전에는 서 있다가 내려가기 시작하는 순간 사람 없음 프레임이 마지막 서 있는 프레임(무릎각 160도 이상)을 덮으면, 다시 보일 때
+    이미 160도 아래라 STANDING으로 돌아가지 못해 그 반복이 시작되지 않았다(이 테스트는 그 약점을 고정했었고, 수정과 함께 뒤집었다).
+    이제 짧은 놓침은 STANDING을 지우지 않아 세어진다."""
     payload = rf.load_fixture(session)
     base = baseline_reps(payload)
     rest = len(base) - 1
@@ -99,4 +104,5 @@ def test_known_limitation_a_dropout_covering_the_last_standing_frame_loses_the_r
 
     assert counted_after_first(-0.9, 0.12) == rest  # 서 있는 동안의 짧은 놓침은 문제가 없다
     assert counted_after_first(-0.3, 0.3) == rest  # 놓친 뒤에도 160도 이상 프레임이 남으면 STANDING으로 복귀한다
-    assert counted_after_first(0.0, 0.3) == 0  # 마지막 서 있는 프레임을 덮으면 그 반복을 못 센다
+    assert counted_after_first(0.0, 0.3) == rest  # 마지막 서 있는 프레임을 덮어도 이제 센다(수정 전에는 0)
+    assert counted_after_first(0.1, 0.12) == rest

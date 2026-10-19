@@ -41,6 +41,7 @@ from config.settings import (
     REP_SET_BASELINE_HIP_PERCENTILE,
     REP_SET_BASELINE_MIN_SAMPLES,
     REP_SET_BASELINE_WINDOW_SECONDS,
+    REP_STANDING_MAX_GAP_SECONDS,
     STANDING_KNEE_ANGLE,
 )
 from src.geometry_tracker import GeometryTracker, LockState, TrackedFrame
@@ -122,8 +123,9 @@ class RepFrame:
         return self.knee_boundary if self.knee_boundary is not None else self.knee_smoothed
 
     @classmethod
-    def missing(cls, timestamp: float) -> "RepFrame":
-        return cls(timestamp=timestamp)
+    def missing(cls, timestamp: float, locked: bool = False) -> "RepFrame":
+        """사람·Pose를 놓친 프레임. locked는 BodyLock이 아직 유지되고 있는지(놓침이 짧으면 잠금은 유지된다). 모르면 False(= 초기화)."""
+        return cls(timestamp=timestamp, locked=locked)
 
     @classmethod
     def from_tracked(cls, tracked: TrackedFrame, measures: RepMeasures | None, timestamp: float) -> "RepFrame":
@@ -170,7 +172,8 @@ def track_primary_person(
             pass
         else:
             return tracked, tracked.lock, RepFrame.from_tracked(tracked, measures, timestamp)
-    return None, tracker.update_missing(timestamp), RepFrame.missing(timestamp)
+    lock_state = tracker.update_missing(timestamp)
+    return None, lock_state, RepFrame.missing(timestamp, locked=lock_state.locked)
 
 
 # ---------------------------------------------------------------- 출력
@@ -269,6 +272,7 @@ class RepTracker:
         notice_delay_seconds: float = LOCK_GUIDANCE_DELAY_SECONDS,
         merge_rise_degrees: float = REP_MERGE_RISE_DEGREES,
         merge_drop_degrees: float = REP_MERGE_DROP_DEGREES,
+        standing_max_gap_seconds: float = REP_STANDING_MAX_GAP_SECONDS,
         return_angle: float | None = REP_RETURN_KNEE_ANGLE,
         set_baseline: bool = REP_SET_BASELINE_ENABLED,
         set_baseline_window_seconds: float = REP_SET_BASELINE_WINDOW_SECONDS,
@@ -286,6 +290,7 @@ class RepTracker:
         self._set_window = set_baseline_window_seconds
         self._set_min_samples = set_baseline_min_samples
         self._max_gap = max_gap_seconds
+        self._standing_max_gap = standing_max_gap_seconds
         self._min_seconds = min_seconds
         self._min_hip_drop = min_hip_drop
         self._max_ankle_gap = max_ankle_gap
@@ -328,6 +333,7 @@ class RepTracker:
         self._baseline_samples: list[tuple[float, RepMeasures]] = []
         self._set_samples: list[tuple[float, RepMeasures]] = []  # 세트 단위 기준 높이용(잠금이 유지되는 동안의 완전히 선 프레임)
         self._last_stand: _Sample | None = None
+        self._idle_seen_t = 0.0  # 서 있는 중(STANDING) 마지막으로 사람이 보이고 잠겨 있던 시각(놓침 길이를 재는 기준)
         self._samples: list[_Sample] = []
         self._baseline: _Baseline | None = None
         self._leg: str | None = None
@@ -461,12 +467,28 @@ class RepTracker:
         )
 
     def _update_idle(self, frame: RepFrame, label: str | None) -> RepResult | None:
+        """STANDING 이외(WAITING_LOCK 포함)의 프레임 처리.
+
+        놓침(사람·Pose 없음) 처리 규칙: 잠금이 유지되는 STANDING에서 놓친 시간이 REP_STANDING_MAX_GAP_SECONDS 이하이면 상태와 서 있던
+        기준값을 그대로 둔다. 다시 보인 첫 프레임이 이미 내려가는 중(< 하강 기준)이어도 직전이 STANDING이므로 반복을 시작한다.
+        넘기거나 잠금이 풀렸으면 WAITING_LOCK으로 초기화한다. IN_REP 중 놓침은 _update_in_rep이 REP_MAX_GAP_SECONDS(같은 1.5초 기본값)까지
+        보간하고 넘으면 중단(tracking_lost)한다. 두 규칙의 기준은 모두 '마지막으로 유효했던 시각'으로부터의 경과 시간이다.
+        """
+        if (
+            not frame.present
+            and frame.locked
+            and self._state == STATE_STANDING
+            and self._last_stand is not None
+            and frame.timestamp - self._idle_seen_t <= self._standing_max_gap
+        ):
+            return None
         if not (frame.present and frame.locked):
             self._state = STATE_WAITING_LOCK
             self._baseline_samples.clear()
             self._set_samples.clear()
             self._last_stand = None
             return None
+        self._idle_seen_t = frame.timestamp
         knee = frame.boundary_knee
         if self._state == STATE_WAITING_LOCK:
             if knee is None or knee < self._standing_angle:
@@ -638,5 +660,6 @@ class RepTracker:
         self._baseline = None
         self._baseline_samples = []
         self._last_stand = None
+        self._idle_seen_t = frame.timestamp
         self._note_standing(frame, samples[-1].label)
         return result

@@ -60,6 +60,10 @@ BODY_LOCK_ACQUIRE_SIDE_SECONDS = 0.5
 BODY_LOCK_RELEASE_NONSIDE_SECONDS = 0.4
 # Pose를 이 시간 넘게 놓치면 다리/방향 잠금을 푼다.
 BODY_LOCK_MISSING_RELEASE_SECONDS = 2.0
+# 잠금 다리 선택의 히스테리시스: 좌우 다리의 가시성 합(hip+knee+ankle, 0~3)이 이 값보다 더 차이 나야 잠금/선호 다리를 바꾼다.
+# 두 다리가 겹치는 측면 서 있기에서는 가시성이 비슷해 다리가 프레임마다 뒤집힌다(2026-10-19 세션 2에서 1.4초 동안 6번). 현재 다리가 전신 무효이고
+# 반대 다리가 유효하면 이 값과 상관없이 바꾼다.
+LEG_SWITCH_VISIBILITY_MARGIN = 0.3
 
 # 스쿼트 카운트 방식 스위치. True(기본)면 RepTracker(무릎각 반복 구간, 측면 전용), False면 v0.1.x(stable 라벨 stand → squat → stand).
 USE_REP_TRACKER = True
@@ -71,6 +75,11 @@ LOCK_GUIDANCE_DELAY_SECONDS = 2.0
 REP_DESCENT_KNEE_ANGLE = 150.0
 # 반복 중 전신 무효 등으로 평활 무릎각이 이 시간보다 오래 비면 그 반복을 버린다.
 REP_MAX_GAP_SECONDS = 1.5
+# 서 있는 중(STANDING, 잠금 유지)에 사람이나 Pose를 놓친 시간이 이 값 이하이면 STANDING 상태와 서 있던 기준값을 지우지 않는다. 다시 보인 첫 프레임이 이미
+# 내려가는 중(160도 미만)이어도 직전이 STANDING이었으므로 반복을 시작한다. 이 값을 넘으면 기존처럼 WAITING_LOCK으로 초기화한다. 초기값 1.5초 근거:
+# IN_REP 중 놓침 허용(REP_MAX_GAP_SECONDS)과 같게 둬 일관되고, 실측(field_test_1 세션 1~5와 2026-10-19 두 세션)의 사람 없음 연속 구간 344개 중
+# 343개가 1.5초 이하였으며(최대 1.65초), 잠금 자체는 BODY_LOCK_MISSING_RELEASE_SECONDS(2.0초) 놓치면 풀리므로 그보다 짧게 둔다.
+REP_STANDING_MAX_GAP_SECONDS = 1.5
 # 반복 확정 조건(기하): 반복 길이 하한, 엉덩이 하강량 하한(서 있을 때 대비, 다리 길이 비), 서 있을 때 양발 간격 상한(다리 길이 비, 측면 전용).
 # 엉덩이 하강 하한 0.20: 정상 반복 최소 0.331(세션 3, 무릎 약 100°)과 걷기 최대 0.085의 중앙(0.208)에 가깝게 잡았다.
 # 이전 0.25는 정상 쪽 여유가 0.09뿐이라 하프보다 얕은 반복이 "얕음" 판정 없이 아예 안 세어질 위험이 있었다. 쿼터 스쿼트 데이터는 없다.

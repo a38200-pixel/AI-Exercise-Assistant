@@ -39,7 +39,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "rep_sessions"
 
 def make_frame(t, knee, *, hip_y=BASE_HIP_Y, ankle_gap=3.0, locked=True, present=True):
     if not present:
-        return RepFrame.missing(t)
+        return RepFrame.missing(t, locked=locked)  # 놓쳐도 잠금은 유지된다(짧은 놓침)
     return RepFrame(
         timestamp=t,
         present=True,
@@ -373,7 +373,7 @@ def simulate(session: str, events_out: list | None = None, **tracker_options):
             )
         else:
             decision = policy.missing(t)
-            frame = RepFrame.missing(t)
+            frame = RepFrame.missing(t, locked=policy.locked)
         if decision in ("acquire", "release_view", "release_missing"):
             events.append((t, decision))
         result = tracker.update(frame, values["label"])
