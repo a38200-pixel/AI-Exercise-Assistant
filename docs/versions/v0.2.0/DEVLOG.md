@@ -1323,3 +1323,11 @@
 - 합성 시퀀스 테스트(`tests/test_standing_gap_and_leg_lock.py` 21개): 놓침 0.12/0.3/1.0초는 세어지고 상한 초과(1.6초)는 초기화, 수정 전 동작(상한 0)은 놓침, 잠금 없는 놓침·WAITING_LOCK 놓침, IN_REP 놓침 맞물림, 파이프라인이 잠금 상태를 넘김, 잠금 다리 교착 해소·반복 중 고정·히스테리시스. `test_known_limitation_...`는 의도적으로 뒤집어 `test_a_dropout_covering_the_last_standing_frame_no_longer_loses_the_rep`로 바꿨다(이제 세어짐을 검증). 전체 테스트 566개 통과.
 - **하지 않은 것**: `--debug-max-fps`를 만들지 않았다. RELEASE.md에 최소 FPS 문구를 넣지 않았다(솎아내기 결과와 맞지 않고 측정값이 아니다). 가설 1·4·5 플래그(세트 기준 높이, 복귀 각도, 경계 신호, 잠금 유예)는 기본 꺼짐 그대로, 진짜 연속 세트(위에서 멈추지 않음) 로그를 받은 뒤 판단한다.
 - 이 수정은 로그 재생과 합성 시퀀스로만 검증했고 실제 카메라로 확인하지 않았다.
+
+---
+
+## 2026-10-19 · 실측 로그 백업에 오늘 연속 세트 로그 2개 추가
+
+- `D:\FitRoute_backup\landmark_sequences_20261019\`에 `session_20261019_171322_normal_side.jsonl`(continuous10)과 `session_20261019_171519_normal_side.jsonl`(continuous10_fast)을 복사했다(원본은 그대로, 기존 백업 파일은 덮어쓰지 않음).
+- 검증: 파일 18개, 총 42,915,075 bytes. manifest.csv의 모든 항목(기존 16 + 새 2)이 백업과 원본 양쪽의 크기·SHA-256과 일치(불일치 0). manifest.csv와 README.txt를 갱신했다(두 로그는 format_version 2, 정상 종료, `options.face_landmarks = false`, 얼굴 좌표 없음, footer 실제 횟수 10/10).
+- POLAR overlay·샘플 CSV는 위 정정 결정대로 백업하지 않는다.
