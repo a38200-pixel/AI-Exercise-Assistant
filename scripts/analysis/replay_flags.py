@@ -83,6 +83,7 @@ class Replay:
     merge_suspects: int
     frames: int
     results: list = None  # 반복마다의 RepResult(확정·탈락 모두)
+    events: list = None  # RepTracker 진단 이벤트(rep_end, rep_merge_suspect)
 
 
 # ---------------------------------------------------------------- 입력
@@ -120,24 +121,46 @@ def load_log(path: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------- 재생
 
 
-def replay(payload: dict[str, Any], flags: Flags) -> Replay:
+def decimate(frames: list[dict[str, Any]], fps: float) -> list[dict[str, Any]]:
+    """프레임 솎아내기: 시각 격자(시작 + k/fps)마다 그 시각 이후 첫 프레임만 남긴다. 타임스탬프는 원본 그대로다."""
+    if not frames:
+        return []
+    step = 1.0 / fps
+    kept, next_time = [], frames[0]["t"]
+    for frame in frames:
+        if frame["t"] >= next_time - 1e-9:
+            kept.append(frame)
+            while next_time <= frame["t"] + 1e-9:
+                next_time += step
+    return kept
+
+
+def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -> Replay:
+    """fps를 주면 프레임을 그 속도로 솎아낸 뒤 **솎아낸 프레임만으로 무릎각을 다시 평활**하고(원본 무릎각 + 새 One Euro) 재생한다.
+    솎아낸 프레임의 판정용 값(측면 판정, 좌표, 라벨)은 원본 그대로다. MediaPipe 추적 품질 저하는 재현하지 못한다."""
+    frames = payload["frames"] if fps is None else decimate(payload["frames"], fps)
+    smoother = OneEuroFilter() if fps is not None else None
     policy = BodyLockPolicy(release_grace_seconds=flags.lock_grace)
     tracker = RepTracker(return_angle=flags.return_angle, set_baseline=flags.set_baseline)
     light = OneEuroFilter(
         min_cutoff=settings.REP_BOUNDARY_LIGHT_MIN_CUTOFF, beta=settings.ONE_EURO_BETA, d_cutoff=settings.ONE_EURO_D_CUTOFF
     )
-    results, merge_suspects, releases = [], 0, 0
+    results, merge_suspects, releases, events = [], 0, 0, []
     leg = facing = None
-    for v in payload["frames"]:
+    for v in frames:
         t = v["t"]
         if not v["present"]:
             if policy.missing(t) == "release_missing":
                 releases += 1
             if policy.missing_long_enough(t):
                 light.reset()
+                if smoother is not None:
+                    smoother.reset()
             result = tracker.update(RepFrame.missing(t), v["label"])
         else:
             knee = v["knee_smoothed"]
+            if smoother is not None and knee is not None and v.get("knee_raw") is not None:
+                knee = smoother(v["knee_raw"], t)  # 솎아낸 프레임만 보는 평활
             decision = policy.step(
                 t,
                 standing=knee is not None and knee >= settings.STANDING_KNEE_ANGLE,
@@ -164,7 +187,9 @@ def replay(payload: dict[str, Any], flags: Flags) -> Replay:
             result = tracker.update(frame, v["label"])
         if result is not None:
             results.append(result)
-        merge_suspects += sum(1 for e in tracker.pop_events() if e["kind"] == "rep_merge_suspect")
+        popped = tracker.pop_events()
+        events.extend(popped)
+        merge_suspects += sum(1 for e in popped if e["kind"] == "rep_merge_suspect")
     rejected: dict[str, int] = {}
     for r in results:
         if not r.counted:
@@ -178,8 +203,9 @@ def replay(payload: dict[str, Any], flags: Flags) -> Replay:
         counted_starts=[round(r.t_start, 3) for r in results if r.counted],
         lock_releases=releases,
         merge_suspects=merge_suspects,
-        frames=len(payload["frames"]),
+        frames=len(frames),
         results=results,
+        events=events,
     )
 
 

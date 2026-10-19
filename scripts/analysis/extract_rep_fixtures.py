@@ -76,7 +76,39 @@ def extract(path: Path) -> list[list]:
     return rows
 
 
+# 연속 세트 재현 실측(2026-10-19, 반복 사이 휴지 없이 이어서). 로그 헤더의 note로 찾고 실제 횟수는 footer의 입력값을 쓴다.
+CONTINUOUS_NOTES = {"continuous10": "c10", "continuous10_fast": "c10_fast"}
+
+
+def extract_continuous() -> int:
+    """data/landmark_sequences/의 연속 세트 로그에서 fixture(session_c10.json, session_c10_fast.json)를 만든다. 얼굴 landmark는 저장하지 않는다."""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    found = 0
+    for path in sorted(DATA_DIR.glob("session_*.jsonl")):
+        with path.open("r", encoding="utf-8") as handle:
+            lines = [json.loads(line) for line in handle if line.strip()]
+        note = lines[0]["metadata"].get("note")
+        if note not in CONTINUOUS_NOTES:
+            continue
+        footer = next((r for r in lines if r.get("type") == "footer"), None)
+        payload = {
+            "session": CONTINUOUS_NOTES[note],
+            "source": path.name,
+            "note": note,
+            "actual_squats": None if footer is None else footer.get("actual_reps"),
+            "columns": COLUMNS,
+            "rows": extract(path),
+        }
+        out = OUT_DIR / f"session_{CONTINUOUS_NOTES[note]}.json"
+        out.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"{out.name}: {len(payload['rows'])} frames, actual {payload['actual_squats']}, {out.stat().st_size / 1024:.0f} KB")
+        found += 1
+    return 0 if found else 1
+
+
 def main() -> int:
+    if "--continuous" in sys.argv:
+        return extract_continuous()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for info in match_sessions(DATA_DIR):
         if info.plan_id not in SESSIONS:
