@@ -32,7 +32,7 @@ from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
-from src.rep_tracker import RepTracker, track_primary_person
+from src.rep_tracker import NOTICE_FULL_BODY_INVALID, NOTICE_NOT_SIDE, RepTracker, track_primary_person
 from src.runtime_diagnostic import run_runtime_diagnostic
 from src.sequence_logger import (
     CAMERA_VIEWS,
@@ -285,6 +285,56 @@ def _put_ui_text(
     )
 
 
+# 안내 사유 → (한글 문구, 한글 폰트를 쓸 수 없을 때의 영어 문구)
+NOTICE_TEXT = {
+    NOTICE_NOT_SIDE: ("카메라 쪽으로 옆모습이 보이게 서주세요", "TURN SIDEWAYS TO THE CAMERA"),
+    NOTICE_FULL_BODY_INVALID: ("발끝까지 화면에 들어오게 서주세요", "STAND SO YOUR FEET ARE IN VIEW"),
+}
+NOTICE_COLOR = (94, 190, 255)
+_KOREAN_FONT_CANDIDATES = (
+    "C:/Windows/Fonts/malgun.ttf",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+)
+
+
+@lru_cache(maxsize=1)
+def _korean_font(size: int = 22):
+    """한글을 그릴 수 있는 폰트. Pillow나 폰트 파일이 없으면 None(그러면 영어 문구로 대체한다)."""
+    try:
+        from PIL import ImageFont
+    except ImportError:
+        return None
+    for path in _KOREAN_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return None
+
+
+def _draw_notice_band(canvas: np.ndarray, notice: str, left: int, right: int, bottom: int) -> None:
+    """영상 영역 아래쪽에 반투명 띠를 깔고 안내 한 줄을 그린다. 안내가 있을 때만 호출한다."""
+    korean, english = NOTICE_TEXT[notice]
+    band_height = 44
+    top = bottom - band_height - 10
+    region = canvas[top:top + band_height, left:right]
+    region[:] = cv2.addWeighted(region, 0.25, np.full_like(region, INK), 0.75, 0)
+    font = _korean_font()
+    if font is not None:
+        from PIL import Image, ImageDraw
+
+        image = Image.fromarray(region[:, :, ::-1])  # BGR → RGB
+        draw = ImageDraw.Draw(image)
+        width = draw.textlength(korean, font=font)
+        draw.text(((region.shape[1] - width) / 2, 9), korean, font=font, fill=NOTICE_COLOR[::-1])
+        region[:] = np.asarray(image)[:, :, ::-1]
+        return
+    scale = 0.62
+    text_width = cv2.getTextSize(english, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]
+    _put_ui_text(canvas, english, (left + (right - left - text_width) // 2, top + 30), scale, NOTICE_COLOR, 2)
+
+
 def _workout_ui_status(session_status: str, cloud_status: str) -> tuple[str, tuple[int, int, int]]:
     if session_status == "ACTIVE":
         return "ACTIVE", LIME
@@ -352,8 +402,9 @@ def compose_workout_ui(
     display_pose: str,
     display_confidence: float,
     tracking_active: bool,
+    notice: str | None = None,
 ) -> np.ndarray:
-    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다."""
+    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다. notice가 있으면 영상 아래쪽에 안내 한 줄을 보인다."""
     frame_height, frame_width = frame.shape[:2]
     header_height = 64
     footer_height = 54
@@ -366,6 +417,8 @@ def compose_workout_ui(
         footer_height,
     ).copy()
     canvas[header_height:header_height + frame_height, :frame_width] = frame
+    if notice in NOTICE_TEXT:
+        _draw_notice_band(canvas, notice, 12, frame_width - 12, header_height + frame_height)
 
     panel_x = frame_width
 
@@ -815,6 +868,7 @@ def main() -> int:
                 display_pose,
                 display_confidence,
                 primary_person is not None and primary_person["landmarks"] is not None,
+                exercise_status["rep_notice"],
             )
             draw_seconds = time.perf_counter() - draw_started
 
