@@ -1,0 +1,139 @@
+# 2차 실측 진행표 (실측 당일용, 한 장)
+
+이유와 자세한 설명은 `field_test_2_protocol.md`. 이 문서는 **당일 보고 따라 하기만** 하면 되게 줄였다. 카메라는 사람이 직접 켠다.
+참가자 코드는 `P01`로 적었다. 다른 사람이면 이 문서의 `P01_`을 전부 `P02_`로 바꾼다(편집기의 전체 바꾸기).
+
+## 0. 한눈에
+| 구분 | 세션 | 예상 시간(한 사람) |
+|---|---|---|
+| 준비 | 아래 1절 | 약 8분 |
+| **필수 10개** | 진행 1~10 | 약 27분 (세션당 약 2.5분 + 연속 10회 뒤 추가 휴식 2분) |
+| 선택 6개 | 진행 B1~B6 | 약 15분 |
+
+- 예상 시간의 근거: 1차 실측은 13개 세션을 33분(13:55~14:28)에 했다(세션당 약 2.5분: 실행, 동작, 종료·입력, 확인, 휴식 포함).
+- **필수만 하면 준비 포함 약 35분**이다. 시간이 되면 선택을 **필수 9번(연속 빠르게) 뒤, 필수 10번(일부러 가깝게) 앞**에 한다. **필수 10번은 항상 마지막**이다(구도를 일부러 어기므로).
+
+## 1. 준비 체크리스트 (실행 전)
+- [ ] **GPU**: `nvidia-smi` — 학습 같은 다른 GPU 프로세스가 없는지 본다(있으면 끈다. FPS가 달라진다).
+- [ ] **브랜치**: `git branch --show-current` → `feature/v0.2.0-squat-quality`. `git status`가 깨끗하고, `git rev-parse --short HEAD`를 **기록표 머리말에 적는다**.
+- [ ] **설정이 기본값인지**(플래그가 꺼져 있어야 한다): `python -c "import config.settings as s; print(s.USE_REP_TRACKER, s.REP_SET_BASELINE_ENABLED, s.REP_RETURN_KNEE_ANGLE, s.REP_BOUNDARY_SIGNAL, s.BODY_LOCK_RELEASE_GRACE_SECONDS)"` → **`True False None smoothed 0.0`**이어야 한다.
+- [ ] **다른 무거운 프로그램 종료**, 노트북이면 전원 연결.
+- [ ] **카메라 거리 기준**(영상 창을 보며 맞춘다):
+  - 발끝 아래로 **화면 높이의 4% 이상 여유**(480p에서 약 20px, 발 아래 빈 바닥이 손바닥 폭 정도 보임).
+  - 몸(머리~발) 높이가 **화면 높이의 60~80%**.
+  - 좌우 가장자리에 닿지 않게 **화면 가운데**.
+  - "뒤로 물러서 주세요" / "화면 가운데로 이동해 주세요"가 **뜨지 않는 자리**여야 한다(1.5초 넘게 서 있어 보기).
+- [ ] **바닥 위치 표시**(테이프):
+  - ① **정위치**: 위 기준을 맞춘 자리(발 위치 두 점). 필수·선택 세션은 모두 여기서 한다.
+  - ② **가까운 자리**: 정위치에서 카메라 쪽으로 나와, 발이 화면 아래 경계에 닿거나 몸이 화면의 95% 이상이 되는 자리(다른 색 테이프). **필수 10번(일부러 가깝게)에서만** 쓴다.
+  - 카메라 높이와 위치는 한 번 정하면 **실측이 끝날 때까지 건드리지 않는다**. 기록표 머리말에 카메라 거리(발에서 카메라까지)와 높이를 적는다.
+- [ ] **영상 창에서 S, E, R 키를 누르지 않는다**(S와 R은 화면 카운트를 0으로 되돌린다). 종료는 `Q` 또는 `ESC`.
+- [ ] 저장소 루트(`AI-Exercise-Assistant` 폴더)에서 실행한다. 평소 앱을 실행하는 환경(예: `conda activate vision_ai`)에서.
+- [ ] 보조자가 있으면 종이/계수기를 주고, **화면을 보지 말고 몸 동작만** 세게 한다.
+
+## 2. 세션표 — 필수 (이 순서대로)
+공통 순서: **① 명령 실행 → ② 정위치에서 측면(해당 시점)으로 서서 0.5초 이상 가만히 → ③ 동작 → ④ 동작 후 가만히 1~2초 → ⑤ `Q`/`ESC` → ⑥ 터미널에서 "실제 반복 횟수" 입력 → ⑦ 3절 확인 → ⑧ 쉬기(1분 이상).**
+"휴지 있음" = 올라와서 서서 1~2초 쉬고 다음 반복.
+
+| 진행 | 번호 | 세션 | 횟수 | 자세 설명 한 줄 | 종료 후 입력할 실제 횟수 |
+|---|---|---|---|---|---|
+| 1 | 1 | 측면 정상(평행) | 5 | 허벅지가 바닥과 평행하게, 반복 사이 1~2초 서서 쉬기 | **5** |
+| 2 | 3 | 측면 얕게(하프) | 5 | 무릎을 절반쯤만 굽히기(하프), 휴지 있음 | **5** (화면은 덜 셀 수 있다: 그대로 기록) |
+| 3 | 6 | 사선 정상 | 5 | 몸을 카메라에 비스듬히(약 45°) 돌려 정상 스쿼트 | **5** (화면은 **0이 정상**, 안내 문구가 뜬다) |
+| 4 | 7 | 정면 정상 | 5 | 카메라를 정면으로 보고 정상 스쿼트 | **5** (화면은 **0이 정상**, 안내 문구가 뜬다) |
+| 5 | 9 | 제자리 걷기 15초 | - | 정위치에서 제자리 걷기 15초 | **0** (화면 0이 정상) |
+| 6 | 14 | 쿼터 스쿼트 | 5 | 엉덩이를 약간만(무릎 120~140°쯤), 휴지 있음. **일부러 얕게** | **5** (화면이 몇 개 세는지가 확인 대상) |
+| 7 | 15 | 상체가 꼿꼿한 스쿼트 | 5 | 양손을 가슴 앞에 모으고 몸통을 세운 채, 휴지 있음 | **5** |
+| 8 | 12 | **연속 세트 정상 10회** | **10** | **위에서 멈추지 말고 바로 내려가기.** 약 2초에 1회(내려가 1초, 올라가 1초) | **10** (중간에 멈췄으면 그때까지 한 횟수) → **끝나고 2분 쉬기** |
+| 9 | 13 | **연속 세트 빠르게 5회** | **5** | **위에서 멈추지 말고 바로 내려가기.** 약 1.5초에 1회 | **5** |
+| 10 | 16 | 일부러 가깝게 선 세션 | 5 | **②가까운 자리**에 서서 정상 스쿼트(휴지 있음). **구도 안내를 따르지 말고** 5회 | **5** — **항상 마지막** |
+
+> **연속 세트(진행 8, 9)**: 시작 자세로 0.5초 이상 선 다음, 올라온 곳에서 **쉬지 말고 곧바로 다음 반복**을 한다. 이전 실측들은 반복 사이에 0.7~1.5초 서 있어서 진짜 연속이 아니었다. 힘들면 중간에 멈추지 말고 그 시점까지 한 횟수를 실제 횟수로 입력한다.
+
+## 3. 세션 하나 끝날 때마다 확인 (3가지)
+1. **파일 생성**: 터미널에 `[Sequence] Saved: data/landmark_sequences/session_<시각>_<자세>_<시점>.jsonl`이 떴는지. 파일 이름을 기록표에 적는다.
+2. **footer 입력**: 종료 직후 `실제 반복 횟수`를 입력했는지(Enter로 건너뛰면 "미입력"이 된다). 놓쳤다면 기록표에 적어 두고 나중에 보조자 기록으로 채운다.
+3. **그래프로 actual / screen / detected**(쉬는 동안 실행, 10~20초):
+
+   PowerShell:
+   ```
+   python scripts/analysis/plot_landmark_sequence.py --session (Get-ChildItem data\landmark_sequences\*.jsonl | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+   ```
+   다른 셸이면 터미널에 찍힌 `Saved:` 경로를 복사해 `--session` 뒤에 붙여넣는다. 출력의 **`counts : actual N | screen N | detected N`** 한 줄을 기록표에 옮긴다.
+   - actual = 입력한 실제 횟수, screen = 화면에 센 횟수, detected = 로그에서 확정된 반복. 보통 screen = detected.
+   - 기대: 정상 측면 세션은 셋이 같다. 진행 3, 4(사선·정면), 5(걷기)는 **screen·detected = 0**. 안 맞으면 **고치려 하지 말고 그대로 기록**하고 특이사항에 적는다.
+
+## 4. 선택 세션 (시간이 되면, 진행 9번 뒤·10번 앞)
+| 순서 | 번호 | 세션 | 횟수 | 자세 설명 한 줄 | 입력할 실제 횟수 |
+|---|---|---|---|---|---|
+| B1 | 2 | 측면 깊게 | 5 | 최대한 깊게, 휴지 있음 | **5** |
+| B2 | 4 | 측면 상체 숙임 | 5 | 상체를 앞으로 많이 숙이며 | **5** |
+| B3 | 5 | 측면 뒤꿈치 들림 | 5 | 앉을 때 뒤꿈치를 들며(원자료 확인용) | **5** |
+| B4 | 8 | 측면 반대 방향 정상 | 5 | 앞과 반대 방향(몸을 반대로)을 보고 정상 스쿼트 | **5** |
+| B5 | 10 | 의자 앉았다 일어나기 | 3 | 의자에 앉았다 일어나기(알려진 한계: 세어질 수 있다) | **0** (특이사항에 "의자 3회") |
+| B6 | 11 | 런지 | 3 | 런지 3회 | **0** |
+
+## 5. 실행 명령 (복사해서 바로 사용)
+저장소 루트에서. 실행하면 영상 창이 뜬다. **참가자가 P01이 아니면 `P01_`을 바꾼다.** `--log-face-landmarks`는 쓰지 않는다.
+
+필수:
+```
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_parallel"
+python -m src.main --log-sequence --session-posture shallow --session-view side --session-note "P01_half"
+python -m src.main --log-sequence --session-posture normal --session-view oblique --session-note "P01_oblique"
+python -m src.main --log-sequence --session-posture normal --session-view front --session-note "P01_front"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_nonsquat_walk"
+python -m src.main --log-sequence --session-posture shallow --session-view side --session-note "P01_quarter"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_upright"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_continuous10"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_continuous5_fast"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_too_close"
+```
+선택:
+```
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_deep"
+python -m src.main --log-sequence --session-posture torso_lean --session-view side --session-note "P01_torso_lean"
+python -m src.main --log-sequence --session-posture heel_lift --session-view side --session-note "P01_heel_lift"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_facing_reversed"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_nonsquat_chair"
+python -m src.main --log-sequence --session-posture normal --session-view side --session-note "P01_nonsquat_lunge"
+```
+위 명령의 줄 순서는 필수 진행 1~10, 선택 B1~B6의 순서와 같다.
+
+## 6. 문제가 생기면
+- **"뒤로 물러서 주세요" / "화면 가운데로 이동해 주세요"가 정위치에서 계속 뜬다**: 카메라를 더 멀리 두고 1절부터 다시. (진행 10번에서만 정상이다.)
+- **"카메라 쪽으로 옆모습이 보이게 서주세요" / "발끝까지 화면에 들어오게 서주세요"**가 2초 넘게 뜬다: 몸 방향·발끝을 고치고 다시 시작. 특이사항에 적는다. (진행 3, 4번은 정상이다.)
+- **실수로 S/E/R을 눌렀다**: 화면 카운트가 초기화된 것이므로 그 세션을 다시 한다(파일 이름을 기록표에 "무효"로 적는다).
+- **입력을 놓치고 창을 닫았다**: 기록표에 실제 횟수를 적어 두면 된다(로그는 "미입력").
+- **세션 중간에 실제 횟수가 헷갈린다**: 보조자 기록과 다르면 둘 다 기록표에 적는다("정답 불확실"로 분석에서 제외).
+
+## 7. 기록표 (세션마다 한 줄, 사람마다 한 장)
+머리말: 날짜 ______ / 참가자 코드 ______ / 보조자 □유 □무 / 커밋 해시 ______ / 카메라 거리·높이 ______ / 설정 기본 그대로 □ / 동의 확인 □(다른 사람일 때)
+
+| 진행 | 번호 | 파일 이름 | 입력한 실제 | 보조자 | 화면(screen) | 검출(detected) | 안내 문구 뜬 것 | 특이사항 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | | | | | | | |
+| 2 | 3 | | | | | | | |
+| 3 | 6 | | | | | | | |
+| 4 | 7 | | | | | | | |
+| 5 | 9 | | | | | | | |
+| 6 | 14 | | | | | | | |
+| 7 | 15 | | | | | | | |
+| 8 | 12 | | | | | | | |
+| 9 | 13 | | | | | | | |
+| 10 | 16 | | | | | | | |
+| B1~B6 | 2, 4, 5, 8, 10, 11 | | | | | | | |
+
+## 8. 다른 사람이 참여할 때 추가로 할 일 (별도 칸)
+- [ ] **시작 전 동의**(말로 설명하고 받는다, 기록표 머리말의 "동의 확인"에 체크): 영상은 저장하지 않는다 / **얼굴 좌표는 저장하지 않는다**(`--log-face-landmarks`를 쓰지 않는다) / 화면 캡처·사진을 찍지 않는다 / 번호(P02 등)로만 구분하고 이름은 어디에도 적지 않는다 / 언제든 중단하거나 자기 기록 삭제를 요청할 수 있다.
+- [ ] **참가 제외 확인**: 미성년자, 부상·통증이 있는 사람, 무릎·허리에 부담이 되는 동작을 하면 안 되는 사람은 하지 않는다.
+- [ ] **같은 진행 순서**로 한다(필수 10개, 이 문서 2절 순서 그대로). 사람이 바뀌어도 카메라 위치는 그대로 두고, **정위치 확인(1절 카메라 거리 기준)만 그 사람 키로 다시** 한다(키가 다르면 몸 높이 60~80%가 달라진다).
+- [ ] **파일 note에 참여자 코드**: 명령의 `P01_`을 `P02_`로 바꿨는지 확인(5절).
+- [ ] 참가자마다 **기록표를 새로** 만든다. 참가자의 기록 삭제 요청이 있으면 그 사람의 세션 로그(파일 이름에는 코드가 없고 안의 note에 있으므로 기록표의 파일 이름·시각으로 찾는다)와 기록표 행을 삭제한다.
+- [ ] 안전: 쿼터·깊은 스쿼트·런지·의자는 **편한 범위에서만**, 연속 10회는 힘들면 중간에 멈추고 그 횟수를 입력.
+- [ ] 촬영 범위에 참가자 외의 사람이 지나가지 않게 한다.
+
+## 9. 끝나고
+- [ ] 기록표와 로그 파일 이름을 대조(빠진 세션, 입력 안 한 세션).
+- [ ] 로그 원본과 기록표를 `D:\FitRoute_backup\`에 복사해 백업(저장소에 올리지 않는다).
+- [ ] 분석은 사용자 확인 뒤에 한다: 임계값은 1차 값을 고정한 채 2차 로그에 적용한 결과를 먼저 본다(`field_test_2_protocol.md` 6절).
