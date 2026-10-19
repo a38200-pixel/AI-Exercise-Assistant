@@ -1,0 +1,11 @@
+﻿rule,normal_total,normal_rejected,8a_candidates,8a_remaining,8b_candidates,8b_remaining,8c_candidates,8c_remaining
+all 5 conditions,48,0,17,0,3,0,3,0
+without [duration >= 1.0 s],48,0,17,0,3,0,3,0
+without [hip_drop_norm >= 0.25],48,0,17,0,3,0,3,0
+without [ankle_gap_start_norm <= 0.25 (side only)],48,0,17,0,3,0,3,0
+without [torso_signed >= 30 deg],48,0,17,0,3,0,3,0
+without [sit_share <= 0.25],48,0,17,0,3,0,3,0
+FINAL 3 (duration + hip_drop + ankle gap),48,0,17,0,3,3,3,0
+FINAL 3 without [duration >= 1.0 s],48,0,17,0,3,3,3,0
+FINAL 3 without [hip_drop_norm >= 0.25],48,0,17,0,3,3,3,0
+FINAL 3 without [ankle_gap_start_norm <= 0.25 (side only)],48,0,17,0,3,3,3,3

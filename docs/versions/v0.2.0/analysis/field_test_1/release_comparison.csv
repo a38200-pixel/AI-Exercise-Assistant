@@ -1,0 +1,14 @@
+﻿session,what,actual_squats,nonsquat_motions,screen_count_v01x,replay_v01x,replay_matches_screen,geometry_candidates,geometry_after_transit
+0,"시험, 측면 정상",6,,,6,,6,6
+1(무효),"측면 정상, 횟수 착오로 중단",,,,3,,3,3
+1,측면 정상(평행),10,,,6,,11,10
+2,측면 깊게(deep),8,,7,7,True,10,8
+3,측면 얕음,8,,5,5,True,8,8
+4,측면 상체 숙임,8,,7,7,True,8,8
+5,측면 뒤꿈치 들림,8,,,5,,9,8
+6,사선 정상,5,,,5,,5,5
+7,정면 정상,5,,2,2,True,5,5
+8a,제자리 걷기 15초(스쿼트 아님),0,,0,0,True,17,17
+8b,의자 앉았다 일어나기(스쿼트 아님),0,3,2,2,True,3,3
+8c,런지 스트레칭(스쿼트 아님),0,3,1,1,True,4,3
+9,측면 반대 방향 정상,5,,,0,,6,6
