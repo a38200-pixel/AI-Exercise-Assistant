@@ -18,4 +18,5 @@
 - **1** (2026-10-12): session / frame / end.
 - **2** (2026-10-18): `frame`에 `rep`(RepTracker 상태·안내 사유)와 `lock.detail` 필드 추가, `event` 줄 추가. 읽는 쪽은 1과 2를 모두 읽는다.
 - 2 유지 (2026-10-19): `event`(`rep_end`)에 선택 키 `posture`(확정된 반복의 자세 점수: `total`, `worst_item`, `capped`, `item_status`, `item_scores`, `measures`; 탈락·중단이면 null) 추가. 기존 키는 그대로.
+- 2 유지 (2026-10-19): `frame.rep`에 선택 키 `framing`(그 프레임에 화면에 뜬 구도 안내 코드 `move_back`/`move_center` 또는 null) 추가. 기존 키(`state`, `notice`)는 그대로.
 - 2 유지 (2026-10-19): `footer` 줄 추가(`app_reps`, `mode`, `actual_reps`, `actual_status`, `note`, `prompt`). 기존 줄은 그대로.
