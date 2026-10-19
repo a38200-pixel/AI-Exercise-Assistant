@@ -36,6 +36,11 @@ from config.settings import (
     REP_MIN_SECONDS,
     REP_OTHER_EXERCISE_LABELS,
     REP_OTHER_EXERCISE_MAX_RATIO,
+    REP_RETURN_KNEE_ANGLE,
+    REP_SET_BASELINE_ENABLED,
+    REP_SET_BASELINE_HIP_PERCENTILE,
+    REP_SET_BASELINE_MIN_SAMPLES,
+    REP_SET_BASELINE_WINDOW_SECONDS,
     STANDING_KNEE_ANGLE,
 )
 from src.geometry_tracker import GeometryTracker, LockState, TrackedFrame
@@ -110,6 +115,11 @@ class RepFrame:
     measures: RepMeasures | None = None
     side_now: bool | None = None  # 이 프레임만 본 측면 판정(안내 사유용)
     body_valid: bool | None = None  # 이 프레임의 전신 유효 여부(안내 사유용)
+    knee_boundary: float | None = None  # 반복 경계 판정용 무릎각(REP_BOUNDARY_SIGNAL). None이면 knee_smoothed를 쓴다
+
+    @property
+    def boundary_knee(self) -> float | None:
+        return self.knee_boundary if self.knee_boundary is not None else self.knee_smoothed
 
     @classmethod
     def missing(cls, timestamp: float) -> "RepFrame":
@@ -130,6 +140,7 @@ class RepFrame:
             measures=measures,
             side_now=tracked.geometry_now.view.is_side,
             body_valid=tracked.geometry_now.full_body.valid,
+            knee_boundary=tracked.knee_angle_boundary,
         )
 
 
@@ -223,6 +234,13 @@ def _median(values: Sequence[float]) -> float:
     return float(np.median(array)) if len(array) else _NAN
 
 
+def _percentile(values: Sequence[float], percentile: float) -> float:
+    """NaN을 뺀 분위수. percentile=50이면 중앙값이다. 엉덩이 y는 작을수록 높으므로 낮은 분위수가 '높이 선' 쪽이다."""
+    array = np.asarray(values, dtype=float)
+    array = array[~np.isnan(array)]
+    return float(np.percentile(array, percentile)) if len(array) else _NAN
+
+
 def _or_nan(value: float | None) -> float:
     return _NAN if value is None else float(value)
 
@@ -251,11 +269,22 @@ class RepTracker:
         notice_delay_seconds: float = LOCK_GUIDANCE_DELAY_SECONDS,
         merge_rise_degrees: float = REP_MERGE_RISE_DEGREES,
         merge_drop_degrees: float = REP_MERGE_DROP_DEGREES,
+        return_angle: float | None = REP_RETURN_KNEE_ANGLE,
+        set_baseline: bool = REP_SET_BASELINE_ENABLED,
+        set_baseline_window_seconds: float = REP_SET_BASELINE_WINDOW_SECONDS,
+        set_baseline_min_samples: int = REP_SET_BASELINE_MIN_SAMPLES,
     ) -> None:
         if descent_angle >= standing_angle:
             raise ValueError("descent_angle must be below standing_angle (hysteresis).")
+        if return_angle is not None and not descent_angle < return_angle <= standing_angle:
+            raise ValueError("return_angle must be above descent_angle and not above standing_angle.")
         self._standing_angle = standing_angle
         self._descent_angle = descent_angle
+        # 복귀 각도를 낮추면 끝나는 프레임의 엉덩이가 더 낮으므로, 기준 높이는 세트 단위로 잡아야 한다(함께 켠다).
+        self._return_angle = standing_angle if return_angle is None else return_angle
+        self._set_baseline = bool(set_baseline) or self._return_angle < standing_angle
+        self._set_window = set_baseline_window_seconds
+        self._set_min_samples = set_baseline_min_samples
         self._max_gap = max_gap_seconds
         self._min_seconds = min_seconds
         self._min_hip_drop = min_hip_drop
@@ -297,6 +326,7 @@ class RepTracker:
         self._notice: str | None = None
         self._state = STATE_WAITING_LOCK
         self._baseline_samples: list[tuple[float, RepMeasures]] = []
+        self._set_samples: list[tuple[float, RepMeasures]] = []  # 세트 단위 기준 높이용(잠금이 유지되는 동안의 완전히 선 프레임)
         self._last_stand: _Sample | None = None
         self._samples: list[_Sample] = []
         self._baseline: _Baseline | None = None
@@ -434,9 +464,10 @@ class RepTracker:
         if not (frame.present and frame.locked):
             self._state = STATE_WAITING_LOCK
             self._baseline_samples.clear()
+            self._set_samples.clear()
             self._last_stand = None
             return None
-        knee = frame.knee_smoothed
+        knee = frame.boundary_knee
         if self._state == STATE_WAITING_LOCK:
             if knee is None or knee < self._standing_angle:
                 return None
@@ -455,14 +486,22 @@ class RepTracker:
             self._baseline_samples.append((frame.timestamp, frame.measures))
         cutoff = frame.timestamp - self._baseline_seconds
         self._baseline_samples = [(t, m) for t, m in self._baseline_samples if t >= cutoff]
+        if self._set_baseline and frame.measures is not None and (frame.knee_smoothed or 0.0) >= self._standing_angle:
+            self._set_samples.append((frame.timestamp, frame.measures))
+            set_cutoff = frame.timestamp - self._set_window
+            self._set_samples = [(t, m) for t, m in self._set_samples if t >= set_cutoff]
 
     def _start_rep(self, frame: RepFrame, label: str | None) -> None:
         stand = self._last_stand
         assert stand is not None
         measures = [m for _, m in self._baseline_samples]
+        hip_percentile = 50.0
+        if self._set_baseline and len(self._set_samples) >= self._set_min_samples:
+            measures = [m for _, m in self._set_samples]  # 세트 단위 기준 높이(부족하면 직전 1초로 되돌아간다)
+            hip_percentile = REP_SET_BASELINE_HIP_PERCENTILE
         self._baseline = (
             _Baseline(
-                hip_y=_median([m.hip_y for m in measures]),
+                hip_y=_percentile([m.hip_y for m in measures], hip_percentile),
                 heel_y=_median([m.heel_y for m in measures]),
                 leg_length=_median([m.leg_length for m in measures]),
                 ankle_gap=_median([m.ankle_gap for m in measures]),
@@ -474,7 +513,7 @@ class RepTracker:
         self._samples = [stand, self._sample(frame, label)]
         self._last_valid_t = frame.timestamp
         self._merge_count = 0
-        knee = float(frame.knee_smoothed)
+        knee = float(frame.boundary_knee)
         self._extrema = {"min_k": knee, "min_t": frame.timestamp, "peak_k": knee, "peak_t": frame.timestamp}
         self._state = STATE_IN_REP
 
@@ -483,13 +522,13 @@ class RepTracker:
         if frame.present and not frame.locked:
             return self._abort(timestamp, REASON_LOCK_LOST)
         self._samples.append(self._sample(frame, label))
-        knee = frame.knee_smoothed if frame.present else None
+        knee = frame.boundary_knee if frame.present else None
         if knee is None:
             if timestamp - self._last_valid_t > self._max_gap:
                 return self._abort(timestamp, REASON_TRACKING_LOST)
             return None
         self._last_valid_t = timestamp
-        if knee >= self._standing_angle:
+        if knee >= self._return_angle:
             return self._complete(frame)
         self._track_merge(timestamp, knee)
         return None
@@ -513,6 +552,7 @@ class RepTracker:
         self._samples = []
         self._baseline = None
         self._baseline_samples.clear()
+        self._set_samples.clear()
         self._last_stand = None
 
     def _complete(self, frame: RepFrame) -> RepResult:

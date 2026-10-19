@@ -16,7 +16,12 @@ from typing import Any, Sequence
 from config.settings import (
     BODY_LOCK_ACQUIRE_SIDE_SECONDS,
     BODY_LOCK_MISSING_RELEASE_SECONDS,
+    BODY_LOCK_RELEASE_GRACE_SECONDS,
     BODY_LOCK_RELEASE_NONSIDE_SECONDS,
+    ONE_EURO_BETA,
+    ONE_EURO_D_CUTOFF,
+    REP_BOUNDARY_LIGHT_MIN_CUTOFF,
+    REP_BOUNDARY_SIGNAL,
     STANDING_KNEE_ANGLE,
 )
 from src.pose_geometry import (
@@ -30,6 +35,9 @@ from src.pose_geometry import (
     ViewJudgement,
     analyze_frame,
 )
+
+
+BOUNDARY_SIGNALS = ("smoothed", "light", "raw")  # REP_BOUNDARY_SIGNAL로 고를 수 있는 반복 경계용 무릎각 신호
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,8 @@ class TrackedFrame:
     knee_angle_smoothed: float | None  # 전신이 유효한 프레임의 무릎각만 평활화한다
     standing: bool
     lock: LockState
+    # 반복 경계 판정용 무릎각(REP_BOUNDARY_SIGNAL). 기본("smoothed")은 knee_angle_smoothed와 같다. 무효 프레임은 둘 다 None.
+    knee_angle_boundary: float | None = None
 
 
 class BodyLockPolicy:
@@ -69,9 +79,10 @@ class BodyLockPolicy:
         acquire_side_seconds: float = BODY_LOCK_ACQUIRE_SIDE_SECONDS,
         release_nonside_seconds: float = BODY_LOCK_RELEASE_NONSIDE_SECONDS,
         missing_release_seconds: float = BODY_LOCK_MISSING_RELEASE_SECONDS,
+        release_grace_seconds: float = BODY_LOCK_RELEASE_GRACE_SECONDS,
     ) -> None:
         self._acquire_side_seconds = acquire_side_seconds
-        self._release_nonside_seconds = release_nonside_seconds
+        self._release_nonside_seconds = release_nonside_seconds + release_grace_seconds  # 유예는 해제 기준에 더한다
         self._missing_release_seconds = missing_release_seconds
         self.reset()
 
@@ -139,9 +150,16 @@ class GeometryTracker:
         missing_release_seconds: float = BODY_LOCK_MISSING_RELEASE_SECONDS,
         acquire_side_seconds: float = BODY_LOCK_ACQUIRE_SIDE_SECONDS,
         release_nonside_seconds: float = BODY_LOCK_RELEASE_NONSIDE_SECONDS,
+        release_grace_seconds: float = BODY_LOCK_RELEASE_GRACE_SECONDS,
+        boundary_signal: str = REP_BOUNDARY_SIGNAL,
+        boundary_light_min_cutoff: float = REP_BOUNDARY_LIGHT_MIN_CUTOFF,
         view_classifier: ViewClassifier | None = None,
         knee_filter: OneEuroFilter | None = None,
     ) -> None:
+        if boundary_signal not in BOUNDARY_SIGNALS:
+            raise ValueError(f"boundary_signal must be one of {BOUNDARY_SIGNALS}.")
+        self._boundary_signal = boundary_signal
+        self._boundary_filter = OneEuroFilter(min_cutoff=boundary_light_min_cutoff, beta=ONE_EURO_BETA, d_cutoff=ONE_EURO_D_CUTOFF)
         self._standing_knee_angle = standing_knee_angle
         self._missing_release_seconds = missing_release_seconds
         self._view_classifier = view_classifier
@@ -151,11 +169,13 @@ class GeometryTracker:
             acquire_side_seconds=acquire_side_seconds,
             release_nonside_seconds=release_nonside_seconds,
             missing_release_seconds=missing_release_seconds,
+            release_grace_seconds=release_grace_seconds,
         )
 
     def reset(self) -> None:
         """운동 모드를 바꾸거나 새 세션을 시작할 때 잠금과 평활화 상태를 모두 버린다."""
         self._knee_filter.reset()
+        self._boundary_filter.reset()
         self._lock.release()
         self._policy.reset()
 
@@ -195,9 +215,15 @@ class GeometryTracker:
         else:
             geometry = geometry_now
 
-        smoothed = None
+        smoothed = boundary = None
         if geometry.knee_angle is not None and geometry.full_body.valid:
             smoothed = self._knee_filter(geometry.knee_angle, timestamp)
+            if self._boundary_signal == "light":
+                boundary = self._boundary_filter(geometry.knee_angle, timestamp)
+            elif self._boundary_signal == "raw":
+                boundary = float(geometry.knee_angle)
+            else:
+                boundary = smoothed
         standing = smoothed is not None and smoothed >= self._standing_knee_angle
 
         lockable = geometry_now.full_body.valid and geometry_now.facing is not None
@@ -228,6 +254,7 @@ class GeometryTracker:
             knee_angle_smoothed=smoothed,
             standing=standing,
             lock=self.lock_state(event, detail),
+            knee_angle_boundary=boundary,
         )
 
     def update_missing(self, timestamp: float) -> LockState:
@@ -240,4 +267,5 @@ class GeometryTracker:
             detail = dict(self._policy.last_release)
         if self._policy.missing_long_enough(timestamp):
             self._knee_filter.reset()
+            self._boundary_filter.reset()
         return self.lock_state(event, detail)

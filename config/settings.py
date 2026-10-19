@@ -89,6 +89,26 @@ REP_BOTTOM_PLATEAU_DEGREES = 10.0
 REP_MERGE_RISE_DEGREES = 20.0
 REP_MERGE_DROP_DEGREES = 10.0
 
+# 대응안 후보(세트 중간 누락 진단용, v0.2.0): 모두 기본은 꺼짐이며 기본 동작은 바뀌지 않는다. 2차 실측 로그로 효과를 확인한 뒤 켤지 정한다.
+# 세트 단위 서 있는 기준 높이(가설 4): 켜면 서 있을 때 기준값(엉덩이·뒤꿈치 y, 다리 길이, 양발 간격)을 내려가기 직전 1초(REP_BASELINE_SECONDS)가
+# 아니라, 잠금이 유지되는 동안(세트) 최근 REP_SET_BASELINE_WINDOW_SECONDS 안에서 무릎각이 STANDING_KNEE_ANGLE 이상이던 프레임의 중앙값으로
+# 정한다(엉덩이 y는 중앙값 대신 높은 쪽 REP_SET_BASELINE_HIP_PERCENTILE 분위수: 세트 중에는 완전히 선 프레임이 적어 중앙값이 낮아지기 쉽다).
+# 휴지 없는 연속 세트에서는 직전 1초에 완전히 선 프레임이 거의 없어 기준 높이가 낮아지고 엉덩이 하강량이 작게 나온다.
+# 해당 프레임이 REP_SET_BASELINE_MIN_SAMPLES보다 적으면 기존 방식(직전 1초)으로 되돌아간다.
+REP_SET_BASELINE_ENABLED = False
+REP_SET_BASELINE_WINDOW_SECONDS = 30.0
+REP_SET_BASELINE_MIN_SAMPLES = 5
+REP_SET_BASELINE_HIP_PERCENTILE = 25.0
+# 복귀 각도 조정: 반복이 끝나는 '서 있음으로 복귀' 기준 무릎각. None이면 STANDING_KNEE_ANGLE과 같다(꺼짐).
+# REP_DESCENT_KNEE_ANGLE < 값 <= STANDING_KNEE_ANGLE이어야 한다. 낮추면 기준 높이가 더 낮은 프레임에서 끝나므로 세트 단위 기준 높이가 자동으로 함께 켜진다.
+REP_RETURN_KNEE_ANGLE = None
+# 반복 경계(내려감·복귀) 판정에 쓰는 무릎각 신호(가설 5). "smoothed"(기본): STANDING 판정과 같은 One Euro 평활값,
+# "light": 별도 가벼운 평활(min_cutoff만 REP_BOUNDARY_LIGHT_MIN_CUTOFF로 올림), "raw": 평활 없는 원본값. 잠금 정책의 STANDING 판정과 최저점 계산은 평활값을 그대로 쓴다.
+REP_BOUNDARY_SIGNAL = "smoothed"
+REP_BOUNDARY_LIGHT_MIN_CUTOFF = 4.0
+# 잠금 해제 유예(가설 2): 해제 기준(BODY_LOCK_RELEASE_NONSIDE_SECONDS)에 이 시간(초)을 더해 일시적인 비측면 판정으로 세트 중간에 잠금이 풀리는 것을 늦춘다. 0이면 꺼짐.
+BODY_LOCK_RELEASE_GRACE_SECONDS = 0.0
+
 # Landmark 시퀀스 로깅(진단용): 기본은 꺼져 있고 CLI --log-sequence로만 켠다. 영상은 저장하지 않는다.
 SEQUENCE_LOGGING_ENABLED = False
 # 얼굴 landmark(0~10번)의 좌표는 기본으로 저장하지 않는다. 코(0번)의 visibility만 시점 신호용으로 남긴다.
