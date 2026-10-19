@@ -109,6 +109,19 @@ REP_BOUNDARY_LIGHT_MIN_CUTOFF = 4.0
 # 잠금 해제 유예(가설 2): 해제 기준(BODY_LOCK_RELEASE_NONSIDE_SECONDS)에 이 시간(초)을 더해 일시적인 비측면 판정으로 세트 중간에 잠금이 풀리는 것을 늦춘다. 0이면 꺼짐.
 BODY_LOCK_RELEASE_GRACE_SECONDS = 0.0
 
+# 자세 점수(v0.2.0 Phase 3, 표시용): 판정 항목은 depth(최저점 무릎각)와 torso_shin(최저점의 |몸통각 - 정강이각|) 두 개뿐이다.
+# 정상 경계 이내 = 100점, 교정 경계 이상 = 0점, 사이는 선형. 뒤꿈치(heel)와 템포는 판정·점수에 쓰지 않는다(원자료만 기록).
+# 교정선은 가정이고 정상선은 field_test_1 분포(depth AUC 1.00, torso_shin AUC 0.997)로 잡았다. 2차 실측으로 검증한 뒤 확정한다.
+POSTURE_DEPTH_NORMAL_MAX = 80.0
+POSTURE_DEPTH_CORRECT_MIN = 95.0
+POSTURE_TORSO_SHIN_NORMAL_MAX = 25.0
+POSTURE_TORSO_SHIN_CORRECT_MIN = 35.0
+# 총점 = 판정된 항목 점수의 가중 평균. 두 항목 모두 분리도가 거의 1.0이라 우열을 가릴 근거가 없어 같은 가중치로 시작한다.
+POSTURE_WEIGHT_DEPTH = 0.5
+POSTURE_WEIGHT_TORSO_SHIN = 0.5
+# 교정 항목이 하나라도 있으면 총점이 이 값을 넘지 못한다. (가중치가 같으면 교정 항목이 0점이라 자연 최댓값과 같고, 가중치를 바꿔도 지켜지게 하는 안전장치다.)
+POSTURE_SCORE_CAP_WITH_CORRECTION = 50.0
+
 # Landmark 시퀀스 로깅(진단용): 기본은 꺼져 있고 CLI --log-sequence로만 켠다. 영상은 저장하지 않는다.
 SEQUENCE_LOGGING_ENABLED = False
 # 얼굴 landmark(0~10번)의 좌표는 기본으로 저장하지 않는다. 코(0번)의 visibility만 시점 신호용으로 남긴다.
