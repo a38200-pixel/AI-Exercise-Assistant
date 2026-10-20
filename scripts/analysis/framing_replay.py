@@ -22,8 +22,20 @@ from src.framing_guide import FramingGuide, classify_framing  # noqa: E402
 
 
 def candidate_spans(path: Path) -> list[tuple[float, float]]:
-    result = rf.replay(rf.load_log(path), rf.PRESETS["off"])
-    return [(r.t_start, r.t_end) for r in result.results]
+    """반복 중(IN_REP)인 구간. **실제 RepTracker가 프레임마다 가진 상태**에서 만든다(앱이 구도 안내에 넘기는 in_rep과 같은 값).
+    이전에는 반복 후보의 (시작, 끝) 시각을 썼는데 시작은 마지막으로 서 있던 프레임이라 경계에서 프레임 한두 개가 달랐다."""
+    states = rf.replay(rf.load_log(path), rf.PRESETS["off"]).states
+    spans, start, last = [], None, None
+    for t, state in states:
+        if state == "IN_REP":
+            start = t if start is None else start
+            last = t
+        elif start is not None:
+            spans.append((start - 1e-4, last + 1e-4))  # 로그 시각의 반올림(4자리)을 허용
+            start = None
+    if start is not None:
+        spans.append((start - 1e-4, last + 1e-4))
+    return spans
 
 
 def run(frames: list[dict[str, Any]], spans: list[tuple[float, float]], delay: float) -> list[dict[str, Any]]:

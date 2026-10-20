@@ -24,9 +24,14 @@ from src.rep_tracker import RepTracker  # noqa: E402
 REMOVED = 2.0  # 비율은 0~1이라 2.0이면 조건이 절대 걸리지 않는다
 
 
-def run(payload, other_max):
+def run(payload, other_max, **tracker_options):
+    """실제 RepTracker에 설정만 바꿔 재생한다. 새 조건(최저점 발 간격, 엉덩이 이동)은 따로 주지 않으면 **꺼진** 상태다.
+
+    이 도구가 처음 만들어질 때의 비교(ML 조건 0.40 대 제거, 새 조건 없음)를 그대로 재현하려는 것이다. 새 기본 동작과 비교하려면
+    run(payload, None, max_ankle_gap_bottom=0.40, max_hip_shift=0.70) 또는 replay_flags.replay를 그대로 쓴다."""
+    tracker_options = {"max_ankle_gap_bottom": None, "max_hip_shift": None, **tracker_options}
     original = rf.RepTracker
-    rf.RepTracker = partial(RepTracker, other_max_ratio=other_max)
+    rf.RepTracker = partial(RepTracker, other_max_ratio=other_max, **tracker_options)
     try:
         return rf.replay(payload, rf.PRESETS["off"])
     finally:

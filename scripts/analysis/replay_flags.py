@@ -84,6 +84,7 @@ class Replay:
     frames: int
     results: list = None  # 반복마다의 RepResult(확정·탈락 모두)
     events: list = None  # RepTracker 진단 이벤트(rep_end, rep_merge_suspect)
+    states: list = None  # 프레임마다 (시각, 업데이트 직후 RepTracker 상태). 구도 안내처럼 실시간 반복 상태가 필요한 재생에 쓴다
 
 
 # ---------------------------------------------------------------- 입력
@@ -145,7 +146,7 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
     light = OneEuroFilter(
         min_cutoff=settings.REP_BOUNDARY_LIGHT_MIN_CUTOFF, beta=settings.ONE_EURO_BETA, d_cutoff=settings.ONE_EURO_D_CUTOFF
     )
-    results, merge_suspects, releases, events = [], 0, 0, []
+    results, merge_suspects, releases, events, states = [], 0, 0, [], []
     leg = facing = None
     for v in frames:
         t = v["t"]
@@ -157,6 +158,7 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
                 if smoother is not None:
                     smoother.reset()
             result = tracker.update(RepFrame.missing(t, locked=policy.locked), v["label"])
+            states.append((t, tracker.state))
         else:
             knee = v["knee_smoothed"]
             if smoother is not None and knee is not None and v.get("knee_raw") is not None:
@@ -190,6 +192,7 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
                 side_now=bool(v["side_now"]), body_valid=bool(v["valid"]), knee_boundary=boundary,
             )
             result = tracker.update(frame, v["label"])
+            states.append((t, tracker.state))
         if result is not None:
             results.append(result)
         popped = tracker.pop_events()
@@ -211,6 +214,7 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
         frames=len(frames),
         results=results,
         events=events,
+        states=states,
     )
 
 

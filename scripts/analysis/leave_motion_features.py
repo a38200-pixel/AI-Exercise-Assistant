@@ -4,7 +4,7 @@
 특징(반복 구간 t_start~t_end의 프레임 기준):
   non_side   : landmark가 있는 프레임 중 측면 판정(view.is_side)이 아닌 비율
   yaw_range  : view.hip_yaw_deg 최대-최소 (도)
-  hipx_shift : 잠근 다리 엉덩이 x(프레임 픽셀)의 최대-최소 / 서 있을 때 L
+  hipx_shift : 실제 RepTracker의 hip_shift_norm = 잠근 다리 엉덩이 x(프레임 픽셀)의 최대-최소 / 반복 중 L 중앙값 (이 도구가 따로 계산하지 않는다)
   invalid    : landmark가 있는 프레임 중 전신 무효(full_body.valid=False) 비율
   missing    : RepTracker가 계산한 사람/자세 없음 비율(pose_missing_ratio)
   bbox_h     : YOLO bbox 높이 / 프레임 높이의 최대
@@ -28,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ml_condition_replay as ml  # noqa: E402
 import replay_flags as rf  # noqa: E402
 
-HIP_INDEX = {"left": 23, "right": 24}
 FEATURES = ("non_side", "yaw_range", "hipx_shift", "invalid", "missing", "bbox_h", "L_growth", "hip_drop", "seconds")
 
 
@@ -39,7 +38,7 @@ def load_raw(path: Path):
 def candidate_features(path: Path):
     payload = rf.load_log(path)
     result = ml.run(payload, ml.REMOVED)
-    now = ml.run(payload, 0.40)
+    now = rf.replay(payload, rf.PRESETS["off"])  # 새 기본 설정(지금 확정되는가)
     frames = load_raw(path)
     rows = []
     previous_end = -1e9
@@ -51,10 +50,6 @@ def candidate_features(path: Path):
         present = [f for f in window if f.get("person") and f.get("landmarks") is not None and f.get("geometry") is not None]
         base = [p for p in payload["frames"] if max(r.t_start - 1.0, previous_end) <= p["t"] <= r.t_start and p["present"] and p["leg_length"]]
         base_l = statistics.median(p["leg_length"] for p in base) if base else float("nan")
-        hip_x = []
-        for f in present:
-            x0, _, x1, _ = f["crop_bbox"]
-            hip_x.append(x0 + f["landmarks"][HIP_INDEX[r.leg]][0] * (x1 - x0))
         yaw = [f["view"]["hip_yaw_deg"] for f in present if f.get("view") and f["view"].get("hip_yaw_deg") is not None]
         window_l = [p["leg_length"] for p in payload["frames"] if r.t_start <= p["t"] <= r.t_end and p["present"] and p["leg_length"]]
         height = [(f["yolo_bbox"][3] - f["yolo_bbox"][1]) / f["frame_size"][1] for f in window if f.get("yolo_bbox") and f.get("person")]
@@ -63,7 +58,7 @@ def candidate_features(path: Path):
             "log": path.stem[8:], "t": r.t_start,
             "non_side": sum(1 for f in present if not (f.get("view") or {}).get("is_side")) / n,
             "yaw_range": (max(yaw) - min(yaw)) if yaw else float("nan"),
-            "hipx_shift": (max(hip_x) - min(hip_x)) / base_l if hip_x and base_l == base_l else float("nan"),
+            "hipx_shift": r.hip_shift_norm,  # 실제 RepTracker 값(반복 중 L 중앙값으로 정규화). 이전에는 이 도구가 따로 계산해 서 있을 때 L로 나눴다
             "invalid": sum(1 for f in present if not (f.get("full_body") or {}).get("valid")) / n,
             "missing": r.pose_missing_ratio, "bbox_h": max(height) if height else float("nan"),
             "L_growth": max(window_l) / base_l if window_l and base_l == base_l else float("nan"),

@@ -47,6 +47,7 @@ def replay(frames: list[dict[str, Any]], config: dict[str, dict], window: tuple[
     tracker = GeometryTracker(**config["tracker"])
     rep_tracker = RepTracker(**config["rep"])
     counted, rejected, leg_changes, waiting_in_window, invalid_frames = [], 0, 0, 0.0, 0
+    results = []  # 반복 후보마다의 RepResult(확정·탈락 모두): 다른 재생 도구와 반복 단위로 비교하는 데 쓴다
     previous_t = None
     previous_leg = None
     for frame in frames:
@@ -68,6 +69,7 @@ def replay(frames: list[dict[str, Any]], config: dict[str, dict], window: tuple[
             previous_leg = None
         result = rep_tracker.update(rep_frame, (frame.get("labels") or {}).get("stable"))
         if result is not None:
+            results.append(result)
             if result.counted:
                 counted.append((round(result.t_start, 2), round(result.t_end, 2)))
             else:
@@ -79,6 +81,7 @@ def replay(frames: list[dict[str, Any]], config: dict[str, dict], window: tuple[
         if tracked is not None and not tracked.geometry.full_body.valid and tracked.geometry_now.full_body.valid:
             invalid_frames += 1  # 잠근(또는 선택된) 다리는 무효인데 이 프레임의 다른 다리는 유효한 프레임
     return {
+        "results": results,
         "counted": counted,
         "rejected": rejected,
         "leg_changes": leg_changes,

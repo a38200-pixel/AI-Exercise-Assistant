@@ -2,7 +2,8 @@
 
 기준값은 RepTracker와 같은 방식으로 다시 구한다: 내려가기 직전 REP_BASELINE_SECONDS(1초) 안에서 서 있던(무릎각 STANDING 이상) 프레임의
 |왼쪽 발목 x - 오른쪽 발목 x|(프레임 픽셀) 중앙값 = 발 간격, |엉덩이-무릎| + |무릎-발목|(잠근 다리, 프레임 픽셀) 중앙값 = L.
-재구성한 비율이 RepTracker가 기록한 ankle_gap_norm과 얼마나 다른지도 함께 출력한다(검증).
+재구성한 비율이 RepTracker가 기록한 ankle_gap_norm과 얼마나 다른지도 함께 출력한다(검증). 최저점 비율은 실제 RepTracker의 ankle_gap_bottom_norm을 옆에 함께 보인다
+(판정에 쓰이는 값은 항상 RepTracker의 값이고, 이 도구의 재구성은 픽셀 값을 보여 주기 위한 설명용이다).
 
 실행(저장소 루트에서):
     python -m scripts.analysis.ankle_gap_analysis --fixtures --log data/landmark_sequences/session_X.jsonl [--trace 9 16]
@@ -48,7 +49,7 @@ def candidates(payload):
             "t": r.t_start, "counted": r.counted, "reasons": ",".join(r.reasons) or "-", "gap_px": gap, "L_px": length,
             "ratio": gap / length if length == length and length else float("nan"), "recorded": r.ankle_gap_norm,
             "L_bottom": median([f["leg_length"] for f in bottom]), "n": len(window), "hip_drop": r.hip_drop_norm,
-            "gap_bottom_px": gap_bottom, "gap_max_px": max((f["ankle_gap"] for f in inside), default=float("nan")),
+            "bottom_recorded": r.ankle_gap_bottom_norm, "gap_bottom_px": gap_bottom, "gap_max_px": max((f["ankle_gap"] for f in inside), default=float("nan")),
         })
     return rows
 
@@ -59,7 +60,7 @@ def print_table(name, rows):
     print("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in rows:
         shrink = r["L_bottom"] / r["L_px"] if r["L_px"] == r["L_px"] and r["L_px"] else float("nan")
-        print(f"| {r['t']:.1f} | {'O' if r['counted'] else 'X'} | {r['reasons']} | {r['gap_px']:.0f} | {r['L_px']:.0f} | {r['ratio']:.3f} | {r['recorded']:.3f} | {r['L_bottom']:.0f} | {shrink:.2f} | {r['n']} | {r['gap_bottom_px']:.0f} ({r['gap_bottom_px'] / r['L_px']:.2f}) | {r['gap_max_px']:.0f} ({r['gap_max_px'] / r['L_px']:.2f}) |")
+        print(f"| {r['t']:.1f} | {'O' if r['counted'] else 'X'} | {r['reasons']} | {r['gap_px']:.0f} | {r['L_px']:.0f} | {r['ratio']:.3f} | {r['recorded']:.3f} | {r['L_bottom']:.0f} | {shrink:.2f} | {r['n']} | {r['gap_bottom_px']:.0f} ({r['gap_bottom_px'] / r['L_px']:.2f}; 실제 RepTracker {r['bottom_recorded']:.2f}) | {r['gap_max_px']:.0f} ({r['gap_max_px'] / r['L_px']:.2f}) |")
 
 
 def main() -> int:
