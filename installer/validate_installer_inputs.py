@@ -21,7 +21,7 @@ ISS_PATH = INSTALLER_ROOT / "FitRouteAIClient.iss"
 MANIFEST_PATH = INSTALLER_ROOT / "installer_manifest.json"
 
 APP_ID = "{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}"
-DEFAULT_VERSION = "0.1.0"
+DEFAULT_VERSION = "0.2.0"
 SEMVER_PATTERN = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
