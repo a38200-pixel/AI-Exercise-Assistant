@@ -26,10 +26,10 @@
 
 ## D. 설치판(패키징 빌드) 확인 (사용자 확인 뒤 진행)
 - [ ] **설치판에서 운동 기록이 `%LOCALAPPDATA%\FitRoute\workout_logs\`에 저장되는지 확인**: 세션을 시작·종료한 뒤 `workout_<시작시각>.json`이 생기고(`schema_version` 1, 반복별 결과), 설치 폴더에는 아무것도 안 생기는지, 폴더가 읽기 전용일 때(또는 일부러 막았을 때) 세션 종료와 서버 업로드가 정상이고 콘솔·로그에 저장 실패 한 줄이 남는지 본다. 개발 실행은 `data/workout_logs/`.
-- [ ] 실제 PyInstaller 빌드를 만들어 `--diagnose-runtime`로 확인(지금까지는 spec·런처의 정적 확인만 했다).
-- [ ] 빌드한 앱에서 안내·점수 문구가 한글로 나오는지(맑은 고딕 폰트 탐색, 없으면 영어 대체), `PIL.*` hiddenimports가 spec에 반영됐는지(기준 spec만 수정함, `optimized*.spec` 3개는 손대지 않음).
-- [ ] 패키징 빌드에서 `--log-sequence`의 실제 횟수 입력(footer)이 묻지 않는지(frozen은 묻지 않음).
-- [ ] 설치판 스모크(사용자 직접, 카메라 사용): 앱 시작, 측면 스쿼트 몇 회가 세어지는지, 점수 문구가 나오는지, 구도 안내가 한글인지, 종료 후 로컬 기록이 생기는지.
+- [x] 실제 PyInstaller 빌드를 만들어 `--diagnose-runtime`로 확인: **PASS**(번들 커밋 c39a682, 설치 파일 `FitRoute-AI-Client-Setup-0.2.0.exe` 2,379,730,431바이트, 0.1.1보다 89,332바이트 큼; 승격·R2 업로드는 하지 않음, DEVLOG D단계).
+- [ ] (번들에 Pillow 포함 확인, 실제 화면은 `install_check_runsheet.md` 2절) 빌드한 앱에서 안내·점수 문구가 한글로 나오는지(맑은 고딕 폰트 탐색, 없으면 영어 대체), `PIL.*` hiddenimports가 spec에 반영됐는지(기준 spec만 수정함, `optimized*.spec` 3개는 손대지 않음).
+- [x] 패키징 빌드에서 footer 질문은 frozen에서 묻지 않음(코드·테스트). 단 `--log-sequence` 자체는 설치판에서 거부되지 않는다(DEVLOG D단계).
+- [ ] 설치판 스모크(진행표 `install_check_runsheet.md`, 사용자 직접, 카메라 사용): 앱 시작, 측면 스쿼트 몇 회가 세어지는지, 점수 문구가 나오는지, 구도 안내가 한글인지, 종료 후 로컬 기록이 생기는지.
 - [ ] **설치판 서버 업로드 경로 확인(D단계 추가, 사용자 직접)**: 9월 15일 이후 실제 업로드 경로가 한 번도 실행되지 않았다(Supabase `workout_sessions` 마지막 기록 2026-09-15). 설치판에서 **런처로 로그인 → 짧은 세션 1회 실행·종료(업로드) → `workout_sessions`와 `daily_workout_summary`에 행이 생겼는지 확인 → 테스트 행 삭제**. 실패하면 클라이언트(`api_client`, 토큰 전달)와 서버 중 어디인지 구분해 기록한다.
 
 ## E. 백업·저장소·병합

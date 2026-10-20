@@ -1845,3 +1845,24 @@
 - RELEASE.md: "작성 중 (골격)" 제거, 1절 한 줄 요약, **2·3절에 남아 있던 "라벨은 2차 조건" 설명을 현재 동작(라벨 비율은 기록만)으로 수정**(ML 조건 제거 때 놓친 오래된 문구), 5절 머리말, 6절 검증 방법(측정값만), 7절 0.3.0 후보. 연속 세트 문구는 앞서 확정한 문구 그대로.
 - `phase5_checklist.md`를 A~E 단계로 정리하고 완료 항목을 체크했다. 지난 진행표 3개에는 설정 확인 명령이 제거된 상수를 쓰므로 지금은 오류가 난다는 안내를 덧붙였다.
 - **설치판 빌드(D단계)는 사용자 확인 뒤에 한다.**
+
+## 2026-10-20 — Phase 5 D단계: 설치판 빌드 (카메라 사용 안 함)
+
+### 0. 업로드 주소 확인 (빌드 전)
+- 설치판은 런처가 `{app}\config.json`(= `installer/config.production.json`)의 `https://fitroute-api.onrender.com`과 로그인 토큰을 `FITROUTE_API_BASE_URL`·`FITROUTE_ACCESS_TOKEN`으로 AI Client 자식 프로세스에 넘긴다(`desktop_launcher/launcher.py`). `src/api_client.py`의 기본값 `http://127.0.0.1:8000`은 `python -m src.main` 직접 실행에서만 쓰인다. 0.1.1 릴리스 커밋(6d8995b) 이후 `launcher.py`, `api_client.py`, `config.production.json`, 업로드 경로는 바뀌지 않았다. **로컬 주소로 올라가는 경우가 아니므로 중단 조건에 해당하지 않아 빌드했다.**
+
+### 1. 빌드
+- 깨끗한 워크트리 `C:\fr_wt`(분리 HEAD)에서 빌드. **AI Client 번들은 커밋 c39a682, 설치 파일은 커밋 c63b5ee**(c39a682..c63b5ee는 설치 검증 스크립트의 번들 크기·SHA 고정값과 `docs/windows_installer.md`만 바꿨고 `src`·`config` 차이는 없다).
+- 번들: `packaging/ai_client/FitRouteAIClient.optimized_protoc.spec`를 `fitroute_build` 환경에서 PyInstaller 6.22.3으로 직접 실행(후보 빌드 스크립트는 없는 이전 기준 exe를 요구해 실행할 수 없어 같은 명령·환경 변수로 실행). 3,653개 파일, 5,204,054,133바이트, exe 49,573,405바이트, SHA-256 `7E3C9D3324EB19201EC5DCAA8D79D82DFA11E53904EABEFC676205EE600FB9CE`(0.1.1은 5,203,968,114바이트, 파일 수 같음).
+- `--diagnose-runtime`: **PASS**(모델 4개, OpenCV GUI/MSMF, CUDA 12.8 RTX 3080, TensorRT, MediaPipe, Ultralytics, HTTPX, XGBoost 9 클래스·132 특징). 알려진 xgboost 형식 UserWarning만 있다.
+- 설치 파일: `installer/build_installer.ps1 -Version 0.2.0` 성공(732초). `FitRoute-AI-Client-Setup-0.2.0.exe` **2,379,730,431바이트(2.216297 GiB)**, SHA-256 `4B5A4C467C562CB8C340723E846CCD88B549F07AB51AD257986753B61342A174`. 0.1.1(2,379,641,099바이트)보다 89,332바이트(0.004%) 크다.
+- **승격(promote)·`production.json` 변경·R2 업로드는 하지 않았다**(R2 객체는 한 번 올리면 같은 버전으로 다시 올릴 수 없어 사용자 확인 뒤에 한다). 산출물(`dist_candidate_protoc/`, `build_candidate_protoc/`, `installer_output/`)은 `.gitignore`에 있어 git에 없다. 빌드 스크립트가 워크트리의 `installer/installer_manifest.json`을 갱신했으나 커밋하지 않았다(릴리스 절차 산출물).
+
+### 2. 카메라 없이 확인한 것 (빌드 산출물)
+- Pillow: `_imagingft` 확장과 `PIL.ImageFont/ImageDraw/Image`가 번들에 있다(protoc spec에 PIL hiddenimports가 따로 없지만 포함됨). 이 PC에 `C:\Windows\Fonts\malgun.ttf`가 있다. 영어 대체는 단위 테스트로 확인했고 설치판에서 직접 실행해 본 것은 아니다.
+- 로컬 기록 경로 `%LOCALAPPDATA%\FitRoute\workout_logs`와 저장 실패 시 동작은 코드(`src/paths.py`)와 테스트로 확인했고 설치판 실행 확인은 진행표에 있다.
+- **`--log-sequence`는 설치판에서 거부되지 않는다**(`--help`에도 나온다). 켜면 설치 폴더 아래 `ai_client\data\landmark_sequences`에 쓰려 한다. 사용자가 쓰는 기능이 아니므로 동작은 바꾸지 않았고 기록만 한다. **횟수 입력(footer) 질문은 frozen에서 묻지 않는다**(`main.py`, 테스트).
+- 설치 파일 크기 비교는 위 1절.
+
+### 3. 사용자 직접 확인
+`install_check_runsheet.md`를 만들었다(업그레이드 설치, 스모크, 로컬 기록 위치, 서버 업로드와 Supabase SQL·정리, 문제 시 남길 정보). 설치판 서버 업로드는 README Known Issues(설치 후 최초 첫 세션 저장 실패 가능)와 겹칠 수 있어 재시도 기록을 넣었다. 실행 파일은 콘솔 모드(`console=True`)라 `[Cloud]` 출력이 창에 보인다.
