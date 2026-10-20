@@ -2,6 +2,8 @@
 
 한 줄에 JSON 하나. 구현: `src/sequence_logger.py`. 읽는 쪽(`scripts/analysis/*`)은 **알 수 없는 줄 종류를 건너뛴다.**
 
+> 설치판(frozen)에서도 `--log-sequence`는 거부되지 않는다. 켜면 설치 폴더 아래 `ai_client\data\landmark_sequences\`에 쓰려 하며, 종료 시 실제 횟수 입력(footer) 질문만 묻지 않는다(0.2.1/0.3.0에서 거부 검토, RELEASE.md 7절).
+
 ## 버전 규칙
 **호환이 깨지는 변경만 `format_version`을 올린다.** 기존 줄을 바꾸지 않는 선택적 줄 종류 추가는 버전을 유지하고, 아래 표에 줄 종류와 추가 시점을 기록한다.
 
