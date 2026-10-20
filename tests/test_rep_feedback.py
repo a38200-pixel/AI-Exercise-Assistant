@@ -115,9 +115,10 @@ def test_the_hip_drop_rejection_shows_the_deeper_hint_and_only_then() -> None:
     [
         {"hip_drop": 0.05, "down": 0.3, "hold": 0.0, "up": 0.3},  # 너무 짧음 + 얕음(걷다가 굽힌 것처럼): 사유가 둘 이상이면 안내하지 않는다
         {"ankle_gap_norm": 0.6},  # 양발이 벌어짐
-        {"label": "walk"},  # 다른 운동
+        {"bottom_ankle_gap_norm": 1.1},  # 최저점에서 양발이 벌어짐(런지 걸음)
+        {"hip_shift_norm": 1.2},  # 엉덩이가 가로로 크게 이동(자리를 뜨는 동작)
     ],
-    ids=["short-and-shallow", "feet-apart", "other-exercise"],
+    ids=["short-and-shallow", "feet-apart", "feet-apart-bottom", "hip-shift"],
 )
 def test_other_rejection_reasons_show_nothing(curve) -> None:
     rejected = run(RepTracker(), rep_curve(**curve))[0]

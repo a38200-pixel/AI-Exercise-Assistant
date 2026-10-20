@@ -1,4 +1,4 @@
-"""RepTracker: 평활 무릎각 시계열로 스쿼트 반복을 나누고, 기하 조건(+ML 2차 조건)을 만족한 반복만 확정한다.
+"""RepTracker: 평활 무릎각 시계열로 스쿼트 반복을 나누고, 기하 조건을 만족한 반복만 확정한다(ML 라벨 비율은 기록만 한다).
 
 반복: 평활 무릎각이 STANDING_KNEE_ANGLE 이상이던 뒤 REP_DESCENT_KNEE_ANGLE 미만으로 내려갔다가 다시
 STANDING_KNEE_ANGLE 이상이 되면 1회다(히스테리시스). 시작은 반드시 잠긴 상태의 STANDING이어야 한다. BodyLock은
@@ -6,9 +6,12 @@ GeometryTracker가 정책(측면이 유지될 때만 잠금, 서 있는 중 측�
 RepTracker는 그 결과를 쓴다. 그래서 측면이 아니면 반복을 세지 않는다(측면 전용).
 
 확정 조건(모두 field_test_1 실측 기반 초기값, config/settings.py):
-- 1차 기하: 반복 길이 >= REP_MIN_SECONDS, 엉덩이 하강량 >= REP_MIN_HIP_DROP(서 있을 때 대비, 다리 길이 비),
-  서 있을 때 양발 간격 <= REP_MAX_ANKLE_GAP(다리 길이 비, 측면 전용).
-- 2차 ML: 반복 구간의 stable 라벨 시간 중 REP_OTHER_EXERCISE_LABELS의 비율 <= REP_OTHER_EXERCISE_MAX_RATIO.
+- 기하: 반복 길이 >= REP_MIN_SECONDS, 엉덩이 하강량 >= REP_MIN_HIP_DROP(서 있을 때 대비, 다리 길이 비),
+  서 있을 때 양발 간격 <= REP_MAX_ANKLE_GAP(다리 길이 비, 측면 전용),
+  최저점(±REP_BOTTOM_WINDOW_SECONDS)의 양발 간격 <= REP_MAX_ANKLE_GAP_BOTTOM(런지 걸음을 거름),
+  반복 중 잠근 다리 엉덩이 x 이동 폭 <= REP_MAX_HIP_SHIFT(반복 중 다리 길이 중앙값 비, 자리를 뜨는 동작을 거름. 반복 중 잠금은 그대로 고정하고 끝날 때 판정에만 쓴다).
+- ML: 반복 구간의 stable 라벨 시간 중 REP_OTHER_EXERCISE_LABELS의 비율은 rep_end에 기록만 한다. 상한(REP_OTHER_EXERCISE_MAX_RATIO)을 숫자로
+  주면 다시 확정 조건이 되지만 기본은 None(조건 아님)이다. 근거는 config/settings.py의 주석과 DEVLOG.
 - 일부러 넣지 않은 것: 몸통 숙임 하한(몸통을 세우는 스쿼트를 탈락시킴), sit 비율(sit은 실제 스쿼트가 오분류되는 라벨),
   최저점 체류(여유 없음), 좌우 무릎 차이(반대 방향에서 먼 쪽 다리가 불안정). 의자·박스 앉았다 일어나기는 걸러지지
   않고 스쿼트로 센다(알려진 한계).
@@ -27,7 +30,10 @@ from config.settings import (
     REP_BASELINE_SECONDS,
     REP_BOTTOM_PLATEAU_DEGREES,
     REP_DESCENT_KNEE_ANGLE,
+    REP_BOTTOM_WINDOW_SECONDS,
     REP_MAX_ANKLE_GAP,
+    REP_MAX_ANKLE_GAP_BOTTOM,
+    REP_MAX_HIP_SHIFT,
     REP_MAX_GAP_SECONDS,
     REP_MERGE_DROP_DEGREES,
     REP_MERGE_RISE_DEGREES,
@@ -61,6 +67,8 @@ NOTICE_FULL_BODY_INVALID = "full_body_invalid"
 REASON_TOO_SHORT = "too_short"
 REASON_SHALLOW_HIP_DROP = "shallow_hip_drop"
 REASON_FEET_APART = "feet_apart"
+REASON_FEET_APART_BOTTOM = "feet_apart_bottom"  # 최저점에서 양발이 벌어짐(런지 걸음)
+REASON_HIP_SHIFT = "hip_shift"  # 반복 중 엉덩이가 가로로 크게 이동(자리를 뜨는 동작)
 REASON_OTHER_EXERCISE = "other_exercise"
 REASON_NO_BASELINE = "no_baseline"
 REASON_TRACKING_LOST = "tracking_lost"
@@ -82,6 +90,7 @@ class RepMeasures:
     heel_y: float
     leg_length: float  # |엉덩이-무릎| + |무릎-발목|
     ankle_gap: float  # |왼쪽 발목 x - 오른쪽 발목 x|
+    hip_x: float = _NAN  # 잠근 다리 엉덩이 x(프레임 픽셀). 옛 fixture처럼 모르면 NaN이고 엉덩이 이동 조건은 건너뛴다
 
 
 def measure_frame(landmarks: Sequence[Any], crop_bbox: Sequence[int], leg: str) -> RepMeasures:
@@ -99,6 +108,7 @@ def measure_frame(landmarks: Sequence[Any], crop_bbox: Sequence[int], leg: str) 
         heel_y=float(crop_bbox[1] + at(f"{leg}_heel")[1]),
         leg_length=float(np.linalg.norm(hip - knee) + np.linalg.norm(knee - ankle)),
         ankle_gap=float(abs(at("left_ankle")[0] - at("right_ankle")[0])),
+        hip_x=float(crop_bbox[0] + hip[0]),
     )
 
 
@@ -197,6 +207,8 @@ class RepResult:
     min_knee_angle: float = _NAN
     hip_drop_norm: float = _NAN  # (최저점 엉덩이 y - 서 있을 때 엉덩이 y) / 다리 길이
     ankle_gap_norm: float = _NAN  # 서 있을 때 양발 간격 / 다리 길이
+    ankle_gap_bottom_norm: float = _NAN  # 최저점 ±REP_BOTTOM_WINDOW_SECONDS의 양발 간격(중앙값) / 서 있을 때 다리 길이
+    hip_shift_norm: float = _NAN  # 반복 중 잠근 다리 엉덩이 x의 (최대 - 최소) / 반복 중 다리 길이 중앙값
     descent_seconds: float = _NAN
     bottom_dwell_seconds: float = _NAN
     ascent_seconds: float = _NAN
@@ -224,6 +236,9 @@ class _Sample:
     torso: float
     shin: float
     label: str
+    hip_x: float = _NAN
+    ankle_gap: float = _NAN  # 프레임 픽셀
+    leg_length: float = _NAN  # 프레임 픽셀
 
 
 @dataclass
@@ -283,7 +298,10 @@ class RepTracker:
         min_hip_drop: float = REP_MIN_HIP_DROP,
         max_ankle_gap: float = REP_MAX_ANKLE_GAP,
         other_labels: Sequence[str] = REP_OTHER_EXERCISE_LABELS,
-        other_max_ratio: float = REP_OTHER_EXERCISE_MAX_RATIO,
+        other_max_ratio: float | None = REP_OTHER_EXERCISE_MAX_RATIO,
+        max_ankle_gap_bottom: float | None = REP_MAX_ANKLE_GAP_BOTTOM,
+        max_hip_shift: float | None = REP_MAX_HIP_SHIFT,
+        bottom_window_seconds: float = REP_BOTTOM_WINDOW_SECONDS,
         baseline_seconds: float = REP_BASELINE_SECONDS,
         plateau_degrees: float = REP_BOTTOM_PLATEAU_DEGREES,
         notice_delay_seconds: float = LOCK_GUIDANCE_DELAY_SECONDS,
@@ -312,7 +330,10 @@ class RepTracker:
         self._min_hip_drop = min_hip_drop
         self._max_ankle_gap = max_ankle_gap
         self._other_labels = frozenset(other_labels)
-        self._other_max_ratio = other_max_ratio
+        self._other_max_ratio = other_max_ratio  # None이면 조건이 아니라 기록만 한다
+        self._max_ankle_gap_bottom = max_ankle_gap_bottom
+        self._max_hip_shift = max_hip_shift
+        self._bottom_window = bottom_window_seconds
         self._baseline_seconds = baseline_seconds
         self._plateau = plateau_degrees
         self._notice_delay = notice_delay_seconds
@@ -396,6 +417,8 @@ class RepTracker:
             "total_seconds": _json_number(result.total_seconds),
             "hip_drop_norm": _json_number(result.hip_drop_norm),
             "ankle_gap_norm": _json_number(result.ankle_gap_norm),
+            "ankle_gap_bottom_norm": _json_number(result.ankle_gap_bottom_norm),
+            "hip_shift_norm": _json_number(result.hip_shift_norm),
             "other_exercise_ratio": _json_number(result.other_exercise_ratio),
             "pose_missing_ratio": _json_number(result.pose_missing_ratio),
             "label_seconds": result.label_seconds,
@@ -405,6 +428,8 @@ class RepTracker:
                 "min_seconds": self._min_seconds,
                 "min_hip_drop": self._min_hip_drop,
                 "max_ankle_gap": self._max_ankle_gap,
+                "max_ankle_gap_bottom": self._max_ankle_gap_bottom,
+                "max_hip_shift": self._max_hip_shift,
                 "other_max_ratio": self._other_max_ratio,
                 "standing_angle": self._standing_angle,
             },
@@ -482,6 +507,9 @@ class RepTracker:
             torso=_or_nan(frame.torso_signed),
             shin=_or_nan(frame.shin_signed),
             label=label if label is not None else _LABEL_NONE,
+            hip_x=measures.hip_x if measures else _NAN,
+            ankle_gap=measures.ankle_gap if measures else _NAN,
+            leg_length=measures.leg_length if measures else _NAN,
         )
 
     def _update_idle(self, frame: RepFrame, label: str | None) -> RepResult | None:
@@ -612,6 +640,15 @@ class RepTracker:
         usable_base = base is not None and base.leg_length > 0 and not math.isnan(base.hip_y)
         hip_drop = (hip_bottom - base.hip_y) / base.leg_length if usable_base and not math.isnan(hip_bottom) else _NAN
         ankle_gap = base.ankle_gap / base.leg_length if usable_base and not math.isnan(base.ankle_gap) else _NAN
+        near_bottom = np.abs(times - times[bottom]) <= self._bottom_window
+        gap_bottom_px = _median([s.ankle_gap for s, keep in zip(samples, near_bottom) if keep])
+        ankle_gap_bottom = gap_bottom_px / base.leg_length if usable_base and not math.isnan(gap_bottom_px) else _NAN
+        # 엉덩이 이동은 서 있을 때 L이 아니라 **반복 중 L의 중앙값**으로 정규화한다. 카메라로 다가오며 일어난 동작은 서 있는 기준 창의 L이 이미 부풀어(c10 80.1초: 309 대 194 px)
+        # 서 있을 때 L로 나누면 그 동작이 0.74로 줄어 상한 0.70과의 여유가 6%뿐이다. 반복 중 L의 중앙값으로 나눈 구현 값은 그 동작 2.6, 스쿼트 121개 최대 0.46(세션 16, 그 밖은 0.36)이다.
+        hip_xs = np.array([s.hip_x for s in samples], dtype=float)
+        hip_xs = hip_xs[~np.isnan(hip_xs)]
+        rep_leg = _median([s.leg_length for s in samples])
+        hip_shift = float(hip_xs.max() - hip_xs.min()) / rep_leg if len(hip_xs) and rep_leg > 0 else _NAN
         heel_rise = base.heel_y - heel_bottom if usable_base and not math.isnan(base.heel_y) else _NAN
 
         plateau = np.nan_to_num(knees, nan=999.0) <= knees[bottom] + self._plateau
@@ -645,7 +682,11 @@ class RepTracker:
             reasons.append(REASON_SHALLOW_HIP_DROP)
         if not math.isnan(ankle_gap) and ankle_gap > self._max_ankle_gap:
             reasons.append(REASON_FEET_APART)
-        if other_ratio > self._other_max_ratio:
+        if self._max_ankle_gap_bottom is not None and not math.isnan(ankle_gap_bottom) and ankle_gap_bottom > self._max_ankle_gap_bottom:
+            reasons.append(REASON_FEET_APART_BOTTOM)
+        if self._max_hip_shift is not None and not math.isnan(hip_shift) and hip_shift > self._max_hip_shift:
+            reasons.append(REASON_HIP_SHIFT)
+        if self._other_max_ratio is not None and other_ratio > self._other_max_ratio:
             reasons.append(REASON_OTHER_EXERCISE)
 
         result = RepResult(
@@ -659,6 +700,8 @@ class RepTracker:
             min_knee_angle=float(knees[bottom]),
             hip_drop_norm=hip_drop,
             ankle_gap_norm=ankle_gap,
+            ankle_gap_bottom_norm=ankle_gap_bottom,
+            hip_shift_norm=hip_shift,
             descent_seconds=float(times[first] - t_start),
             bottom_dwell_seconds=float(times[last] - times[first]),
             ascent_seconds=float(t_end - times[last]),

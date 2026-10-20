@@ -194,7 +194,8 @@ def rep_record(result: RepResult, index: int, rep_number: int | None, session_st
 def _decision_settings() -> dict[str, Any]:
     """기록 시점의 판정 기준(임계값은 2차 실측 뒤 바뀔 수 있어, 점수를 나중에 해석할 수 있게 함께 남긴다)."""
     names = (
-        "REP_MIN_SECONDS", "REP_MIN_HIP_DROP", "REP_MAX_ANKLE_GAP", "REP_OTHER_EXERCISE_MAX_RATIO",
+        "REP_MIN_SECONDS", "REP_MIN_HIP_DROP", "REP_MAX_ANKLE_GAP", "REP_MAX_ANKLE_GAP_BOTTOM", "REP_MAX_HIP_SHIFT",
+        "REP_OTHER_EXERCISE_MAX_RATIO",
         "POSTURE_DEPTH_NORMAL_MAX", "POSTURE_DEPTH_CORRECT_MIN", "POSTURE_DEPTH_ZERO_AT",
         "POSTURE_TORSO_SHIN_NORMAL_MAX", "POSTURE_TORSO_SHIN_CORRECT_MIN",
         "POSTURE_WEIGHT_DEPTH", "POSTURE_WEIGHT_TORSO_SHIN", "POSTURE_SCORE_CAP_WITH_CORRECTION",

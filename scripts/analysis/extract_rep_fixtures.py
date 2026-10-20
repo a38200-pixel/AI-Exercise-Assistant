@@ -35,8 +35,8 @@ SESSIONS = {"1": 10, "2": 8, "3": 8, "4": 8, "5": 8, "6": 5, "7": 5, "8a": 0, "8
 # lock_*는 로깅 당시의 옛 임시 정책이 남긴 값이라 참고용이다.
 COLUMNS = [
     "t", "present", "knee_smoothed", "locked", "lock_leg", "lock_facing", "torso_signed", "shin_signed",
-    "label", "hip_y", "heel_y", "leg_length", "ankle_gap", "side_now", "valid", "facing_now", "leg_now", "knee_raw",
-]  # knee_raw: 평활 전 무릎각(반복 경계 신호 대응안 재생용)
+    "label", "hip_y", "heel_y", "leg_length", "ankle_gap", "side_now", "valid", "facing_now", "leg_now", "knee_raw", "hip_x",
+]  # knee_raw: 평활 전 무릎각(반복 경계 신호 대응안 재생용), hip_x: 잠근 다리 엉덩이 x(엉덩이 이동 조건용, 2026-10-19 추가)
 
 
 def _round(value, digits=4):
@@ -59,7 +59,7 @@ def extract(path: Path) -> list[list]:
             if not record.get("person") or record.get("landmarks") is None or geometry is None:
                 rows.append(
                     [_round(record["t"]), 0, None, 0, None, None, None, None, labels.get("stable"), None, None, None, None,
-                     None, None, None, None, None]
+                     None, None, None, None, None, None]
                 )
                 continue
             measures = measure_frame(_landmark_tuples(record["landmarks"]), record["crop_bbox"], geometry["leg"])
@@ -71,6 +71,7 @@ def extract(path: Path) -> list[list]:
                     _round(measures.leg_length, 2), _round(measures.ankle_gap, 2),
                     int(bool((record.get("view") or {}).get("is_side"))), int(bool((record.get("full_body") or {}).get("valid"))),
                     geometry.get("facing_now"), geometry.get("leg_now"), _round(geometry["knee"]),
+                    _round(measures.hip_x, 2),
                 ]
             )
     return rows

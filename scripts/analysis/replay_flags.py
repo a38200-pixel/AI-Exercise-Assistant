@@ -179,7 +179,12 @@ def replay(payload: dict[str, Any], flags: Flags, *, fps: float | None = None) -
                     boundary = raw
                 elif flags.boundary == "light":
                     boundary = light(raw, t)
-            measures = RepMeasures(v["hip_y"], v["heel_y"], v["leg_length"], v["ankle_gap"]) if v["hip_y"] is not None else None
+            hip_x = v.get("hip_x")  # 옛 fixture에는 없다(엉덩이 이동 조건은 NaN이면 건너뛴다)
+            measures = (
+                RepMeasures(v["hip_y"], v["heel_y"], v["leg_length"], v["ankle_gap"], float("nan") if hip_x is None else hip_x)
+                if v["hip_y"] is not None
+                else None
+            )
             frame = RepFrame(
                 t, True, knee, policy.locked, leg, facing, v["torso_signed"], v["shin_signed"], measures,
                 side_now=bool(v["side_now"]), body_valid=bool(v["valid"]), knee_boundary=boundary,

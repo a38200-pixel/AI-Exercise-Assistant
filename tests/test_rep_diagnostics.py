@@ -71,17 +71,26 @@ def test_a_confirmed_rep_leaves_one_json_safe_event_with_its_measurements_and_li
     assert event["min_knee"] == pytest.approx(70.0, abs=0.5) and event["hip_drop_norm"] == pytest.approx(0.55, abs=0.03)
     assert event["ankle_gap_norm"] == pytest.approx(0.02, abs=0.005) and event["other_exercise_ratio"] == 0.0
     assert event["limits"] == {
-        "min_seconds": 1.0, "min_hip_drop": 0.20, "max_ankle_gap": 0.25, "other_max_ratio": 0.40, "standing_angle": 160.0,
+        "min_seconds": 1.0, "min_hip_drop": 0.20, "max_ankle_gap": 0.25, "max_ankle_gap_bottom": 0.40, "max_hip_shift": 0.70,
+        "other_max_ratio": None, "standing_angle": 160.0,  # ML 비율은 조건이 아니라 기록만 한다(None)
     }
+    assert event["ankle_gap_bottom_norm"] == pytest.approx(0.02, abs=0.005) and event["hip_shift_norm"] is None  # 엉덩이 x를 모르는 합성 입력
     assert tracker.pop_events() == []  # 가져가면 비워진다
 
 
 def test_a_rejected_rep_records_the_failed_conditions_with_their_values() -> None:
     event = events_of(RepTracker(), rep_curve(hip_drop=0.10, label="walk"))[0]
-    assert event["counted"] is False and set(event["reasons"]) == {"shallow_hip_drop", "other_exercise"}
+    assert event["counted"] is False and event["reasons"] == ["shallow_hip_drop"]  # ML 비율(1.00)은 사유가 아니다
     assert event["hip_drop_norm"] == pytest.approx(0.10, abs=0.03)  # 기준(0.20) 미달
-    assert event["other_exercise_ratio"] > event["limits"]["other_max_ratio"]  # 기준(0.40) 초과
+    assert event["other_exercise_ratio"] > 0.40 and event["limits"]["other_max_ratio"] is None  # 비율은 기록만 된다
     assert event["total_seconds"] >= event["limits"]["min_seconds"]  # 이 조건은 통과했다는 것도 보인다
+
+
+def test_the_new_geometry_conditions_record_their_values_and_reasons_in_the_event() -> None:
+    event = events_of(RepTracker(), rep_curve(bottom_ankle_gap_norm=1.1, hip_shift_norm=0.9))[0]
+    assert event["counted"] is False and set(event["reasons"]) == {"feet_apart_bottom", "hip_shift"}
+    assert event["ankle_gap_bottom_norm"] == pytest.approx(1.1, abs=0.02) and event["hip_shift_norm"] == pytest.approx(0.9, abs=0.02)
+    json.dumps(event, allow_nan=False)
 
 
 def test_a_rep_aborted_by_a_gap_is_flagged_as_a_timeout_and_stays_json_safe() -> None:

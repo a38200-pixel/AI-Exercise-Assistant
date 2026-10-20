@@ -204,10 +204,25 @@ def test_side_squat_fixtures_keep_their_exact_counts_with_each_flag_on(session, 
 
 
 @pytest.mark.parametrize("preset", FLAGGED)
-@pytest.mark.parametrize("session", ["6", "7", "8a", "8c"])
+@pytest.mark.parametrize("session", ["6", "7", "8a"])
 def test_non_squats_and_non_side_fixtures_still_count_nothing_with_each_flag_on(session, preset) -> None:
     result = replay_flags.replay(replay_flags.load_fixture(session), replay_flags.PRESETS[preset])
     assert result.counted == 0
+
+
+@pytest.mark.parametrize("preset", ["light", "raw", "grace0.6"])
+def test_the_lunge_stretch_is_still_not_counted_with_the_flags_that_keep_the_standing_baseline(preset) -> None:
+    result = replay_flags.replay(replay_flags.load_fixture("8c"), replay_flags.PRESETS[preset])
+    assert result.counted == 0  # 서 있을 때 양발 간격(0.55)이 그대로라 feet_apart로 걸러진다
+
+
+@pytest.mark.parametrize("preset", ["baseline", "return155", "all"])
+def test_known_gap_the_set_baseline_flags_let_the_lunge_stretch_through_now_that_the_ml_condition_is_gone(preset) -> None:
+    # 알려진 한계(2026-10-19): 세트 단위 기준(baseline, return155, all)은 서 있을 때 양발 간격 기준을 0.03~0.05로 낮춰 feet_apart가 사라지고,
+    # 이전에는 ML 라벨 비율(0.48~0.55)이 마지막 방어선이었다. ML 조건을 뺀 뒤 1차 스트레치 런지(8c) 3개가 세어진다(최저점 간격 0.13~0.35,
+    # 엉덩이 이동 0.09~0.14라 새 기하 조건에도 안 걸린다). 이 플래그들은 기본 꺼짐이며 켜기 전에 이 점을 다시 확인해야 한다.
+    result = replay_flags.replay(replay_flags.load_fixture("8c"), replay_flags.PRESETS[preset])
+    assert result.counted == 3
 
 
 def test_the_replay_script_with_flags_off_matches_the_regular_fixture_simulation() -> None:

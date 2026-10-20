@@ -298,8 +298,11 @@ def format_events(events: list[dict[str, Any]]) -> list[str]:
                 f"len {number(event['total_seconds'])} (>= {limits.get('min_seconds', '-')}) "
                 f"hip {number(event['hip_drop_norm'])} (>= {limits.get('min_hip_drop', '-')}) "
                 f"gap {number(event['ankle_gap_norm'])} (<= {limits.get('max_ankle_gap', '-')}) "
-                f"ml {number(event['other_exercise_ratio'])} (<= {limits.get('other_max_ratio', '-')}) "
-                f"min_knee {number(event['min_knee'], 0)} merge_suspects {event.get('merge_suspects', 0)}"
+                + (f"bottom_gap {number(event['ankle_gap_bottom_norm'])} (<= {limits.get('max_ankle_gap_bottom', '-')}) " if "ankle_gap_bottom_norm" in event else "")
+                + (f"hip_shift {number(event['hip_shift_norm'])} (<= {limits.get('max_hip_shift', '-')}) " if "hip_shift_norm" in event else "")
+                + f"ml {number(event['other_exercise_ratio'])} "
+                + (f"(<= {limits['other_max_ratio']}) " if limits.get("other_max_ratio") is not None else "(record only) " if "other_max_ratio" in limits else "(<= -) ")
+                + f"min_knee {number(event['min_knee'], 0)} merge_suspects {event.get('merge_suspects', 0)}"
                 + (" TIMEOUT" if event.get("timeout") else "")
             )
         elif kind == "rep_merge_suspect":

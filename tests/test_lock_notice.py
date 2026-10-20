@@ -293,7 +293,8 @@ def test_the_switch_and_the_rep_constants_are_in_the_logging_snapshot_and_header
     snapshot = settings_snapshot()
     expected = {
         "USE_REP_TRACKER": settings.USE_REP_TRACKER, "LOCK_GUIDANCE_DELAY_SECONDS": 2.0, "REP_MIN_HIP_DROP": 0.20,
-        "REP_MIN_SECONDS": 1.0, "REP_MAX_ANKLE_GAP": 0.25, "REP_OTHER_EXERCISE_MAX_RATIO": 0.40,
+        "REP_MIN_SECONDS": 1.0, "REP_MAX_ANKLE_GAP": 0.25, "REP_OTHER_EXERCISE_MAX_RATIO": None,
+        "REP_MAX_ANKLE_GAP_BOTTOM": 0.40, "REP_MAX_HIP_SHIFT": 0.70, "REP_BOTTOM_WINDOW_SECONDS": 0.25,
         "BODY_LOCK_ACQUIRE_SIDE_SECONDS": 0.5, "BODY_LOCK_RELEASE_NONSIDE_SECONDS": 0.4,
     }
     for name, value in expected.items():

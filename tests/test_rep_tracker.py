@@ -1,6 +1,7 @@
 """RepTracker: 합성 시퀀스로 상태기계와 확정 조건을, 실측 로그에서 뽑은 fixture로 회귀를 검증한다."""
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,8 @@ from src.rep_tracker import (
     NOTICE_FULL_BODY_INVALID,
     NOTICE_NOT_SIDE,
     REASON_FEET_APART,
+    REASON_FEET_APART_BOTTOM,
+    REASON_HIP_SHIFT,
     REASON_LOCK_LOST,
     REASON_OTHER_EXERCISE,
     REASON_SHALLOW_HIP_DROP,
@@ -37,7 +40,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "rep_sessions"
 # ---------------------------------------------------------------- 합성 시퀀스
 
 
-def make_frame(t, knee, *, hip_y=BASE_HIP_Y, ankle_gap=3.0, locked=True, present=True):
+def make_frame(t, knee, *, hip_y=BASE_HIP_Y, ankle_gap=3.0, locked=True, present=True, hip_x=float("nan")):
     if not present:
         return RepFrame.missing(t, locked=locked)  # 놓쳐도 잠금은 유지된다(짧은 놓침)
     return RepFrame(
@@ -49,7 +52,7 @@ def make_frame(t, knee, *, hip_y=BASE_HIP_Y, ankle_gap=3.0, locked=True, present
         facing="right",
         torso_signed=45.0,
         shin_signed=28.0,
-        measures=RepMeasures(hip_y=hip_y, heel_y=318.0, leg_length=LEG_LENGTH, ankle_gap=ankle_gap),
+        measures=RepMeasures(hip_y=hip_y, heel_y=318.0, leg_length=LEG_LENGTH, ankle_gap=ankle_gap, hip_x=hip_x),
     )
 
 
@@ -64,11 +67,16 @@ def rep_curve(
     bottom=70.0,
     hip_drop=0.55,
     ankle_gap_norm=0.02,
+    bottom_ankle_gap_norm=None,
+    hip_shift_norm=None,
     label="squat",
     locked=True,
     blank=None,
 ):
-    """서 있음 → 내려감 → 최저점 유지 → 올라옴 → 서 있음 한 번. blank=(시작 초, 길이 초)는 그 구간을 사람 없음으로 만든다."""
+    """서 있음 → 내려감 → 최저점 유지 → 올라옴 → 서 있음 한 번. blank=(시작 초, 길이 초)는 그 구간을 사람 없음으로 만든다.
+
+    bottom_ankle_gap_norm: 최저점에서의 양발 간격(다리 길이 비). 주지 않으면 서 있을 때와 같다.
+    hip_shift_norm: 최저점에서 엉덩이 x가 서 있을 때보다 가로로 옮겨 간 양(다리 길이 비). 주지 않으면 엉덩이 x를 모른다(NaN)."""
     frames = []
     total = rest_before + down + hold + up + rest_after
     for index in range(int(total * FPS)):
@@ -86,8 +94,12 @@ def rep_curve(
         depth = (175.0 - knee) / (175.0 - bottom)
         hip_y = BASE_HIP_Y + hip_drop * LEG_LENGTH * depth
         present = not (blank is not None and blank[0] <= s < blank[0] + blank[1])
+        gap_norm = ankle_gap_norm if bottom_ankle_gap_norm is None else ankle_gap_norm + (bottom_ankle_gap_norm - ankle_gap_norm) * depth
+        # 서 있을 때(무릎각 160 이상)는 x가 그대로이고 최저점에서 hip_shift_norm만큼 옮겨 간다(측정 이동 폭이 입력과 같도록 160도에서 시작).
+        hip_depth = min(1.0, max(0.0, (160.0 - knee) / (160.0 - bottom)))
+        hip_x = float("nan") if hip_shift_norm is None else 200.0 + hip_shift_norm * LEG_LENGTH * hip_depth
         frame = make_frame(
-            start + s, knee, hip_y=hip_y, ankle_gap=ankle_gap_norm * LEG_LENGTH, locked=locked, present=present
+            start + s, knee, hip_y=hip_y, ankle_gap=gap_norm * LEG_LENGTH, locked=locked, present=present, hip_x=hip_x
         )
         # 사람이 없는 구간의 stable 라벨은 파이프라인과 같이 None이다.
         frames.append((frame, None if not present else ("stand" if knee >= 160 else label)))
@@ -152,12 +164,68 @@ def test_a_rep_without_enough_hip_drop_is_rejected() -> None:
 
 
 def test_a_rep_that_starts_with_the_feet_far_apart_is_rejected() -> None:
-    results = run(RepTracker(), rep_curve(ankle_gap_norm=0.55))
+    results = run(RepTracker(), rep_curve(ankle_gap_norm=0.55, bottom_ankle_gap_norm=0.02))
     assert results[0].reasons == (REASON_FEET_APART,)
 
 
-def test_a_rep_dominated_by_other_exercise_labels_is_rejected() -> None:
-    results = run(RepTracker(), rep_curve(label="walk"))
+def test_the_standing_gap_limit_is_a_boundary_at_0_25() -> None:
+    assert run(RepTracker(), rep_curve(ankle_gap_norm=0.24, bottom_ankle_gap_norm=0.02))[0].counted
+    assert run(RepTracker(), rep_curve(ankle_gap_norm=0.26, bottom_ankle_gap_norm=0.02))[0].reasons == (REASON_FEET_APART,)
+
+
+def test_a_rep_whose_feet_are_apart_at_the_bottom_is_rejected_even_if_they_start_together() -> None:
+    # 발을 먼저 내딛는 런지: 서 있을 때 간격(기준 창)은 좁게 잡혔지만 최저점에서는 크게 벌어져 있다(P01 런지 14.3초: 0.24 대 1.11).
+    results = run(RepTracker(), rep_curve(ankle_gap_norm=0.05, bottom_ankle_gap_norm=1.1))
+    assert results[0].reasons == (REASON_FEET_APART_BOTTOM,)
+    assert results[0].ankle_gap_bottom_norm == pytest.approx(1.1, abs=0.02)
+
+
+def test_the_bottom_gap_limit_is_a_boundary_at_0_40() -> None:
+    assert run(RepTracker(), rep_curve(bottom_ankle_gap_norm=0.38))[0].counted
+    assert run(RepTracker(), rep_curve(bottom_ankle_gap_norm=0.42))[0].reasons == (REASON_FEET_APART_BOTTOM,)
+
+
+def test_a_small_bottom_gap_like_a_real_squat_is_counted() -> None:
+    result = run(RepTracker(), rep_curve(bottom_ankle_gap_norm=0.16))[0]  # 실측 스쿼트 최대(본인 0.16)
+    assert result.counted and result.ankle_gap_bottom_norm == pytest.approx(0.16, abs=0.01)
+
+
+def test_the_hip_shift_limit_is_a_boundary_at_0_70() -> None:
+    assert run(RepTracker(), rep_curve(hip_shift_norm=0.68))[0].counted
+    far = run(RepTracker(), rep_curve(hip_shift_norm=0.72))[0]
+    assert far.reasons == (REASON_HIP_SHIFT,) and far.hip_shift_norm == pytest.approx(0.72, abs=0.02)
+
+
+def test_a_real_squat_hip_shift_is_counted_and_a_walk_away_is_rejected() -> None:
+    assert run(RepTracker(), rep_curve(hip_shift_norm=0.34))[0].counted  # 실측 스쿼트 최대
+    assert REASON_HIP_SHIFT in run(RepTracker(), rep_curve(hip_shift_norm=1.18))[0].reasons  # 자리를 뜨는 동작(c10 80.1초)
+
+
+def test_an_unknown_hip_x_skips_the_hip_shift_condition() -> None:
+    result = run(RepTracker(), rep_curve())[0]  # 엉덩이 x를 모르는 입력(옛 fixture)
+    assert result.counted and math.isnan(result.hip_shift_norm)
+
+
+def test_the_hip_shift_is_judged_when_the_rep_ends_and_does_not_unlock_the_rep_midway() -> None:
+    tracker = RepTracker()
+    frames = rep_curve(hip_shift_norm=1.18)
+    states = []
+    for frame, label in frames:
+        tracker.update(frame, label)
+        states.append(tracker.state)
+    assert STATE_IN_REP in states and states[-1] == STATE_STANDING  # 반복은 끝까지 진행되고, 끝날 때 탈락한다
+    assert tracker.last_result.reasons == (REASON_HIP_SHIFT,)
+
+
+def test_a_rep_dominated_by_other_exercise_labels_is_counted_and_the_ratio_is_only_recorded() -> None:
+    # ML 라벨 비율은 확정 조건이 아니다(기록만): 비율이 1.00이어도 기하 조건을 통과하면 확정한다.
+    result = run(RepTracker(), rep_curve(label="walk"))[0]
+    assert result.counted and result.reasons == ()
+    assert result.other_exercise_ratio > 0.4
+
+
+def test_giving_an_explicit_ml_limit_makes_it_a_condition_again() -> None:
+    results = run(RepTracker(other_max_ratio=0.40), rep_curve(label="walk"))
     assert results[0].reasons == (REASON_OTHER_EXERCISE,)
     assert results[0].other_exercise_ratio > 0.4
 
@@ -246,10 +314,10 @@ def test_squat_count_only_follows_confirmed_reps() -> None:
 def test_rejected_reps_are_kept_but_not_counted() -> None:
     counter = ExerciseCounter(rep_tracker=RepTracker())
     counter.set_mode(SQUAT_MODE, 0.0)
-    for frame, label in rep_curve(label="walk"):
+    for frame, label in rep_curve(hip_drop=0.10):
         counter.update(label, frame.timestamp, frame)
     assert counter.squat_count == 0
-    assert counter.last_rep_result.reasons == (REASON_OTHER_EXERCISE,)
+    assert counter.last_rep_result.reasons == (REASON_SHALLOW_HIP_DROP,)
 
 
 def test_status_reports_the_rep_state_and_guidance() -> None:
@@ -334,7 +402,11 @@ def test_track_primary_person_treats_nobody_and_broken_landmarks_as_missing() ->
 
 # 기하 조건(1차)과 ML 조건(2차)이 각각 혼자서도 제 일을 하는지 보기 위해 한쪽을 끈 설정.
 GEOMETRY_ONLY = {"other_max_ratio": 2.0}  # ML 조건을 끈다(비율은 최대 1이라 탈락하지 않는다)
-ML_ONLY = {"min_seconds": 0.0, "min_hip_drop": -10.0, "max_ankle_gap": 10.0}  # 기하 조건 셋을 끈다
+# 기하 조건을 모두 끄고 ML 조건만 명시적으로 켠다(ML 조건은 기본이 아니다).
+ML_ONLY = {
+    "min_seconds": 0.0, "min_hip_drop": -10.0, "max_ankle_gap": 10.0, "max_ankle_gap_bottom": None, "max_hip_shift": None,
+    "other_max_ratio": 0.40,
+}
 
 
 def simulate(session: str, events_out: list | None = None, **tracker_options):
@@ -363,7 +435,10 @@ def simulate(session: str, events_out: list | None = None, **tracker_options):
             if decision in ("acquire", "refresh"):
                 leg, facing = values["leg_now"], values["facing_now"]
             measures = (
-                RepMeasures(values["hip_y"], values["heel_y"], values["leg_length"], values["ankle_gap"])
+                RepMeasures(
+                    values["hip_y"], values["heel_y"], values["leg_length"], values["ankle_gap"],
+                    float("nan") if values.get("hip_x") is None else values["hip_x"],
+                )
                 if values["hip_y"] is not None
                 else None
             )
@@ -420,6 +495,32 @@ def test_the_lunge_is_rejected_because_the_feet_start_apart() -> None:
     _, results = replay("8c")
     assert all(REASON_FEET_APART in r.reasons for r in results)
     assert all(r.ankle_gap_norm > 0.5 for r in results)
+
+
+def test_the_walk_away_after_the_continuous_set_is_rejected_only_by_the_hip_shift_condition() -> None:
+    # c10(본인, 실제 10회)의 세트 후 자리를 뜨는 동작(80.1초)은 기하 조건을 통과하고 ML 라벨 비율(1.00)로만 막혀 있었다.
+    # 이 데이터는 엉덩이 이동 상한(0.70)을 정하는 데 쓴 것이라 이 테스트는 검증이 아니라 회귀 확인이다(표본 1건).
+    payload, results = replay("c10")
+    assert len(counted(results)) == payload["actual_squats"] == 10
+    walk_away = [r for r in results if REASON_HIP_SHIFT in r.reasons]
+    assert len(walk_away) == 1 and walk_away[0].t_start == pytest.approx(80.1, abs=0.2) and walk_away[0].hip_shift_norm > 1.0
+    _, without_hip_shift = replay("c10", max_hip_shift=None)
+    assert len(counted(without_hip_shift)) == 11  # ML 조건을 뺀 대가: 이 조건이 없으면 11회로 센다
+
+
+@pytest.mark.parametrize(
+    ("session", "actual"),
+    [("1", 10), ("2", 8), ("3", 8), ("4", 8), ("5", 8), ("c10", 10), ("c10_fast", 10), ("8a", 0), ("8c", 0), ("6", 0), ("7", 0)],
+)
+def test_the_default_conditions_keep_the_regression_counts_of_every_fixture(session, actual) -> None:
+    # 재생 결과(2026-10-19 조합 재생)와 같은 횟수. 사선(6)·정면(7)은 측면이 아니라 0, 의자(8b)는 알려진 한계로 3.
+    _, results = replay(session)
+    assert len(counted(results)) == actual
+
+
+def test_the_fixtures_carry_the_hip_x_column_for_the_hip_shift_condition() -> None:
+    payload = json.loads((FIXTURES / "session_1.json").read_text(encoding="utf-8"))
+    assert payload["columns"][-1] == "hip_x" and any(row[-1] is not None for row in payload["rows"])
 
 
 def test_sitting_on_a_chair_is_counted_known_limitation() -> None:

@@ -64,7 +64,11 @@ def simulate(session: str, *, policy_options: dict | None = None, **tracker_opti
             )
             if decision in ("acquire", "refresh"):
                 leg, facing = v["leg_now"], v["facing_now"]
-            measures = RepMeasures(v["hip_y"], v["heel_y"], v["leg_length"], v["ankle_gap"]) if v["hip_y"] is not None else None
+            measures = (
+                RepMeasures(v["hip_y"], v["heel_y"], v["leg_length"], v["ankle_gap"], float("nan") if v.get("hip_x") is None else v["hip_x"])
+                if v["hip_y"] is not None
+                else None
+            )
             frame = RepFrame(t, True, knee, policy.locked, leg, facing, v["torso_signed"], v["shin_signed"], measures,
                              side_now=bool(v["side_now"]), body_valid=bool(v["valid"]))
         else:
