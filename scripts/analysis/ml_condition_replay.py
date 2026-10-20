@@ -33,7 +33,7 @@ def run(payload, other_max, **tracker_options):
     original = rf.RepTracker
     rf.RepTracker = partial(RepTracker, other_max_ratio=other_max, **tracker_options)
     try:
-        return rf.replay(payload, rf.PRESETS["off"])
+        return rf.replay(payload)
     finally:
         rf.RepTracker = original
 

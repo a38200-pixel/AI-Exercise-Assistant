@@ -113,29 +113,9 @@ REP_BOTTOM_PLATEAU_DEGREES = 10.0
 REP_MERGE_RISE_DEGREES = 20.0
 REP_MERGE_DROP_DEGREES = 10.0
 
-# 대응안 후보(세트 중간 누락 진단용, v0.2.0): 모두 기본은 꺼짐이며 기본 동작은 바뀌지 않는다. 2차 실측 로그로 효과를 확인한 뒤 켤지 정한다.
-# 세트 단위 서 있는 기준 높이(가설 4): 켜면 서 있을 때 기준값(엉덩이·뒤꿈치 y, 다리 길이, 양발 간격)을 내려가기 직전 1초(REP_BASELINE_SECONDS)가
-# 아니라, 잠금이 유지되는 동안(세트) 최근 REP_SET_BASELINE_WINDOW_SECONDS 안에서 무릎각이 STANDING_KNEE_ANGLE 이상이던 프레임의 중앙값으로
-# 정한다(엉덩이 y는 중앙값 대신 높은 쪽 REP_SET_BASELINE_HIP_PERCENTILE 분위수: 세트 중에는 완전히 선 프레임이 적어 중앙값이 낮아지기 쉽다).
-# 휴지 없는 연속 세트에서는 직전 1초에 완전히 선 프레임이 거의 없어 기준 높이가 낮아지고 엉덩이 하강량이 작게 나온다.
-# 해당 프레임이 REP_SET_BASELINE_MIN_SAMPLES보다 적으면 기존 방식(직전 1초)으로 되돌아간다.
-# **검증되지 않음. 켜면 런지 오카운트가 발생한다**(2026-10-19 재생): 서 있을 때 양발 간격 기준이 0.55에서 0.03~0.05로 내려가 feet_apart가 사라지고, ML 라벨 조건을 뺀 뒤에는
-# 막는 것이 없어 1차 스트레치 런지(8c) 3개가 모두 스쿼트로 세어진다(최저점 간격 0.13~0.35, 엉덩이 이동 0.09~0.14라 새 기하 조건에도 안 걸린다). REP_RETURN_KNEE_ANGLE을 쓰면
-# 이 설정이 자동으로 함께 켜지므로 같다. 0.2.0에서 유지할지 제거할지는 docs/versions/v0.2.0/phase5_checklist.md 항목.
-REP_SET_BASELINE_ENABLED = False
-REP_SET_BASELINE_WINDOW_SECONDS = 30.0
-REP_SET_BASELINE_MIN_SAMPLES = 5
-REP_SET_BASELINE_HIP_PERCENTILE = 25.0
-# 복귀 각도 조정: 반복이 끝나는 '서 있음으로 복귀' 기준 무릎각. None이면 STANDING_KNEE_ANGLE과 같다(꺼짐).
-# REP_DESCENT_KNEE_ANGLE < 값 <= STANDING_KNEE_ANGLE이어야 한다. 낮추면 기준 높이가 더 낮은 프레임에서 끝나므로 세트 단위 기준 높이가 자동으로 함께 켜진다.
-# **검증되지 않음. 값을 주면 세트 단위 기준이 함께 켜져 런지 오카운트가 발생한다**(위 REP_SET_BASELINE_ENABLED 주석 참고).
-REP_RETURN_KNEE_ANGLE = None
-# 반복 경계(내려감·복귀) 판정에 쓰는 무릎각 신호(가설 5). "smoothed"(기본): STANDING 판정과 같은 One Euro 평활값,
-# "light": 별도 가벼운 평활(min_cutoff만 REP_BOUNDARY_LIGHT_MIN_CUTOFF로 올림), "raw": 평활 없는 원본값. 잠금 정책의 STANDING 판정과 최저점 계산은 평활값을 그대로 쓴다.
-REP_BOUNDARY_SIGNAL = "smoothed"
-REP_BOUNDARY_LIGHT_MIN_CUTOFF = 4.0
-# 잠금 해제 유예(가설 2): 해제 기준(BODY_LOCK_RELEASE_NONSIDE_SECONDS)에 이 시간(초)을 더해 일시적인 비측면 판정으로 세트 중간에 잠금이 풀리는 것을 늦춘다. 0이면 꺼짐.
-BODY_LOCK_RELEASE_GRACE_SECONDS = 0.0
+# (2026-10-20 제거) 세트 중간 누락 진단용으로 두었던 기본 꺼짐 대응안 후보 4개 — 세트 단위 서 있는 기준 높이, 복귀 각도, 반복 경계 신호(light/raw),
+# 잠금 해제 유예 — 를 지웠다. 버그 수정(짧은 놓침 유지, 잠금 다리 이어받기) 뒤 연속 세트 5개가 플래그 없이 모두 정확했고, 세트 단위 기준과 복귀 각도는
+# 켜면 런지 오카운트가 생겼다. 근거와 재생 결과는 docs/versions/v0.2.0/DEVLOG.md.
 
 # 자세 점수(v0.2.0 Phase 3, 표시용): 판정 항목은 depth(최저점 무릎각)와 torso_shin(최저점의 |몸통각 - 정강이각|) 두 개뿐이다.
 # 정상 경계 이내 = 100점, 교정 경계 = 50점(depth), 사이는 선형. torso_shin은 교정 경계 = 0점. depth는 교정 경계 이후 POSTURE_DEPTH_ZERO_AT에서 0점이 되는 2단 선형이다. 뒤꿈치(heel)와 템포는 판정·점수에 쓰지 않는다(원자료만 기록).

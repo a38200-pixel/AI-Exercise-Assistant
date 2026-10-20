@@ -76,7 +76,7 @@ def signed(paths):
     details = []
     for path in paths:
         payload = rf.load_log(path)
-        res = rf.replay(payload, rf.PRESETS["off"])
+        res = rf.replay(payload)
         reps = [r for r in res.results if r.counted]
         if not reps:
             continue

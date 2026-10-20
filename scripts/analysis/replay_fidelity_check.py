@@ -98,7 +98,7 @@ def run_R(path: Path, rep_options):
     original = rf.RepTracker
     rf.RepTracker = partial(RepTracker, **rep_options)
     try:
-        return as_rows_from_result(rf.replay(rf.load_log(path), rf.PRESETS["off"]).results)
+        return as_rows_from_result(rf.replay(rf.load_log(path)).results)
     finally:
         rf.RepTracker = original
 

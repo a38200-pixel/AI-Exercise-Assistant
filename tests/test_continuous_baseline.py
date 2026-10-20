@@ -11,25 +11,18 @@ from scripts.analysis.continuous_set_analysis import baseline_reps, inject_dropo
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rep_sessions"
 CONTINUOUS = ["c10", "c10_fast"]
-PRESETS = ["off", "baseline", "return155", "light", "raw", "grace0.6", "all"]
 
 
 @pytest.mark.parametrize("session", CONTINUOUS)
 def test_the_continuous_set_baselines_are_counted_exactly_by_default(session) -> None:
     payload = rf.load_fixture(session)
     assert payload["actual_squats"] == 10
-    result = rf.replay(payload, rf.PRESETS["off"])
+    result = rf.replay(payload)
     assert result.counted == 10 and result.merge_suspects == 0
     # 탈락한 후보는 세트 앞뒤의 이동 구간에만 있다(사람 없음 허용 뒤 세션 시작·끝의 짧은 굽힘이 후보가 되지만 길이·엉덩이·라벨 조건으로 탈락한다).
     starts, ends = result.counted_starts, [r.t_end for r in result.results if r.counted]
     for event in (e for e in result.events if e["kind"] == "rep_end" and not e["counted"]):
         assert event["t_end"] <= starts[0] or event["t_start"] >= max(ends)
-
-
-@pytest.mark.parametrize("preset", PRESETS)
-@pytest.mark.parametrize("session", CONTINUOUS)
-def test_the_candidate_flags_keep_the_continuous_baselines_at_ten(session, preset) -> None:
-    assert rf.replay(rf.load_fixture(session), rf.PRESETS[preset]).counted == 10
 
 
 @pytest.mark.parametrize("session", CONTINUOUS)
@@ -73,17 +66,16 @@ def test_decimating_to_the_native_rate_or_above_keeps_nearly_everything() -> Non
 
 def test_the_low_fps_replay_smooths_only_the_kept_frames() -> None:
     payload = rf.load_fixture("c10")
-    full = rf.replay(payload, rf.PRESETS["off"])
-    resmoothed = rf.replay(payload, rf.PRESETS["off"], fps=100)  # 솎아내지 않고 원본 무릎각을 다시 평활해도 같은 결과
+    full = rf.replay(payload)
+    resmoothed = rf.replay(payload, fps=100)  # 솎아내지 않고 원본 무릎각을 다시 평활해도 같은 결과
     assert resmoothed.counted == full.counted == 10 and resmoothed.frames == full.frames
-    assert rf.replay(payload, rf.PRESETS["off"], fps=6).frames < full.frames / 2
+    assert rf.replay(payload, fps=6).frames < full.frames / 2
 
 
-@pytest.mark.parametrize("preset", ["off", "light", "return155", "all"])
 @pytest.mark.parametrize("fps", [12, 10, 8, 6])
 @pytest.mark.parametrize("session", CONTINUOUS)
-def test_the_continuous_baselines_survive_down_to_six_fps(session, fps, preset) -> None:
-    assert rf.replay(rf.load_fixture(session), rf.PRESETS[preset], fps=fps).counted == 10
+def test_the_continuous_baselines_survive_down_to_six_fps(session, fps) -> None:
+    assert rf.replay(rf.load_fixture(session), fps=fps).counted == 10
 
 
 # ---------------------------------------------------------------- 알려진 약점(현재 동작을 고정, 고칠 때 의도적으로 바꾼다)
@@ -99,7 +91,7 @@ def test_a_dropout_covering_the_last_standing_frame_no_longer_loses_the_rep(sess
     rest = len(base) - 1
 
     def counted_after_first(offset, length):
-        result = rf.replay(inject_dropout(payload, base, length, offset), rf.PRESETS["off"])
+        result = rf.replay(inject_dropout(payload, base, length, offset))
         return sum(1 for r in result.results if r.counted and any(r.t_start < e and r.t_end > s for s, e in base[1:]))
 
     assert counted_after_first(-0.9, 0.12) == rest  # 서 있는 동안의 짧은 놓침은 문제가 없다

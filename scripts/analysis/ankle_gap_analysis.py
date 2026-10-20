@@ -30,7 +30,7 @@ def median(values):
 
 
 def candidates(payload):
-    result = rf.replay(payload, rf.PRESETS["off"])
+    result = rf.replay(payload)
     frames = payload["frames"]
     rows = []
     previous_end = -1e9

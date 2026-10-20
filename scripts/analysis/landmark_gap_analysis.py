@@ -41,7 +41,7 @@ def load(path: Path) -> list[dict[str, Any]]:
 
 def set_span(path: Path) -> tuple[float, float] | None:
     """확정된 반복의 첫 시작~마지막 끝(세트). 반복이 없으면 None."""
-    result = rf.replay(rf.load_log(path), rf.PRESETS["off"])
+    result = rf.replay(rf.load_log(path))
     spans = [(r.t_start, r.t_end) for r in result.results if r.counted]
     return (spans[0][0], spans[-1][1]) if spans else None
 

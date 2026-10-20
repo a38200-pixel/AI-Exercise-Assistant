@@ -38,7 +38,7 @@ def load_raw(path: Path):
 def candidate_features(path: Path):
     payload = rf.load_log(path)
     result = ml.run(payload, ml.REMOVED)
-    now = rf.replay(payload, rf.PRESETS["off"])  # 새 기본 설정(지금 확정되는가)
+    now = rf.replay(payload)  # 새 기본 설정(지금 확정되는가)
     frames = load_raw(path)
     rows = []
     previous_end = -1e9

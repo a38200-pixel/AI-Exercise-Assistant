@@ -24,7 +24,6 @@ sys.path.insert(0, str(ROOT))
 from scripts.analysis import replay_flags as rf  # noqa: E402
 
 FPS_LIST = (12, 10, 8, 6, 5)
-PRESET_NAMES = ("off", "light", "return155", "all")
 
 
 # ---------------------------------------------------------------- 원본 로그 읽기
@@ -87,7 +86,7 @@ def lock_leg_report(frames: list[dict[str, Any]], events: list[dict[str, Any]]) 
 
 
 def baseline_reps(payload: dict[str, Any]) -> list[tuple[float, float]]:
-    base = rf.replay(payload, rf.PRESETS["off"])
+    base = rf.replay(payload)
     return [(r.t_start, r.t_end) for r in base.results if r.counted]
 
 
@@ -127,20 +126,18 @@ def peak_between(payload_frames: list[dict[str, Any]], fps: float, base: list[tu
 
 def low_fps_table(sources: list[tuple[str, dict[str, Any]]], fps_values: list[float]) -> str:
     lines = [
-        "| 입력 | FPS | 센 횟수/기준 | 누락 위치와 사유(꺼짐) | 반복 사이 최소 봉우리(재평활) | light | 복귀155 | 모두 |",
-        "|---|---|---|---|---|---|---|---|",
+        "| 입력 | FPS | 센 횟수/기준 | 누락 위치와 사유 | 반복 사이 최소 봉우리(재평활) |",
+        "|---|---|---|---|---|",
     ]
     for name, payload in sources:
         base = baseline_reps(payload)
         for fps in fps_values:
-            results = {p: rf.replay(payload, rf.PRESETS[p], fps=fps) for p in PRESET_NAMES}
-            off = results["off"]
+            off = rf.replay(payload, fps=fps)
             explanation = explain_missing(base, off)
             missing = [f"{i}번 {why}" for i, why in enumerate(explanation, start=1) if why != "ok"]
             peak = peak_between(payload["frames"], fps, base)
             lines.append(
-                f"| {name} | {fps:g} | {off.counted}/{len(base)} | {'; '.join(missing) or '없음'} | {peak:.1f}° "
-                f"| {results['light'].counted} | {results['return155'].counted} | {results['all'].counted} |"
+                f"| {name} | {fps:g} | {off.counted}/{len(base)} | {'; '.join(missing) or '없음'} | {peak:.1f}° |"
             )
     return "\n".join(lines)
 
@@ -170,7 +167,7 @@ def dropout_table(sources: list[tuple[str, dict[str, Any]]], lengths: list[float
         for length in lengths:
             cells = []
             for offset in offsets:
-                result = rf.replay(inject_dropout(payload, base, length, offset), rf.PRESETS["off"])
+                result = rf.replay(inject_dropout(payload, base, length, offset))
                 kept = sum(1 for r in result.results if r.counted and any(r.t_start < e and r.t_end > s for s, e in base[1:]))
                 cells.append(f"{min(kept, len(base) - 1)}/{len(base) - 1}")
             lines.append(f"| {name} | {length:g}초 | " + " | ".join(cells) + " |")

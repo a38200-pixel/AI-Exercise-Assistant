@@ -127,7 +127,7 @@ def test_the_synthetic_session_is_a_real_squat_that_the_app_path_counts(tmp_path
 def test_replay_flags_makes_the_same_rep_decisions_as_the_app_path(tmp_path) -> None:
     path = record_session(tmp_path, two_squats())
     live = rows_from_events(path)
-    replayed = rows_from_results(replay_flags.replay(replay_flags.load_log(path), replay_flags.PRESETS["off"]).results)
+    replayed = rows_from_results(replay_flags.replay(replay_flags.load_log(path)).results)
     assert_same_reps(live, replayed)
 
 
@@ -147,7 +147,7 @@ def test_the_rejection_reasons_also_match_when_the_session_has_a_rejected_rep(tm
     original = replay_flags.RepTracker
     replay_flags.RepTracker = lambda **kwargs: RepTracker(max_hip_shift=0.05, **kwargs)
     try:
-        replayed = rows_from_results(replay_flags.replay(replay_flags.load_log(path), replay_flags.PRESETS["off"]).results)
+        replayed = rows_from_results(replay_flags.replay(replay_flags.load_log(path)).results)
     finally:
         replay_flags.RepTracker = original
     assert_same_reps(live, replayed)

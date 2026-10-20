@@ -21,7 +21,7 @@ SESSIONS = ("1", "2", "3", "4", "5", "9")
 
 
 def scored_reps(session: str) -> list[dict]:
-    result = replay_flags.replay(replay_flags.load_fixture(session), replay_flags.PRESETS["off"])
+    result = replay_flags.replay(replay_flags.load_fixture(session))
     rows = []
     for r in result.results:
         if not r.counted:
