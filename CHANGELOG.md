@@ -17,4 +17,14 @@
 - 의자·박스를 이용한 앉았다 일어나기도 스쿼트로 셀 수 있습니다(알려진 한계).
 - 설정 `USE_REP_TRACKER`(기본 True)를 False로 하면 이전(v0.1.x)의 라벨 전이 방식으로 셉니다.
 
-### Removed
+## [0.1.1] - 2026-09-15
+
+### Changed
+- Prepare / Promote / Rollback 기반 Windows Release workflow를 정식화하고, R2 versioned distribution과 Vercel Production 배포를 안정화했습니다.
+
+## [0.1.0]
+
+### Added
+- Windows Launcher + AI Client 초기 Production 배포.
+
+(릴리스 날짜는 README의 Version History에 기록되어 있지 않아 적지 않았습니다.)

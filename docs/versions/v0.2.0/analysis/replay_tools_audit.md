@@ -6,7 +6,7 @@
 
 | 도구 | 쓰인 곳 | 판정을 자체 구현하는가 | 실제 src를 호출하는가 | 조치 |
 |---|---|---|---|---|
-| `replay_flags.replay` | 거의 모든 재생의 기반(플래그, 저FPS, 구도, 점수 분포) | 판정은 아니고 **접착 코드**를 자체 구현: 기록된 신호(평활 무릎각, 측면 판정, `leg_now`)로 RepFrame을 만든다. 잠금 다리는 로그에 기록된 값을 쓴다 | `RepTracker`, `BodyLockPolicy`, `OneEuroFilter` 실제 클래스 | 아래 2절 대조로 일치 확인, 합성 비교 테스트 추가, 프레임별 RepTracker 상태(`states`) 노출 추가 |
+| `replay_flags.replay` | 거의 모든 재생의 기반(플래그, 저FPS, 구도, 점수 분포) | 판정은 아니고 **접착 코드**를 자체 구현: 기록된 신호(평활 무릎각, 측면 판정, `leg_now`)로 RepFrame을 만든다. 잠금 다리는 로그에 기록된 값을 쓴다 | `RepTracker`, `BodyLockPolicy`, `OneEuroFilter` 실제 클래스 | 아래 2절 대조로 일치 확인, 합성 비교 테스트 추가, 프레임별 RepTracker 상태(`states`) 노출 추가. **2026-10-20 플래그 제거로 `Flags`·`PRESETS`·`--matrix`를 없애 기본 설정 재생과 저FPS 재생만 한다**(이름은 호환을 위해 유지) |
 | `geometry_replay` | 잠금 다리 변경 검증 | 없음 | `GeometryTracker`, `track_primary_person`, `RepTracker` 전부 실제 | 반복 결과(`results`)를 반환하도록 추가 |
 | `ml_condition_replay` | ML 조건 비교 | 없음 | 실제 `RepTracker`에 설정만 바꿔 넣음 | 새 조건은 기본 꺼짐으로 두어 과거 표를 그대로 재현(재실행 동일) |
 | `proposal_replay` | 조합·부호 변경 재생 | `--counts`는 **조건을 자체 재계산했다** | `--signed`는 실제 `score_posture`(함수 하나만 메모리에서 교체) | `--counts`를 실제 `RepTracker` 설정(`other_max_ratio`, `max_ankle_gap_bottom`, `max_hip_shift`)으로 교체. 재실행 표 동일 |
@@ -16,7 +16,7 @@
 | `framing_replay` | 구도 안내 재생 | 안내 판정은 실제 `FramingGuide`·`classify_framing`. **반복 중(in_rep) 입력은 반복 후보의 (시작, 끝) 시각으로 근사**했다 | 일부 | 실제 `RepTracker`의 프레임별 상태(IN_REP)로 교체. 앱이 기록한 `rep.state`와 비교해 차이 프레임이 2.9%에서 0.37%(수정 전 코드로 기록된 c10만)로 줄었다 |
 | `landmark_gap_analysis` | 공백 분석 | 공백 종류·자세 구간(무릎각 보간)·경계 거리 구간을 **자체 분류**한다(기술 통계, 임계값 판정이 아님) | 일부(`replay_flags`로 세트 구간) | 구도 안내 상수는 `FramingGuide` 재생(위)이 검증한다. 조치 없음 |
 | `continuous_set_analysis` | 연속 세트, 저FPS | 진단 지표(반복 사이 봉우리, 서 있는 시간)를 자체 계산. 횟수는 `replay_flags` | 일부 | 지표일 뿐 판정이 아님. 저FPS 재생 재실행(아래) |
-| `midset_diagnosis` | 세트 중간 누락 진단(플래그 설계 근거) | `replay_flags` 이전 형태의 자체 `simulate` 접착 코드 | `RepTracker`, `BodyLockPolicy` 실제 | 과거 진단용이며 새 결론의 근거로 쓰지 않는다. `hip_x` 인자만 맞췄다 |
+| `midset_diagnosis` | 세트 중간 누락 진단(플래그 설계 근거) | `replay_flags` 이전 형태의 자체 `simulate` 접착 코드 | `RepTracker`, `BodyLockPolicy` 실제 | **2026-10-20에 삭제했다.** 기본 꺼짐 플래그 4개를 시뮬레이션하는 전용 도구라 플래그 제거 뒤에는 실행할 수 없다(보고서와 DEVLOG 기록은 남아 있고 코드는 git 이력에 있다) |
 | `hypothesis5_synthetic` | 평활 가설 | 합성 파형 | 실제 `OneEuroFilter` | 없음 |
 | `extract_rep_fixtures` | fixture 추출 | 없음 | 실제 `measure_frame` | `hip_x` 열 추가 |
 | `field_test_1_lib`, `field_test_1_analysis` | Phase 0.5 임계값 도출 | **반복 추출·지표를 전부 자체 구현** | v0.1.x `ExerciseCounter`(비교용)만 | 이후 실제 `RepTracker`가 1차 세션 1~5를 정확히 재현하는 fixture 회귀 테스트(42/42)가 있어 임계값 결론은 실제 코드로 재확인됐다. 더 이상 결정 근거로 쓰지 않음 |

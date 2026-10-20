@@ -1,5 +1,7 @@
 # 연속 세트(B) 본인 확인 진행표 (한 장, 약 10분)
 
+> **2026-10-20 안내**: 이 문서의 설정 확인 명령에 쓰인 `REP_SET_BASELINE_ENABLED`, `REP_RETURN_KNEE_ANGLE`, `REP_BOUNDARY_SIGNAL`, `BODY_LOCK_RELEASE_GRACE_SECONDS`는 기본 꺼짐 플래그와 함께 제거되어 지금 그대로 실행하면 오류가 난다. 지금 기준 확인은 `python -c "import config.settings as s; print(s.USE_REP_TRACKER, s.REP_OTHER_EXERCISE_MAX_RATIO, s.REP_MAX_ANKLE_GAP_BOTTOM, s.REP_MAX_HIP_SHIFT)"` → `True None 0.4 0.7`.
+
 3차 실측(P02)에서 연속 세트(B)는 숫자는 10/10으로 정확했지만 서 있는 시간 중앙값이 **0.87초**라 "위에서 멈추지 않은" 연속이 아니어서 판정하지 못했다. 이 문서는 **본인이 지금 코드로 연속 세트만** 다시 확인하는 진행표다. 카메라는 사람이 직접 켠다. 전체 맥락은 `field_test_2_protocol.md` 11.2절.
 
 > **이 결과는 "같은 사람의 새 데이터"로 기록하고 일반화 증거로 세지 않는다.** 본인은 값을 정한 데이터의 참여자이기 때문이다. 이 확인으로 말할 수 있는 것은 "지금 코드가 본인의 위에서 멈추지 않는 연속 세트를 정확히 센다"뿐이고, 새 사람에게서 검증됐다는 뜻이 아니다.

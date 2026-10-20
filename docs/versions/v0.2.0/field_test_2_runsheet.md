@@ -1,5 +1,7 @@
 # 2차 실측 진행표 (실측 당일용, 한 장)
 
+> **2026-10-20 안내**: 이 문서의 설정 확인 명령에 쓰인 `REP_SET_BASELINE_ENABLED`, `REP_RETURN_KNEE_ANGLE`, `REP_BOUNDARY_SIGNAL`, `BODY_LOCK_RELEASE_GRACE_SECONDS`는 기본 꺼짐 플래그와 함께 제거되어 지금 그대로 실행하면 오류가 난다. 지금 기준 확인은 `python -c "import config.settings as s; print(s.USE_REP_TRACKER, s.REP_OTHER_EXERCISE_MAX_RATIO, s.REP_MAX_ANKLE_GAP_BOTTOM, s.REP_MAX_HIP_SHIFT)"` → `True None 0.4 0.7`.
+
 이유와 자세한 설명은 `field_test_2_protocol.md`. 이 문서는 **당일 보고 따라 하기만** 하면 되게 줄였다. 카메라는 사람이 직접 켠다.
 참가자 코드는 `P01`로 적었다. 다른 사람이면 이 문서의 `P01_`을 전부 `P02_`로 바꾼다(편집기의 전체 바꾸기).
 

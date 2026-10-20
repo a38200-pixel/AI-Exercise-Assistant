@@ -1823,3 +1823,25 @@
 
 ### Supabase 확인 결과
 - 이번 통지의 "Supabase 확인 결과" 칸도 선택지(10/18~10/20 행 없음 / 있어서 삭제함)가 선택되지 않은 채였다. **결과를 기록하지 못했다.** 사용자가 알려 주면 이 항목에 적는다. 그 전까지 "업로드 여부 미확인"이다.
+
+---
+
+## 2026-10-20 · Phase 5 B~C단계: 기본 꺼짐 플래그 4개 제거, 문서·버전 정리, Supabase 확인 결과
+
+### Supabase 확인 결과 (사용자)
+**10/18~10/20 행 없음.** `workout_sessions` 전체 24행, 마지막 기록 2026-09-15. 실측은 `python -m src.main` 직접 실행이라 토큰이 없어 업로드되지 않은 것으로 판단한다(코드 경로·환경 점검과 일치). 삭제할 행이 없다. **9월 15일 이후 실제 업로드 경로가 한 번도 실행되지 않았다**는 뜻이므로 Phase 5 D단계에 "설치판에서 런처 로그인 → 짧은 세션 1회 업로드 → `workout_sessions`·`daily_workout_summary` 행 생성 확인 → 테스트 행 삭제"를 추가했다(`analysis/cloud_upload_check.md` 5절).
+
+### B단계: 기본 꺼짐 플래그 4개 제거 (커밋 e642097)
+- 대상: 세트 단위 서 있는 기준 높이(`REP_SET_BASELINE_*` 4개), 복귀 각도(`REP_RETURN_KNEE_ANGLE`), 반복 경계 신호(`REP_BOUNDARY_SIGNAL`, `REP_BOUNDARY_LIGHT_MIN_CUTOFF`), 잠금 해제 유예(`BODY_LOCK_RELEASE_GRACE_SECONDS`).
+- 이유: 버그 수정 뒤 연속 세트 5개(c10, c10_fast, P01, P02, 본인)가 플래그 없이 모두 정확했고, 세트 단위 기준과 복귀 각도는 켜면 1차 스트레치 런지가 세어졌다.
+- 정리한 것: `src/rep_tracker.py`(생성자 옵션, `RepFrame.knee_boundary`/`boundary_knee`, 세트 기준 높이 수집, 복귀 각도), `src/geometry_tracker.py`(`BOUNDARY_SIGNALS`, `TrackedFrame.knee_angle_boundary`, 경계 필터, `BodyLockPolicy`의 해제 유예), `config/settings.py`(상수와 주석, 대신 제거 사실을 한 줄로 남김), 테스트(`test_rep_flags.py`를 `test_rep_boundaries.py`로 바꿔 기본 동작·제거 확인 테스트만 남김, `test_continuous_baseline.py`의 플래그 매개변수 제거), 재생 도구(`replay_flags.py`의 `Flags`·`PRESETS`·`--matrix`·경계 신호 재현, `continuous_set_analysis`의 플래그 열), 플래그 시뮬레이션 스크립트 `midset_diagnosis.py` 삭제.
+- 유지한 것: 기본으로 켜진 버그 수정(`REP_STANDING_MAX_GAP_SECONDS`, `LEG_SWITCH_VISIBILITY_MARGIN`, `other_leg_refresh`)은 건드리지 않았다.
+- **검증**: `tests/` **552개 통과**(650개에서 플래그 전용 테스트가 빠지고 제거 확인 테스트가 더해짐). **원본 로그 39개**를 기본 설정으로 실제 파이프라인 재생(G)과 `replay_flags` 재생(R) 두 방식으로 돌려 제거 전후를 비교했다: **후보 270개, 반복별 15개 필드(시각, 확정, 사유, 무릎각, 엉덩이 하강, 발 간격 3종, 엉덩이 이동, ML 비율, 몸통·정강이각, 다리, 방향)가 G·R 모두 완전히 같다.** 실시간 대조는 2026-10-19 이전 로그 26개 중 수정 전 코드로 기록한 c10 하나만 다르고(알려진 차이), 새 기본으로 기록한 로그 13개는 실시간·G·R이 일치한다(걷기 세션 6.4초 후보의 수치 차이는 S 키 직후 기준값 초기화로 판정은 같다). 2차 재생 결과 표(조합)와 저FPS 재생도 그대로다.
+
+### C단계: 문서·버전
+- Installer 기본값 3곳을 `0.2.0`으로(`installer/FitRouteAIClient.iss`, `build_installer.ps1`, `validate_installer_inputs.py`). `releases/`의 매니페스트는 릴리스 절차의 산출물이라 건드리지 않았다.
+- README 테스트 수: v0.1.1 시점 122개는 남기고 v0.2.0 준비 시점 재측정을 더했다(`tests/` 552, `backend/tests` 37).
+- CHANGELOG: 빈 `### Removed` 제목 정리, 0.1.1·0.1.0 요약을 README Version History 기준으로 추가. `[Unreleased]`는 **태그를 붙일 때 `0.2.0`과 날짜로 바꾼다**(릴리스 날짜 미정). 0.1.0의 날짜는 README에 없어 적지 않았다.
+- RELEASE.md: "작성 중 (골격)" 제거, 1절 한 줄 요약, **2·3절에 남아 있던 "라벨은 2차 조건" 설명을 현재 동작(라벨 비율은 기록만)으로 수정**(ML 조건 제거 때 놓친 오래된 문구), 5절 머리말, 6절 검증 방법(측정값만), 7절 0.3.0 후보. 연속 세트 문구는 앞서 확정한 문구 그대로.
+- `phase5_checklist.md`를 A~E 단계로 정리하고 완료 항목을 체크했다. 지난 진행표 3개에는 설정 확인 명령이 제거된 상수를 쓰므로 지금은 오류가 난다는 안내를 덧붙였다.
+- **설치판 빌드(D단계)는 사용자 확인 뒤에 한다.**
