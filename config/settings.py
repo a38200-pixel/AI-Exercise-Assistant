@@ -119,12 +119,16 @@ REP_MERGE_DROP_DEGREES = 10.0
 # 정한다(엉덩이 y는 중앙값 대신 높은 쪽 REP_SET_BASELINE_HIP_PERCENTILE 분위수: 세트 중에는 완전히 선 프레임이 적어 중앙값이 낮아지기 쉽다).
 # 휴지 없는 연속 세트에서는 직전 1초에 완전히 선 프레임이 거의 없어 기준 높이가 낮아지고 엉덩이 하강량이 작게 나온다.
 # 해당 프레임이 REP_SET_BASELINE_MIN_SAMPLES보다 적으면 기존 방식(직전 1초)으로 되돌아간다.
+# **검증되지 않음. 켜면 런지 오카운트가 발생한다**(2026-10-19 재생): 서 있을 때 양발 간격 기준이 0.55에서 0.03~0.05로 내려가 feet_apart가 사라지고, ML 라벨 조건을 뺀 뒤에는
+# 막는 것이 없어 1차 스트레치 런지(8c) 3개가 모두 스쿼트로 세어진다(최저점 간격 0.13~0.35, 엉덩이 이동 0.09~0.14라 새 기하 조건에도 안 걸린다). REP_RETURN_KNEE_ANGLE을 쓰면
+# 이 설정이 자동으로 함께 켜지므로 같다. 0.2.0에서 유지할지 제거할지는 docs/versions/v0.2.0/phase5_checklist.md 항목.
 REP_SET_BASELINE_ENABLED = False
 REP_SET_BASELINE_WINDOW_SECONDS = 30.0
 REP_SET_BASELINE_MIN_SAMPLES = 5
 REP_SET_BASELINE_HIP_PERCENTILE = 25.0
 # 복귀 각도 조정: 반복이 끝나는 '서 있음으로 복귀' 기준 무릎각. None이면 STANDING_KNEE_ANGLE과 같다(꺼짐).
 # REP_DESCENT_KNEE_ANGLE < 값 <= STANDING_KNEE_ANGLE이어야 한다. 낮추면 기준 높이가 더 낮은 프레임에서 끝나므로 세트 단위 기준 높이가 자동으로 함께 켜진다.
+# **검증되지 않음. 값을 주면 세트 단위 기준이 함께 켜져 런지 오카운트가 발생한다**(위 REP_SET_BASELINE_ENABLED 주석 참고).
 REP_RETURN_KNEE_ANGLE = None
 # 반복 경계(내려감·복귀) 판정에 쓰는 무릎각 신호(가설 5). "smoothed"(기본): STANDING 판정과 같은 One Euro 평활값,
 # "light": 별도 가벼운 평활(min_cutoff만 REP_BOUNDARY_LIGHT_MIN_CUTOFF로 올림), "raw": 평활 없는 원본값. 잠금 정책의 STANDING 판정과 최저점 계산은 평활값을 그대로 쓴다.
