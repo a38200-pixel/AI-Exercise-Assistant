@@ -20,7 +20,7 @@
 | `schema_version` | 1 |
 | `workout_date`, `started_at`, `ended_at`, `workout_seconds`, `squat_count`, `stretch_seconds` | **서버로 업로드하는 summary와 같은 필드·값** |
 | `reps` | 이번 세션의 반복 후보 전부(확정·탈락·중단), 순서대로 |
-| `settings` | 기록 시점의 판정 기준(`REP_MIN_SECONDS`, `REP_MIN_HIP_DROP`, `REP_MAX_ANKLE_GAP`, `REP_OTHER_EXERCISE_MAX_RATIO`, `POSTURE_*`). 임계값은 2차 실측 뒤 바뀔 수 있어 점수를 나중에 해석하려고 함께 남긴다 |
+| `settings` | 기록 시점의 판정 기준(`REP_MIN_SECONDS`, `REP_MIN_HIP_DROP`, `REP_MAX_ANKLE_GAP`, `REP_MAX_ANKLE_GAP_BOTTOM`, `REP_MAX_HIP_SHIFT`, `REP_OTHER_EXERCISE_MAX_RATIO`(null = 조건이 아니라 기록만), `POSTURE_*`). 임계값은 2차 실측 뒤 바뀔 수 있어 점수를 나중에 해석하려고 함께 남긴다 |
 
 `reps[]` 한 항목:
 
@@ -29,7 +29,7 @@
 | `index` | 세션 안의 반복 후보 순번(1부터) |
 | `rep_number` | 확정된 반복의 순번(1부터). 탈락·중단이면 null |
 | `counted` | 횟수에 들어갔는가 |
-| `reasons` | 탈락·중단 사유 코드 목록(`too_short`, `shallow_hip_drop`, `feet_apart`, `other_exercise`, `tracking_lost`, `lock_lost`, `no_baseline`). 확정이면 빈 목록 |
+| `reasons` | 탈락·중단 사유 코드 목록(`too_short`, `shallow_hip_drop`, `feet_apart`, `feet_apart_bottom`, `hip_shift`, `other_exercise`(ML 상한을 직접 줬을 때만), `tracking_lost`, `lock_lost`, `no_baseline`). 확정이면 빈 목록 |
 | `seconds_from_start` | 세션 시작 기준 반복 시작 시각(초) |
 | `total_seconds`, `min_knee_angle`, `hip_drop_norm` | 반복 길이(초), 최저 무릎각(도), 엉덩이 하강량(다리 길이 비). 알 수 없으면 null |
 | `posture` | 확정된 반복의 자세 점수, 아니면 null. 아래 |

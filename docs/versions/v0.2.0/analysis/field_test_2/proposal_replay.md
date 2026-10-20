@@ -1,5 +1,7 @@
 # 변경 조합 재생 결과 (미적용)
 
+> **정정(2026-10-19, DEVLOG 참고)**: 이 문서의 엉덩이 이동 숫자(1.18, 스쿼트 최대 0.34, 여유 1.7배·2.1배)는 분석 스크립트가 서 있을 때 L로 계산한 값이다. 실제 구현의 기준 L은 부풀어 같은 동작이 0.744였고, 구현은 반복 중 L의 중앙값으로 나누어 그 동작 2.6, 스쿼트 최대 0.46으로 바뀌었다.
+
 2026-10-19. 카메라를 쓰지 않았다(원본 로그 26개 재생). **적용하지 않았다**(사용자 확인 대기). 변경은 모두 3차 확인 대상이고, P01 2차 로그는 변경을 정하는 데 쓰였으므로 검증용으로 쓰지 않는다. 앞 단계는 `after_p01_changes.md`.
 재현: `python -m scripts.analysis.leave_motion_features --log data/landmark_sequences/session_*.jsonl --artifact 20261019_171322_normal_side:80.1`, `python -m scripts.analysis.proposal_replay --counts --signed`.
 
