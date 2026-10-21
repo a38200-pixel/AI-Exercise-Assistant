@@ -1946,3 +1946,16 @@
 - **push**: b05f7c5..f3f5fbd. push 뒤 확인(읽기만): 프론트엔드 HTTP 200, 백엔드 `/health` HTTP 200(응답 0.47초, 서버가 깨어 있는 상태), 배포된 프론트엔드의 다운로드 링크와 `production.json` 모두 0.1.1.
 - **문서 보완**: `docs/README.md` 버전 표에 v0.2.0 행을 추가하고, README Known Issues에 "Supabase 무료 프로젝트 일시정지 가능성"을 추가했다(일정 기간 활동이 없으면 일시정지될 수 있고 그러면 로그인·기록 저장·조회가 모두 동작하지 않는다, 시연 전 활성 상태 확인 필요. 기간 수치는 일반 지식이라 적지 않았다). 이 커밋은 Promote 뒤 `production.json` 커밋과 함께 push한다.
 - **Promote DryRun**: `promote_windows_release.ps1 -Version 0.2.0 -DryRun`이 첫 단계(`vercel whoami`)에서 중단됐다: "no authenticated session was confirmed". Vercel 로그인은 사용자가 직접 하기로 해서 여기서 멈췄다. 변경된 것은 없다(git 변경 0건, DryRun은 읽기 명령만 실행).
+
+## 2026-10-21 — Phase 5 E단계: Promote(스크립트 중단 후 수동 기록)
+
+- **Promote DryRun**: 정상(Vercel 인증·`toru7/fitroute` 접근 확인, 읽기 전용, 변경 0건).
+- **실제 Promote**(`promote_windows_release.ps1 -Version 0.2.0 -ApproveProductionChange`, 10:37:36~10:38:22 KST, 약 46초): Vercel 환경변수 `VITE_DESKTOP_CLIENT_DOWNLOAD_URL`(production)을 0.2.0 URL로 변경하고 `vercel deploy --prod`가 성공했으나, 스크립트가 **"Vercel deploy completed without returning a deployment URL."** 로 중단되어 HTTP 확인과 `production.json` 기록을 하지 못했다. 재실행하지 않고 상태를 읽기 전용으로 확인했다(`vercel ls`, `vercel inspect`, 배포된 번들, git).
+- **스크립트 결함**: Vercel CLI 59.17.0에서 `vercel deploy`가 종료 코드 0으로 끝나도 표준 출력에 배포 주소가 나오지 않는다. 스크립트는 표준 출력의 `https://` 줄만 찾아서(표준 오류는 읽지 않는다) 배포 성공 뒤 HTTP 확인과 `production.json` 기록 전에 멈춘다. 실제 배포 명령의 출력은 저장되지 않아 주소가 어디로 나왔는지는 확인하지 못했다. 이 문서에는 `windows_release_process.md` 3절 주석과 4절(Rollback) 경고로 기록했다. Rollback도 같은 스크립트·경로를 쓰므로 같은 결함이 나타날 수 있다. **스크립트는 고치지 않았다.** 수정 방안(표준 오류도 읽기, 배포 후 `vercel ls`/`vercel inspect`로 주소 확인)은 이후 버전 후보로만 기록한다.
+- **중단 후 상태**: 프로덕션 배포 `https://fitroute-lah4i34jl-toru7.vercel.app`(Ready, 10:37:58 KST 생성, 빌드 19초, 별칭 `fitroute-ivory.vercel.app`), 프론트엔드 HTTP 200, 배포된 페이지 번들의 다운로드 링크가 0.2.0 URL, `production.json`은 0.1.1 그대로, git 변경 없음, 이전 배포(0.1.1 링크)는 Ready로 남아 있었다.
+- **수동 확인**(스크립트 단계 7에 해당, 2026-10-21 10:40 KST): 프론트엔드 HTTP 200, 배포 번들(`ExerciseHomePage` 청크)의 링크 `…/releases/v0.2.0/FitRoute-AI-Client-Setup-0.2.0.exe`, 그 URL 헤더 HTTP 200 / `Content-Length` 2,379,765,928 / `Content-Type: application/x-msdownload`.
+- **`production.json`은 스크립트 출력이 아니라 수동 기록이다**(커밋 483d8dd). 형식은 스크립트와 같게 같은 PowerShell 명령(`ConvertTo-Json | Set-Content -Encoding utf8`)으로 썼고 값의 출처는 다음과 같다.
+  - `version` 0.2.0, `download_url`, `sha256`: `releases/windows/v0.2.0.json`(Prepare가 만든 값, 크기 2,379,765,928바이트).
+  - `deployment_url` `https://fitroute-lah4i34jl-toru7.vercel.app`: `vercel ls fitroute --prod`의 목록과 `vercel inspect`(배포 id `dpl_2fNuXRVDZawMP1D9XHUUJKZB9NyD`, 별칭 확인).
+  - `production_url` `https://fitroute-ivory.vercel.app/`: 이전 값 그대로.
+  - `promoted_at` `2026-10-21T01:37:58Z`: `vercel inspect`의 배포 생성 시각 10:37:58 KST. 스크립트의 `ToString('o')`처럼 소수 자릿수는 없다.

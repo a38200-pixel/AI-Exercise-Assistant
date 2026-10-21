@@ -139,7 +139,11 @@ Prepare 후 생성된 `installer/installer_manifest.json`과 `releases/windows/v
 7. deployment URL과 실제 Frontend Production HTTP 상태를 확인한다.
 8. 성공한 경우에만 `releases/windows/production.json`을 갱신한다.
 
+> **알려진 스크립트 결함(2026-10-21, v0.2.0 Promote에서 발견)**: Vercel CLI 59.17.0에서 `vercel deploy --prod`가 종료 코드 0으로 끝나도 표준 출력에 배포 주소(`https://...`)가 나오지 않는다. 스크립트는 그 줄을 찾지 못해 "Vercel deploy completed without returning a deployment URL."로 중단하며, **배포는 이미 성공한 뒤인데 7단계(HTTP 확인)와 8단계(`production.json` 기록) 전에 멈춘다.** 이때 Vercel 환경변수는 이미 새 값이고 프로덕션도 새 배포로 바뀌어 있으므로 상태 파일만 이전 버전으로 남는다. v0.2.0은 `vercel ls`로 배포를 확인하고 단계 7의 확인(HTTP 상태, 배포된 번들의 링크, 설치 파일 URL 헤더)을 수동으로 한 뒤 `production.json`을 수동으로 기록했다. 스크립트는 고치지 않았다(수정 방안은 이후 버전 후보: 표준 오류도 읽기, 배포 후 `vercel ls`/`vercel inspect`로 주소 확인).
+
 ## 4. Rollback
+
+> **경고**: Rollback도 같은 스크립트(`promote_windows_release.ps1`)와 같은 배포 경로를 쓰므로 위 결함이 똑같이 나타날 수 있다. "deployment URL" 오류로 중단되면 **배포 자체는 성공했을 수 있으므로 재실행하지 말고**, `vercel ls`(배포 목록)와 배포된 페이지 번들로 실제 상태를 먼저 확인한 뒤 `production.json`을 수동 기록한다.
 
 이전 release metadata와 R2 object는 삭제하지 않는다. Rollback 대상의 `v<VERSION>.json`과 R2 object가 모두 남아 있을 때 동일한 promotion script에 이전 version을 전달한다.
 
