@@ -44,8 +44,7 @@
 - [x] 2. **0.2.0 번들 이동**(완료 2026-10-21, 3,653개 / 5,204,054,133바이트 / exe SHA 일치, 검증기 PASS; 0.1.1 번들은 `dist_candidate_protoc_0.1.1`): `C:r_wt\dist_candidate_protoc`를 메인 저장소 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관. 검증 스크립트의 크기·SHA 고정값으로 확인.
 - [x] 3. **Prepare**(완료 2026-10-21, DryRun 경고 없음 → 실제 실행 종료 코드 0, 업로드본 2,379,765,928바이트 / SHA-256 `5D243B3B…904EA9`, 공개 URL HTTP 200, DEVLOG): `release_windows.ps1 -Version 0.2.0 -DryRun` → 실제 실행(R2에 올라가며 같은 버전으로 다시 올릴 수 없다). 사용자 승인 뒤.
 - [x] 4. **`releases/windows/v0.2.0.json` 커밋**(41da563, `installer_manifest.json` 포함. 아직 push 안 함)(Promote가 깨끗한 working tree를 요구한다).
-- [x] 5. **R2 업로드본 설치 테스트**(사용자, 2026-10-21, 진행표 `r2_install_test_runsheet.md`): 해시 일치, 설치·런처·카운트·로컬 기록 정상. **첫 세션 서버 업로드 실패(README Known Issues 재현), 같은 설치 상태의 두 번째 세션은 업로드 성공.** 조사 결과와 **A안 결정(0.2.0 그대로 Promote, 알려진 문제로 두고 0.2.1에서 수정)** 은 DEVLOG, 계획은 `v0.2.1_plan.md`.
-- [ ] 5-1. **0.2.1 수정(릴리스 이후)**: 업로드를 화면 루프 밖으로 이동 후 시간 제한 상향, 런처 로그인 직후 `/health` 사전 호출, 종료 시 대기 요약 재시도·알림, 업로드 결과 파일 로그, 로컬 기록 재전송(성공 표시 + 서버 중복 방지). 항목별 위험·테스트 방법과 서버 유휴 완화 검토는 `v0.2.1_plan.md`.: 웹에서 내려받아 설치, SHA-256이 `v0.2.0.json`과 같은지, 설치·실행·로그인·운동·저장·대시보드 확인.
+- [x] 5. **R2 업로드본 설치 테스트**(사용자, 2026-10-21, 진행표 `r2_install_test_runsheet.md`): 해시 일치, 설치·런처·카운트·로컬 기록 정상. **첫 세션 서버 업로드 실패(알려진 한계 재현), 같은 설치 상태의 두 번째 세션은 업로드 성공.** 조사 결과와 결정(0.2.0을 그대로 Promote, 업로드 실패는 한계로 문서화, **0.2.1은 진행하지 않음**, 해결 방안만 기록)은 DEVLOG, 해결 방안은 `first_upload_limit_and_design.md`.
 - [ ] 6. **CHANGELOG 날짜**(`[Unreleased]` → `[0.2.0] - <Promote 날짜>`)와 **README Version History**(`v0.2.0` 행과 릴리스 절, 최종 SHA-256) 커밋.
 - [ ] 7. **Promote**: `promote_windows_release.ps1 -Version 0.2.0 -DryRun` → `-ApproveProductionChange`로 실제 실행. 사용자 승인 뒤. 이후 프런트 프로덕션 HTTP 확인.
 - [ ] 8. **`releases/windows/production.json` 커밋.**
