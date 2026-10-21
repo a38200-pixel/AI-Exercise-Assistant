@@ -12,7 +12,7 @@ AI Client가 실시간 자세를 분석하고, 운동 결과를 DB에 저장해 
 
 <br />
 
-<img src="docs/FitRoute_랜딩페이지.png" alt="FitRoute 랜딩 페이지" width="88%" />
+<img src="FitRoute_랜딩페이지.png" alt="FitRoute 랜딩 페이지" width="88%" />
 
 </div>
 
@@ -66,7 +66,7 @@ Windows Installer에는 Python runtime과 주요 dependency 및 모델이 포함
 FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을 독립적으로 구성했습니다.
 
 <p align="center">
-  <img src="docs/FitRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
+  <img src="FitRoute_서비스_구조.png" alt="FitRoute 서비스 구조" width="100%" />
 </p>
 
 | Component | Role |
@@ -84,7 +84,7 @@ FitRoute는 **Web / Desktop AI / API / Database**를 분리하고, 각 역할을
 ## 3. 시스템 흐름도
 
 <p align="center">
-  <img src="docs/FitRoute_시스템_흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
+  <img src="FitRoute_시스템_흐름도.png" alt="FitRoute 시스템 흐름도" width="100%" />
 </p>
 
 ### 인증 및 운동 실행
@@ -136,7 +136,7 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 ### Web Service
 
 <p align="center">
-  <img src="docs/FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
+  <img src="FitRoute_주요화면.png" alt="FitRoute 주요 웹 화면" width="100%" />
 </p>
 
 ### Real-time AI Workout
@@ -144,7 +144,7 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
 
 <p align="center">
-  <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
+  <img src="FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
 </p>
 
 ---
@@ -153,7 +153,7 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 ### 실시간 AI 운동 분석
 
 <p align="center">
-  <img src="docs/FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
+  <img src="FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
 </p>
 
 - **33 landmarks → 132 features → XGBoost**
@@ -437,17 +437,17 @@ AI-Exercise-Assistant/
 
 세부 설계·검증·배포 과정은 별도 문서로 분리했습니다.
 
-- [Windows Release Process](docs/windows_release_process.md)
-- [Windows Installer](docs/windows_installer.md)
-- [Desktop Launcher](docs/desktop_client_launcher.md)
-- [AI Client Packaging Plan](docs/ai_client_packaging_plan.md)
-- [Bundle Size Analysis](docs/ai_client_bundle_size_analysis.md)
-- [Torch Slimming Analysis](docs/ai_client_torch_slimming_analysis.md)
-- [Runtime Module Trace](docs/runtime_module_trace.md)
-- [Production Deployment Checklist](docs/production_deployment_checklist.md)
-- [Backend Guide](backend/README.md)
-- [Frontend Guide](frontend/README.md)
-- [Docs Index](docs/README.md)
+- [Windows Release Process](windows_release_process.md)
+- [Windows Installer](windows_installer.md)
+- [Desktop Launcher](desktop_client_launcher.md)
+- [AI Client Packaging Plan](ai_client_packaging_plan.md)
+- [Bundle Size Analysis](ai_client_bundle_size_analysis.md)
+- [Torch Slimming Analysis](ai_client_torch_slimming_analysis.md)
+- [Runtime Module Trace](runtime_module_trace.md)
+- [Production Deployment Checklist](production_deployment_checklist.md)
+- [Backend Guide](../backend/README.md)
+- [Frontend Guide](../frontend/README.md)
+- [Docs Index](README.md)
 
 ---
 ## 14. 프로젝트를 통해 얻은 경험
