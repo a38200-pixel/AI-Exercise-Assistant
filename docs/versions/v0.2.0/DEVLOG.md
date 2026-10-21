@@ -1906,3 +1906,12 @@
 - **번들 이동**: 메인 저장소의 0.1.1 번들(4,708개 파일, 5,228,402,855바이트, exe SHA 09799FF2…)을 `dist_candidate_protoc_0.1.1`로 이름을 바꿔 보관하고(`.git/info/exclude`로 git에서 제외, 커밋 안 됨), `C:\fr_wt`의 0.2.0 번들을 `dist_candidate_protoc`로 복사했다. 복사본은 3,653개 / 5,204,054,133바이트 / exe SHA-256 `7E3C9D33…FB9CE`로 고정값과 같고 main(b05f7c5)에서 `validate_installer_inputs.py --version 0.2.0`이 PASS였다.
 - **설치판 확인에 사용한 사전 빌드본**: 설치 파일 `FitRoute-AI-Client-Setup-0.2.0.exe`(커밋 c63b5ee에서 빌드, 2,379,730,431바이트, SHA-256 `4B5A4C467C562CB8C340723E846CCD88B549F07AB51AD257986753B61342A174`)를 저장소 밖 `D:\FitRoute_backup\installer_prerelease\FitRoute-AI-Client-Setup-0.2.0_c63b5ee.exe`로 옮겨 보관했다(옮긴 뒤 해시 동일). 실제 Prepare가 같은 이름의 설치 파일을 `installer_output\`에 새로 만들기 때문이다. 이 파일은 R2에 올라가지 않았고 업로드본과 다를 수 있다.
 - **Prepare DryRun**: `-DryRun -R2PublicBaseUrl <v0.1.1.json의 다운로드 URL에서 읽은 공개 호스트> -PythonExecutable <fitroute_build>`. 경고·오류 없음, git 변경 0건, R2 접근 없음(DryRun은 rclone 실행 이전에 반환). 실제 Prepare는 아직 실행하지 않았다.
+
+## 2026-10-21 — Phase 5 E단계: Prepare 실행 결과
+
+- **실행**: `release_windows.ps1 -Version 0.2.0 -R2PublicBaseUrl <공개 호스트> -PythonExecutable <fitroute_build>` 한 번, 종료 코드 0, 중단·재실행 없음. 순서: 작업 트리 깨끗함 확인 → 검증기 PASS → R2 동일 객체 없음 확인 → 설치 파일 새로 빌드 → 해시 계산 → R2 업로드(`--immutable`, 업로드 약 31초) → 원격 크기 확인 → 메타데이터 작성.
+- **업로드본**: `FitRoute-AI-Client-Setup-0.2.0.exe` **2,379,765,928바이트**, SHA-256 `5D243B3BF6B07CAF49309CCB7E19606FE450FF9B160AED97E314130F59904EA9`. 스크립트가 만든 `releases/windows/v0.2.0.json`의 `sha256`·`size_bytes`가 로컬 파일과 일치한다. R2 객체: `r2:fitroute-downloads/releases/v0.2.0/FitRoute-AI-Client-Setup-0.2.0.exe`. 공개 URL 헤더 확인: HTTP 200, `Content-Length` 2,379,765,928(로컬과 같음), `Content-Type: application/x-msdownload`.
+- **사전 빌드본과의 차이**: 사전 빌드본(c63b5ee 기준, 2,379,730,431바이트, `4B5A4C46…A174`)과 **해시가 다르고** 크기가 35,497바이트 크다. AI 번들은 검증기 기준으로 같다(3,653개 / 5,204,054,133바이트 / exe SHA-256 `7E3C9D33…FB9CE`; `installer_manifest.json`의 값으로 확인). 설치 파일 자체가 다른 이유(Inno Setup이 매 빌드 설치 파일에 넣는 시각·컴파일 정보 등)는 두 파일을 열어 비교하지 않아 확정하지 않았다. 그래서 업로드본으로 설치 테스트를 다시 한다(결정 사항).
+- **승격 안 함**: `production.json`은 0.1.1 그대로이며 웹사이트 다운로드 링크도 0.1.1이다. 태그도 만들지 않았다.
+- **커밋**: `installer/installer_manifest.json`(0.1.1 → 0.2.0 값)과 `releases/windows/v0.2.0.json`을 41da563으로 커밋했다. push는 하지 않았다.
+- **다음**: 업로드본 설치 테스트(`r2_install_test_runsheet.md`, 사용자).

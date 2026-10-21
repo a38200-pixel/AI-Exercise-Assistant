@@ -41,10 +41,10 @@
 - [x] 사전 확인(2026-10-21): 원격 `origin/feature/v0.2.0-squat-quality`는 로컬과 같은 a8a238c(앞섬·뒤처짐 0, 원격에만 있는 커밋 없음), 원격 범위에 비밀 키·`.jsonl`·POLAR 원본·샘플 단위 CSV·P01/P02 원본 없음, `tests/` 552·`backend/tests` 37 통과.
 - [x] 로그 원본(`data/landmark_sequences/`)이 별도 백업(`D:\FitRoute_backup\`)에 있고 저장소에는 올라가지 않았다. (2026-10-21 재확인: 로그 `.jsonl` **39개** 모두 백업에 있고, manifest 42행은 로그 39개 + `.gitkeep` + 그래프 2개이며 해시가 모두 일치. 앞서 "40개/42개"로 적은 숫자는 파일 종류를 구분하지 않은 것이다.)
 - [ ] 1. **병합(`--no-ff`)·push**: feature push와 main 병합 커밋 9cce57f는 완료(2026-10-21). **main push는 사용자 확인 뒤.**
-- [ ] 2. **0.2.0 번들 이동**: `C:r_wt\dist_candidate_protoc`를 메인 저장소 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관. 검증 스크립트의 크기·SHA 고정값으로 확인.
-- [ ] 3. **Prepare**: `release_windows.ps1 -Version 0.2.0 -DryRun` → 실제 실행(R2에 올라가며 같은 버전으로 다시 올릴 수 없다). 사용자 승인 뒤.
-- [ ] 4. **`releases/windows/v0.2.0.json` 커밋**(Promote가 깨끗한 working tree를 요구한다).
-- [ ] 5. **R2 업로드본 설치 테스트**(사용자): 웹에서 내려받아 설치, SHA-256이 `v0.2.0.json`과 같은지, 설치·실행·로그인·운동·저장·대시보드 확인.
+- [x] 2. **0.2.0 번들 이동**(완료 2026-10-21, 3,653개 / 5,204,054,133바이트 / exe SHA 일치, 검증기 PASS; 0.1.1 번들은 `dist_candidate_protoc_0.1.1`): `C:r_wt\dist_candidate_protoc`를 메인 저장소 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관. 검증 스크립트의 크기·SHA 고정값으로 확인.
+- [x] 3. **Prepare**(완료 2026-10-21, DryRun 경고 없음 → 실제 실행 종료 코드 0, 업로드본 2,379,765,928바이트 / SHA-256 `5D243B3B…904EA9`, 공개 URL HTTP 200, DEVLOG): `release_windows.ps1 -Version 0.2.0 -DryRun` → 실제 실행(R2에 올라가며 같은 버전으로 다시 올릴 수 없다). 사용자 승인 뒤.
+- [x] 4. **`releases/windows/v0.2.0.json` 커밋**(41da563, `installer_manifest.json` 포함. 아직 push 안 함)(Promote가 깨끗한 working tree를 요구한다).
+- [ ] 5. **R2 업로드본 설치 테스트**(사용자, 진행표 `r2_install_test_runsheet.md`; 업로드본은 사전 빌드본과 해시가 다르다): 웹에서 내려받아 설치, SHA-256이 `v0.2.0.json`과 같은지, 설치·실행·로그인·운동·저장·대시보드 확인.
 - [ ] 6. **CHANGELOG 날짜**(`[Unreleased]` → `[0.2.0] - <Promote 날짜>`)와 **README Version History**(`v0.2.0` 행과 릴리스 절, 최종 SHA-256) 커밋.
 - [ ] 7. **Promote**: `promote_windows_release.ps1 -Version 0.2.0 -DryRun` → `-ApproveProductionChange`로 실제 실행. 사용자 승인 뒤. 이후 프런트 프로덕션 HTTP 확인.
 - [ ] 8. **`releases/windows/production.json` 커밋.**
