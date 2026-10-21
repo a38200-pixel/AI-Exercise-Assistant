@@ -144,10 +144,10 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 ### Real-time AI Workout
 
-Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
+측면에서 서 있는 사용자의 스쿼트를 무릎각 기반 반복 추적으로 세고, 반복이 끝나면 영상 아래에 자세 점수 한 줄(`N점 · 개선할 점`, 감점이 없으면 `N점`)과 작은 "깊이·상체" 표기가 나타납니다. 현재 자세와 Confidence는 분류기(XGBoost)가 표시하는 값입니다. 정면·사선에서는 카운트하지 않습니다.
 
 <p align="center">
-  <img src="docs/FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
+  <img src="docs/FitRoute_운동_실행화면_v0.2.0.png" alt="FitRoute 실제 운동 실행 화면 (v0.2.0, 측면 스쿼트와 자세 점수 줄)" width="100%" />
 </p>
 
 ---
@@ -157,10 +157,10 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 ### 실시간 AI 운동 분석
 
 <p align="center">
-  <img src="docs/FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
+  <img src="docs/FitRoute_운동분석_v0.2.0.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인 (v0.2.0, 분류 경로와 반복 추적 경로)" width="100%" />
 </p>
 
-> 위 그림은 사람 검출부터 자세 분류(XGBoost)까지의 파이프라인입니다. **v0.2.0부터 스쿼트 횟수는 XGBoost 라벨이 아니라 아래의 무릎각 기반 반복 추적으로 셉니다.** XGBoost 라벨은 화면의 현재 자세 표시와 기록용으로만 쓰입니다.
+> 위 그림은 v0.2.0의 두 갈래 경로입니다. XGBoost 라벨은 화면의 현재 자세 표시와 기록용이고, **스쿼트 횟수와 자세 점수는 무릎각 기반 반복 추적(RepTracker)에서 나옵니다.** 자세한 내용은 아래 설명을 참고하세요.
 
 [[상세_파이프라인]](docs/AI_client_Pipeline.md)
 

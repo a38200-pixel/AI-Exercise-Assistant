@@ -141,10 +141,10 @@ Frontend가 운동 기록을 Supabase에서 직접 조회하지 않고, **Backen
 
 ### Real-time AI Workout
 
-Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반복 횟수를 기록합니다.
+측면에서 서 있는 사용자의 스쿼트를 무릎각 기반 반복 추적으로 세고, 반복이 끝나면 영상 아래에 자세 점수 한 줄(`N점 · 개선할 점`, 감점이 없으면 `N점`)과 작은 "깊이·상체" 표기가 나타납니다. 현재 자세와 Confidence는 분류기(XGBoost)가 표시하는 값입니다. 정면·사선에서는 카운트하지 않습니다.
 
 <p align="center">
-  <img src="FitRoute_운동_실행화면.png" alt="FitRoute 실제 운동 실행 화면" width="100%" />
+  <img src="FitRoute_운동_실행화면_v0.2.0.png" alt="FitRoute 실제 운동 실행 화면 (v0.2.0, 측면 스쿼트와 자세 점수 줄)" width="100%" />
 </p>
 
 ---
@@ -153,11 +153,13 @@ Pose를 추정하고, 현재 자세와 Confidence를 표시하며 스쿼트 반�
 ### 실시간 AI 운동 분석
 
 <p align="center">
-  <img src="FitRoute_운동분석.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인" width="100%" />
+  <img src="FitRoute_운동분석_v0.2.0.png" alt="FitRoute 실시간 AI 운동 분석 파이프라인 (v0.2.0, 분류 경로와 반복 추적 경로)" width="100%" />
 </p>
 
 - **33 landmarks → 132 features → XGBoost**
 - **Temporal Smoothing 적용**
+
+> 위 그림은 v0.2.0의 두 갈래 경로입니다. XGBoost 라벨은 화면의 현재 자세 표시와 기록용이고, **스쿼트 횟수와 자세 점수는 무릎각 기반 반복 추적(RepTracker)에서 나옵니다.** 자세한 내용은 [AI Client Pipeline](AI_client_Pipeline.md)의 "v0.2.0에서 바뀐 점"을 참고하세요.
 
 ### 운동 세션 기록
 
