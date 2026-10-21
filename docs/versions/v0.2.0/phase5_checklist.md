@@ -38,7 +38,7 @@
 **결정(2026-10-21)**: R2 업로드본(Prepare 결과물)이 D단계에서 테스트한 설치 파일과 다를 수 있어 **업로드본으로 설치 테스트를 다시 한다**(별도 PC가 없으면 이 PC에서 0.2.0 제거 후 웹에서 내려받아 설치, 해시가 `v0.2.0.json`과 같은지 확인). 0.2.0 번들은 메인 저장소의 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관한다. 릴리스는 병합된 main에서 실행한다. 병합은 squash가 아니라 `--no-ff` 병합 커밋이다(DEVLOG·보고서가 커밋 해시를 근거로 인용). 큰 파일(pptx) Git LFS 검토는 릴리스 이후로 미룬다. 릴리스 날짜는 Promote하는 날이다.
 
 - [x] 사전 확인(2026-10-21): 원격 `origin/feature/v0.2.0-squat-quality`는 로컬과 같은 a8a238c(앞섬·뒤처짐 0, 원격에만 있는 커밋 없음), 원격 범위에 비밀 키·`.jsonl`·POLAR 원본·샘플 단위 CSV·P01/P02 원본 없음, `tests/` 552·`backend/tests` 37 통과.
-- [x] 로그 원본(`data/landmark_sequences/`)이 별도 백업(`D:\FitRoute_backup\`)에 있고 저장소에는 올라가지 않았다. (2026-10-20 기준 백업 **42개** 파일, manifest 42행 해시 일치.)
+- [x] 로그 원본(`data/landmark_sequences/`)이 별도 백업(`D:\FitRoute_backup\`)에 있고 저장소에는 올라가지 않았다. (2026-10-21 재확인: 로그 `.jsonl` **39개** 모두 백업에 있고, manifest 42행은 로그 39개 + `.gitkeep` + 그래프 2개이며 해시가 모두 일치. 앞서 "40개/42개"로 적은 숫자는 파일 종류를 구분하지 않은 것이다.)
 - [ ] 1. **병합(`--no-ff`)·push**: main에 병합 커밋을 만들고 push. 사용자 승인 뒤.
 - [ ] 2. **0.2.0 번들 이동**: `C:r_wt\dist_candidate_protoc`를 메인 저장소 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관. 검증 스크립트의 크기·SHA 고정값으로 확인.
 - [ ] 3. **Prepare**: `release_windows.ps1 -Version 0.2.0 -DryRun` → 실제 실행(R2에 올라가며 같은 버전으로 다시 올릴 수 없다). 사용자 승인 뒤.
