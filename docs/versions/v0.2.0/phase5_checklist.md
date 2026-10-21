@@ -48,6 +48,6 @@
 - [x] 6. **CHANGELOG 날짜**(`[0.2.0] - 2026-10-21`)와 **README Version History**(v0.2.0 행·Release 절) 커밋 완료(f3f5fbd).
 - [x] 7. **Promote**(2026-10-21 10:37 KST 실행: 환경변수 변경과 `vercel deploy --prod`는 성공, 스크립트가 배포 주소를 읽지 못해 HTTP 확인·`production.json` 기록 전에 중단 → 수동 확인 후 기록. DEVLOG): `promote_windows_release.ps1 -Version 0.2.0 -DryRun` → `-ApproveProductionChange`로 실제 실행. 사용자 승인 뒤. 이후 프런트 프로덕션 HTTP 확인.
 - [x] 8. **`releases/windows/production.json` 커밋**(483d8dd, **스크립트 출력이 아닌 수동 기록**).
-- [ ] 9. **태그** `v0.2.0` 생성 → **태그 push**(사용자 승인 뒤).
-- [ ] 10. **`C:r_wt` 워크트리 정리**(`git worktree remove`; 번들 이동 이후, 태그 push 뒤 승인 후).
+- [x] 9. **태그** `v0.2.0`(주석 태그, main 38aa59a)을 만들고 태그 push 완료(2026-10-21, 원격 태그 확인).
+- [x] 10. **`C:r_wt` 워크트리 정리** 완료(2026-10-21). 추가로 `dist_candidate_protoc_0.1.1`(0.1.1 번들)과 `.git/info/exclude`의 해당 줄도 삭제. 0.2.0 번들(`dist_candidate_protoc`)과 `D:\FitRoute_backup`은 유지. 결과는 DEVLOG.
 - [ ] (릴리스 이후로 미룸) 큰 추적 파일(pptx 26MB 등) Git LFS·릴리스 첨부 검토.

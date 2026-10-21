@@ -1959,3 +1959,14 @@
   - `deployment_url` `https://fitroute-lah4i34jl-toru7.vercel.app`: `vercel ls fitroute --prod`의 목록과 `vercel inspect`(배포 id `dpl_2fNuXRVDZawMP1D9XHUUJKZB9NyD`, 별칭 확인).
   - `production_url` `https://fitroute-ivory.vercel.app/`: 이전 값 그대로.
   - `promoted_at` `2026-10-21T01:37:58Z`: `vercel inspect`의 배포 생성 시각 10:37:58 KST. 스크립트의 `ToString('o')`처럼 소수 자릿수는 없다.
+
+## 2026-10-21 — Phase 5 E단계 마무리: main push, 태그, 정리
+
+- **main push**: f3f5fbd..38aa59a(`production.json` 수동 기록, 스크립트 결함·롤백 경고 문서 포함). push 뒤 Vercel 자동 빌드(Ready), 프론트엔드 HTTP 200, 배포된 번들의 다운로드 링크는 0.2.0 URL.
+- **태그**: 주석 태그 `v0.2.0`을 main 38aa59a에 만들고 push했다. `git ls-remote --tags origin v0.2.0`: 태그 객체 `14717035f134b514d5a0318d61bb83196dc58e59`, 가리키는 커밋 `38aa59a5554b5a26028b3837a3673105ace6bd44`(로컬과 같음). 태그 메시지에 설치 파일 SHA-256 전체, 릴리스 날짜 2026-10-21, `production.json` 수동 기록 사실, 알려진 문제를 넣었다.
+- **정리**(태그 push 뒤, 사용자 승인):
+  - 삭제: `C:\fr_wt`(git worktree, 3,998개 파일, 7.36 GiB; `git worktree remove --force`, 수정·추적되지 않은 산출물이 있어 `--force` 사용), 메인 저장소의 `dist_candidate_protoc_0.1.1`(0.1.1 번들, 4,708개 파일, 4.87 GiB; 롤백은 R2의 0.1.1 설치 파일과 `v0.1.1.json`으로 하므로 불필요), `.git/info/exclude`의 `/dist_candidate_protoc_0.1.1/` 줄(파일의 줄바꿈이 섞여 있어 정규식으로 제거).
+  - 확보한 용량: C: 여유 33.8 GiB → 46.0 GiB(약 12.2 GiB).
+  - 유지: `dist_candidate_protoc`(0.2.0 번들, 3,653개 파일 / 5,204,054,133바이트 / exe SHA-256 `7E3C9D33…FB9CE`, 정리 후 재확인), `D:\FitRoute_backup`(로그 원본 백업과 `installer_prerelease`의 사전 빌드본 `FitRoute-AI-Client-Setup-0.2.0_c63b5ee.exe`).
+  - 정리 후 상태: `git worktree list`는 메인 작업 폴더 하나(38aa59a [main]), `git status` 변경 0건(깨끗함).
+- 체크리스트 E단계의 9·10번을 완료 처리했다. 큰 추적 파일(pptx) Git LFS 검토는 사용자 결정으로 릴리스 이후로 남아 있다.
