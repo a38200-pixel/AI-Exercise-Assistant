@@ -38,9 +38,35 @@ desktop_launcher/config.json
 
 data/workout_logs/*.csv
 data/workout_logs/*.json
+data/workout_logs/*.tmp
 !data/workout_logs/.gitkeep
+
+# Landmark 시퀀스 로그(진단용, 로컬 전용). 얼굴 landmark가 포함되므로 저장소에 올리지 않는다.
+data/landmark_sequences/*
+!data/landmark_sequences/.gitkeep
 packaging/ai_client/build_ai_client_candidate_testing.ps1
 packaging/ai_client/FitRouteAIClient.optimized_testing.spec
 
 .vercel
 .env*
+
+# POLAR 원본 사진 유래(사진 속 인물, 데이터셋 라이선스): 사진 위에 그린 overlay 이미지와 샘플 단위 파생 CSV는 저장소에 올리지 않는다.
+docs/versions/*/analysis/overlays/
+docs/versions/*/analysis/*_samples.csv
+
+# 분석 캐시(재실행 속도용 파일, 예: polar_phase05_verification.py --cache). 분석 폴더 안으로만 한정한다.
+scripts/analysis/.cache/
+docs/versions/*/analysis/.cache/
+scripts/analysis/**/*.pkl
+scripts/analysis/**/*.npz
+scripts/analysis/**/*.parquet
+docs/versions/*/analysis/**/*.pkl
+docs/versions/*/analysis/**/*.npz
+docs/versions/*/analysis/**/*.parquet
+
+# 실측 세션별 그래프: 로그 1:1 렌더링이라 스크립트로 다시 만들 수 있고, 재실행마다 바뀌는 바이너리라 저장소가 불어난다.
+# (집계 그래프는 같은 plots/ 폴더에 있어도 커밋한다.)
+docs/versions/*/analysis/field_test_*/plots/session_*.png
+
+# 테스트 캐시
+.pytest_cache/

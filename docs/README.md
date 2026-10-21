@@ -406,7 +406,7 @@ AI-Exercise-Assistant/
 ├─ scripts/                  # Environment and Windows release automation
 ├─ tests/                    # AI Client and Launcher test suite
 ├─ releases/windows/         # Version metadata and current Production state
-├─ data/workout_logs/        # Local runtime output placeholder
+├─ data/workout_logs/        # Local workout records (dev runs): workout_<start>.json per session; installed builds use %LOCALAPPDATA%\FitRoute\workout_logs
 ├─ docs/                     # Architecture, deployment and engineering records
 ├─ requirements.txt
 ├─ .vercelignore

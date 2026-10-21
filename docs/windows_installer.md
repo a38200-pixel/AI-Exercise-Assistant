@@ -19,7 +19,7 @@ Installer binary는 Git이 아니라 Cloudflare R2의 versioned object로 관리
 ## Input baseline
 
 - AI Client: `dist_candidate_protoc/FitRouteAIClient/`
-- AI bundle: 3,653 files / 5,203,968,114 bytes / 4.846573 GiB
+- AI bundle: 3,653 files / 5,203,968,114 bytes / 4.846573 GiB (0.1.1). **0.2.0 빌드: 3,653 files / 5,204,054,133 bytes / 4.846653 GiB** (`installer/validate_installer_inputs.py`의 고정 기준을 이 값으로 갱신)
 - Launcher: `desktop_launcher/dist/FitRouteLauncher.exe`
 - Production config: `installer/config.production.json`
 - AppId: `{C75B86BB-3B71-4CDA-BEDF-1040AE9BB0A8}`

@@ -1,6 +1,8 @@
-"""Stable pose를 사용하는 Squat과 Stretch 운동 규칙."""
+"""Squat과 Stretch 운동 규칙. Squat은 RepTracker(무릎각 시계열)가 있으면 그 결과로, 없으면 stable 라벨 전이로 센다."""
 
 from typing import Any
+
+from src.rep_tracker import RepFrame, RepResult, RepTracker
 
 
 IDLE_MODE = "idle"
@@ -14,15 +16,25 @@ SQUAT_WAITING_RETURN_STAND = "WAITING_RETURN_STAND"
 
 
 class ExerciseCounter:
-    def __init__(self) -> None:
+    def __init__(self, rep_tracker: RepTracker | None = None) -> None:
+        """rep_tracker가 있으면 squat 모드의 count는 RepTracker가 확정한 반복만 센다(v0.2.0).
+        없으면 v0.1.x처럼 stable 라벨의 stand → squat → stand 전이로 센다."""
         self.exercise_mode = IDLE_MODE
         self.last_stable_pose: str | None = None
+        self._rep_tracker = rep_tracker
+        self.last_rep_result: RepResult | None = None
+        # 이번 세션(마지막 reset 이후)에 끝난 반복 후보 전부(확정·탈락·중단). WorkoutSession의 로컬 기록용이며 서버 업로드 형식과 무관하다.
+        self.rep_history: list[RepResult] = []
 
         self.squat_count = 0
         self.squat_state = SQUAT_WAITING_STAND
 
         self.total_stretch_seconds = 0.0
         self.stretch_start_time: float | None = None
+
+    @property
+    def uses_rep_tracker(self) -> bool:
+        return self._rep_tracker is not None
 
     def set_mode(self, mode: str, current_time: float) -> None:
         """운동 모드를 바꾸되 이미 완료된 count와 누적 시간은 보존한다."""
@@ -38,12 +50,20 @@ class ExerciseCounter:
         self.exercise_mode = mode
         self._reset_progress_states()
 
-    def update(self, stable_pose: str | None, current_time: float) -> None:
-        """Raw pose가 아닌 smoothing을 통과한 stable pose만 입력받는다."""
+    def update(
+        self,
+        stable_pose: str | None,
+        current_time: float,
+        rep_frame: RepFrame | None = None,
+    ) -> None:
+        """Raw pose가 아닌 smoothing을 통과한 stable pose만 입력받는다. rep_frame은 RepTracker용 기하 입력이다."""
         self.last_stable_pose = stable_pose
 
         if self.exercise_mode == SQUAT_MODE:
-            self._update_squat(stable_pose)
+            if self._rep_tracker is not None:
+                self._update_squat_reps(stable_pose, rep_frame, current_time)
+            else:
+                self._update_squat(stable_pose)
         elif self.exercise_mode == STRETCH_MODE:
             self._update_stretch(stable_pose, current_time)
 
@@ -52,6 +72,7 @@ class ExerciseCounter:
         if self.exercise_mode == SQUAT_MODE:
             self.squat_count = 0
             self.squat_state = SQUAT_WAITING_STAND
+            self._reset_rep_tracker()
         elif self.exercise_mode == STRETCH_MODE:
             self.total_stretch_seconds = 0.0
             if self.last_stable_pose == "stretch":
@@ -63,6 +84,7 @@ class ExerciseCounter:
         """새 Workout Session을 위해 Squat과 Stretch 기록을 모두 초기화한다."""
         self.squat_count = 0
         self.squat_state = SQUAT_WAITING_STAND
+        self._reset_rep_tracker()
         self.total_stretch_seconds = 0.0
         self.stretch_start_time = None
 
@@ -77,7 +99,7 @@ class ExerciseCounter:
             stretch_seconds += current_time - self.stretch_start_time
 
         if self.exercise_mode == SQUAT_MODE:
-            exercise_state = self.squat_state
+            exercise_state = self._rep_tracker.state if self._rep_tracker is not None else self.squat_state
         elif self.exercise_mode == STRETCH_MODE:
             exercise_state = (
                 "STRETCHING" if self.stretch_start_time is not None else "WAITING_STRETCH"
@@ -91,6 +113,15 @@ class ExerciseCounter:
             "state": exercise_state,
             "squat_count": self.squat_count,
             "stretch_seconds": stretch_seconds,
+            # RepTracker가 있을 때만 의미가 있다(Phase 3 화면 안내·점수용).
+            "rep_guidance": self._rep_tracker.guidance if self._rep_tracker is not None else None,
+            # squat 모드에서 BodyLock이 오래 잡히지 않을 때의 안내 사유("not_side" / "full_body_invalid") 또는 None.
+            "rep_notice": (
+                self._rep_tracker.notice
+                if self._rep_tracker is not None and self.exercise_mode == SQUAT_MODE
+                else None
+            ),
+            "last_rep": self.last_rep_result,
         }
 
     def _update_squat(self, stable_pose: str | None) -> None:
@@ -112,6 +143,35 @@ class ExerciseCounter:
                 self.squat_count += 1
                 self.squat_state = SQUAT_WAITING_SQUAT
 
+    def rep_diagnostics(self) -> dict[str, Any] | None:
+        """로그용 진단 정보: RepTracker 상태, 안내 사유, 마지막 호출 이후의 이벤트(rep_end, rep_merge_suspect).
+        RepTracker를 쓰지 않거나 squat 모드가 아니면 None. 호출하면 이벤트가 비워진다."""
+        if self._rep_tracker is None or self.exercise_mode != SQUAT_MODE:
+            return None
+        return {
+            "state": self._rep_tracker.state,
+            "notice": self._rep_tracker.notice,
+            "events": self._rep_tracker.pop_events(),
+        }
+
+    def _update_squat_reps(self, stable_pose: str | None, rep_frame: RepFrame | None, current_time: float) -> None:
+        """RepTracker가 확정한 반복만 센다. 탈락·중단된 반복은 last_rep_result에만 남는다."""
+        assert self._rep_tracker is not None
+        frame = rep_frame if rep_frame is not None else RepFrame.missing(current_time)
+        result = self._rep_tracker.update(frame, stable_pose)
+        if result is None:
+            return
+        self.last_rep_result = result
+        self.rep_history.append(result)
+        if result.counted:
+            self.squat_count += 1
+
+    def _reset_rep_tracker(self) -> None:
+        self.last_rep_result = None
+        self.rep_history = []
+        if self._rep_tracker is not None:
+            self._rep_tracker.reset()
+
     def _update_stretch(self, stable_pose: str | None, current_time: float) -> None:
         if stable_pose == "stretch":
             # stretch로 처음 전환된 시각만 저장하고, 유지 프레임에서는 바꾸지 않는다.
@@ -130,4 +190,5 @@ class ExerciseCounter:
 
     def _reset_progress_states(self) -> None:
         self.squat_state = SQUAT_WAITING_STAND
+        self._reset_rep_tracker()
         self.stretch_start_time = None

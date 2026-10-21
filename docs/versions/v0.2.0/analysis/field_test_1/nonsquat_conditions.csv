@@ -1,0 +1,12 @@
+﻿condition (rep is squat-like if True),normal_reps_total,normal_reps_rejected,8a_candidates,8a_still_kept,8b_candidates,8b_still_kept,8c_candidates,8c_still_kept
+duration >= 1.0 s,48,0,17,0,3,3,3,3
+hip_drop_norm >= 0.25,48,0,17,0,3,3,3,3
+other knee also flexed (other_knee_min <= 130),48,0,17,1,3,3,3,3
+knee L/R diff at bottom <= 8 deg,48,6,17,0,3,3,3,1
+ankle gap at standing <= 0.25 L (feet together),48,0,17,17,3,3,3,0
+torso_signed at bottom >= 30 deg (not upright/back),48,0,17,0,3,0,3,0
+bottom dwell <= 2.2 s,48,0,17,17,3,1,3,3
+sit label share <= 0.25,48,0,17,17,3,0,3,3
+walk label share <= 0.35,48,0,17,0,3,3,3,0
+ML exclusion share (walk+run+jump+lying) <= 0.45,48,0,17,0,3,3,3,0
+COMBINED: duration + hip_drop + ankle gap + torso + sit,48,0,17,0,3,0,3,0

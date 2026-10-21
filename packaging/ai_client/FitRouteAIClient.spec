@@ -55,6 +55,10 @@ hiddenimports = [
     "mediapipe.tasks.python.vision.core",
     "mediapipe.tasks.python.vision.core.vision_task_running_mode",
     "mediapipe.tasks.python.vision.pose_landmarker",
+    # 안내 문구의 한글 렌더링(src.main._korean_font)이 함수 안에서 import한다. 없거나 폰트 파일이 없으면 영어 문구로 대체된다.
+    "PIL.Image",
+    "PIL.ImageDraw",
+    "PIL.ImageFont",
     "tensorrt",
     "tensorrt_bindings",
     "tensorrt_libs",

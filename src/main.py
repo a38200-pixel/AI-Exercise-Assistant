@@ -3,6 +3,7 @@
 import argparse
 import sys
 import time
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,12 @@ if __package__ in (None, ""):
 import cv2
 import numpy as np
 
-from config.settings import BBOX_PADDING
+from config.settings import (
+    BBOX_PADDING,
+    LANDMARK_SEQUENCE_DIR,
+    SEQUENCE_LOG_FACE_LANDMARKS,
+    SEQUENCE_LOGGING_ENABLED,
+)
 from src.api_client import WorkoutUploader, create_api_client_from_environment
 from src.camera import Camera
 from src.exercise_counter import (
@@ -22,11 +28,23 @@ from src.exercise_counter import (
     STRETCH_MODE,
     ExerciseCounter,
 )
+from src.geometry_tracker import GeometryTracker
 from src.person_detector import PersonDetector
 from src.pose_classifier import PoseClassifier
 from src.pose_estimator import PoseEstimator
 from src.prediction_smoother import PredictionSmoother
+from src.framing_guide import NOTICE_MOVE_BACK, NOTICE_MOVE_CENTER, FramingGuide
+from src.rep_feedback import KIND_INTRO, KIND_SCORE, KIND_SHALLOW, FeedbackLine, RepFeedback
+from src.rep_tracker import NOTICE_FULL_BODY_INVALID, NOTICE_NOT_SIDE, RepTracker, track_primary_person
 from src.runtime_diagnostic import run_runtime_diagnostic
+from src.sequence_logger import (
+    CAMERA_VIEWS,
+    INTENDED_POSTURES,
+    SequenceLogger,
+    SequenceRecorder,
+    collect_session_footer,
+    session_metadata,
+)
 from src.workout_session import WorkoutSession
 
 
@@ -99,8 +117,12 @@ def classify_detected_people(
         person_crop = frame[padded_y1:padded_y2, padded_x1:padded_x2]
 
         mediapipe_started = time.perf_counter()
-        landmarks = pose_estimator.extract(person_crop)
+        extraction = pose_estimator.extract(person_crop)
         mediapipe_seconds += time.perf_counter() - mediapipe_started
+
+        # 분류기에는 이전과 같은 정규화 landmark만 넘긴다. world landmarks는 진단 로그 전용이다.
+        landmarks = extraction.landmarks if extraction is not None else None
+        world_landmarks = extraction.world_landmarks if extraction is not None else None
 
         prediction = None
         if landmarks is not None:
@@ -114,6 +136,7 @@ def classify_detected_people(
                 "padded_bbox": padded_bbox,
                 "person_confidence": detection["confidence"],
                 "landmarks": landmarks,
+                "world_landmarks": world_landmarks,
                 "prediction": prediction,
             }
         )
@@ -266,6 +289,126 @@ def _put_ui_text(
     )
 
 
+# 안내 사유 → (한글 문구, 한글 폰트를 쓸 수 없을 때의 영어 문구)
+NOTICE_TEXT = {
+    NOTICE_NOT_SIDE: ("카메라 쪽으로 옆모습이 보이게 서주세요", "TURN SIDEWAYS TO THE CAMERA"),
+    NOTICE_FULL_BODY_INVALID: ("발끝까지 화면에 들어오게 서주세요", "STAND SO YOUR FEET ARE IN VIEW"),
+    NOTICE_MOVE_BACK: ("뒤로 물러서 주세요", "STEP BACK FROM THE CAMERA"),
+    NOTICE_MOVE_CENTER: ("화면 가운데로 이동해 주세요", "MOVE TO THE CENTER OF THE VIEW"),
+}
+NOTICE_COLOR = (94, 190, 255)
+_KOREAN_FONT_CANDIDATES = (
+    "C:/Windows/Fonts/malgun.ttf",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+)
+
+
+@lru_cache(maxsize=4)  # 안내 문구(22)와 점수 옆 작은 표기(16)가 서로 밀어내지 않게 크기별로 둔다
+def _korean_font(size: int = 22):
+    """한글을 그릴 수 있는 폰트. Pillow나 폰트 파일이 없으면 None(그러면 영어 문구로 대체한다)."""
+    try:
+        from PIL import ImageFont
+    except ImportError:
+        return None
+    for path in _KOREAN_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return None
+
+
+@lru_cache(maxsize=8)
+def _notice_text_layer(notice: str, width: int, band_height: int, font: Any) -> tuple[np.ndarray, np.ndarray] | None:
+    """안내 문구를 한 번만 그려 둔 합성용 레이어. 문구(notice)·띠 크기·폰트가 바뀔 때만 다시 그린다.
+
+    반환: (255 - 알파, 문구색 x 알파)를 uint16 배열로 둔 쌍. 프레임마다 영상 위에 `(영상 x (255-알파) + 문구색 x 알파) // 255`로
+    합성만 하면 된다(PIL 변환·폰트 렌더링 없음). 폰트가 없으면 None(영어 문구로 대체).
+    """
+    if font is None:
+        return None
+    from PIL import Image, ImageDraw
+
+    mask_image = Image.new("L", (width, band_height), 0)
+    draw = ImageDraw.Draw(mask_image)
+    text_width = draw.textlength(NOTICE_TEXT[notice][0], font=font)
+    draw.text(((width - text_width) / 2, 9), NOTICE_TEXT[notice][0], font=font, fill=255)
+    alpha = np.asarray(mask_image, dtype=np.uint16)[:, :, None]
+    color = np.array(NOTICE_COLOR, dtype=np.uint16)  # BGR
+    return 255 - alpha, color * alpha
+
+
+FEEDBACK_COLORS = {KIND_SCORE: LIME, KIND_SHALLOW: NOTICE_COLOR, KIND_INTRO: WHITE}
+FEEDBACK_MAIN_FONT_SIZE = 22
+FEEDBACK_TAG_FONT_SIZE = 16
+
+
+@lru_cache(maxsize=16)
+def _feedback_text_layer(
+    line: FeedbackLine, width: int, band_height: int, fonts: tuple[Any, Any]
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """반복 결과 한 줄(문구 + 오른쪽 작은 회색 표기)을 한 번만 그려 둔 합성용 레이어. 문구가 바뀔 때만 다시 그린다.
+    반환: (255 - 알파, 색 x 알파)를 uint16 배열로 둔 쌍. 한글 폰트가 없으면 None(영어 문구로 대체)."""
+    main_font, tag_font = fonts
+    if main_font is None:
+        return None
+    from PIL import Image, ImageDraw
+
+    main_mask = Image.new("L", (width, band_height), 0)
+    draw = ImageDraw.Draw(main_mask)
+    text_width = draw.textlength(line.korean, font=main_font)
+    draw.text(((width - text_width) / 2, 9), line.korean, font=main_font, fill=255)
+    alpha_main = np.asarray(main_mask, dtype=np.uint16)[:, :, None]
+    alpha_tag = np.zeros_like(alpha_main)
+    if line.tag_korean and tag_font is not None:
+        tag_mask = Image.new("L", (width, band_height), 0)
+        tag_draw = ImageDraw.Draw(tag_mask)
+        tag_width = tag_draw.textlength(line.tag_korean, font=tag_font)
+        tag_draw.text((width - tag_width - 14, 15), line.tag_korean, font=tag_font, fill=255)
+        alpha_tag = np.asarray(tag_mask, dtype=np.uint16)[:, :, None]
+    alpha = np.minimum(alpha_main + alpha_tag, 255)
+    foreground = np.array(FEEDBACK_COLORS[line.kind], dtype=np.uint16) * alpha_main + np.array(MUTED_TEXT, dtype=np.uint16) * alpha_tag
+    return 255 - alpha, foreground
+
+
+def _draw_feedback_band(canvas: np.ndarray, line: FeedbackLine, left: int, right: int, bottom: int) -> None:
+    """영상 아래쪽 띠에 반복 결과 한 줄을 그린다(안내 띠와 같은 자리, 안내가 있으면 안내가 우선이라 이 함수는 안 불린다)."""
+    band_height = 44
+    top = bottom - band_height - 10
+    region = canvas[top:top + band_height, left:right]
+    region[:] = cv2.addWeighted(region, 0.25, np.full_like(region, INK), 0.75, 0)
+    fonts = (_korean_font(FEEDBACK_MAIN_FONT_SIZE), _korean_font(FEEDBACK_TAG_FONT_SIZE))
+    layer = _feedback_text_layer(line, region.shape[1], band_height, fonts)
+    if layer is not None:
+        inverse_alpha, foreground = layer
+        region[:] = (region.astype(np.uint16) * inverse_alpha + foreground) // 255
+        return
+    scale = 0.62
+    text_width = cv2.getTextSize(line.english, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]
+    _put_ui_text(canvas, line.english, (left + (right - left - text_width) // 2, top + 30), scale, FEEDBACK_COLORS[line.kind], 2)
+    if line.tag_english:
+        tag_width = cv2.getTextSize(line.tag_english, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)[0][0]
+        _put_ui_text(canvas, line.tag_english, (right - tag_width - 14, top + 28), 0.42, MUTED_TEXT, 1)
+
+
+def _draw_notice_band(canvas: np.ndarray, notice: str, left: int, right: int, bottom: int) -> None:
+    """영상 영역 아래쪽에 반투명 띠를 깔고 안내 한 줄을 그린다. 안내가 있을 때만 호출한다."""
+    _, english = NOTICE_TEXT[notice]
+    band_height = 44
+    top = bottom - band_height - 10
+    region = canvas[top:top + band_height, left:right]
+    region[:] = cv2.addWeighted(region, 0.25, np.full_like(region, INK), 0.75, 0)
+    layer = _notice_text_layer(notice, region.shape[1], band_height, _korean_font())
+    if layer is not None:
+        inverse_alpha, foreground = layer
+        region[:] = (region.astype(np.uint16) * inverse_alpha + foreground) // 255
+        return
+    scale = 0.62
+    text_width = cv2.getTextSize(english, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)[0][0]
+    _put_ui_text(canvas, english, (left + (right - left - text_width) // 2, top + 30), scale, NOTICE_COLOR, 2)
+
+
 def _workout_ui_status(session_status: str, cloud_status: str) -> tuple[str, tuple[int, int, int]]:
     if session_status == "ACTIVE":
         return "ACTIVE", LIME
@@ -333,8 +476,11 @@ def compose_workout_ui(
     display_pose: str,
     display_confidence: float,
     tracking_active: bool,
+    notice: str | None = None,
+    feedback: FeedbackLine | None = None,
 ) -> np.ndarray:
-    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다."""
+    """추론 frame을 유지하면서 고정 크기 FitRoute HUD를 바깥에 구성한다. notice가 있으면 영상 아래쪽에 안내 한 줄을 보이고,
+    없으면 feedback(반복 결과 한 줄: 자세 점수, 얕음 안내, 점수 범위 안내)을 같은 자리에 보인다."""
     frame_height, frame_width = frame.shape[:2]
     header_height = 64
     footer_height = 54
@@ -347,6 +493,10 @@ def compose_workout_ui(
         footer_height,
     ).copy()
     canvas[header_height:header_height + frame_height, :frame_width] = frame
+    if notice in NOTICE_TEXT:
+        _draw_notice_band(canvas, notice, 12, frame_width - 12, header_height + frame_height)
+    elif feedback is not None:
+        _draw_feedback_band(canvas, feedback, 12, frame_width - 12, header_height + frame_height)
 
     panel_x = frame_width
 
@@ -426,9 +576,19 @@ def handle_keyboard_input(
     workout_session: WorkoutSession,
     workout_uploader: WorkoutUploader,
     current_time: float,
+    key_logger: Callable[..., Any] | None = None,
 ) -> bool:
-    """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다."""
+    """Session, 운동 모드, reset 키를 처리하고 종료 여부를 반환한다.
+
+    key_logger(key, current_time, **details)를 주면 카운트·세션에 영향을 주는 키(종료, 세션 시작·종료, 모드 전환, reset)를
+    누른 순간의 모드와 화면 카운트(누르기 전 값)와 함께 넘긴다. 로깅이 꺼져 있으면 None이다."""
+
+    def note(key: str, **details: Any) -> None:
+        if key_logger is not None:
+            key_logger(key, current_time, mode=exercise_counter.exercise_mode, squat_count=exercise_counter.squat_count, **details)
+
     if pressed_key in (27, ord("q"), ord("Q")):
+        note("quit", session_active=workout_session.is_active)
         if workout_session.is_active:
             complete_session(
                 exercise_counter,
@@ -445,11 +605,14 @@ def handle_keyboard_input(
     if pressed_key in (ord("s"), ord("S")):
         if workout_uploader.pending_summary is not None:
             print("[Cloud] Retry the pending workout with P before starting a new session.")
+            note("session_start", applied=False)
             return False
+        note("session_start", applied=not workout_session.is_active)  # 시작되면 운동 기록(화면 카운트)이 0으로 돌아간다
         workout_session.start(exercise_counter, current_time)
         return False
 
     if pressed_key in (ord("e"), ord("E")):
+        note("session_end", applied=workout_session.is_active)
         complete_session(
             exercise_counter,
             workout_session,
@@ -464,8 +627,10 @@ def handle_keyboard_input(
         ord("2"): STRETCH_MODE,
     }
     if pressed_key in mode_by_key:
+        note("mode", to=mode_by_key[pressed_key])
         exercise_counter.set_mode(mode_by_key[pressed_key], current_time)
     elif pressed_key in (ord("r"), ord("R")):
+        note("reset")
         exercise_counter.reset_current_exercise(current_time)
 
     return False
@@ -542,6 +707,8 @@ def print_benchmark(benchmark: dict[str, Any]) -> None:
     print(f"Average Smoothing:{np.mean(benchmark['smoothing']) * 1000:9.2f} ms")
     print(f"Average Exercise Logic:{np.mean(benchmark['exercise']) * 1000:7.2f} ms")
     print(f"Average Draw:     {np.mean(benchmark['draw']) * 1000:.2f} ms")
+    if any(benchmark.get("sequence", ())):
+        print(f"Average Sequence Log: {np.mean(benchmark['sequence']) * 1000:.3f} ms")
     print(f"Average Inference Time:{average_inference_seconds * 1000:8.2f} ms")
     print(f"\nYOLO26n TensorRT only: {YOLO_ONLY_BASELINE_FPS:.2f} FPS")
     print(f"Previous End-to-End:   {PREVIOUS_END_TO_END_FPS:.2f} FPS")
@@ -572,10 +739,176 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Camera와 network 없이 frozen runtime과 모델 파일을 검증합니다.",
     )
+    parser.add_argument(
+        "--log-sequence",
+        action="store_true",
+        default=SEQUENCE_LOGGING_ENABLED,
+        help="(진단용) landmark 시퀀스를 data/landmark_sequences/에 JSONL로 기록합니다. 영상은 저장하지 않으며 기본은 꺼져 있습니다.",
+    )
+    parser.add_argument(
+        "--session-posture",
+        choices=INTENDED_POSTURES,
+        default=None,
+        help="--log-sequence 세션의 의도한 자세: normal(정상), shallow(얕음), torso_lean(상체 숙임), heel_lift(뒤꿈치 들림).",
+    )
+    parser.add_argument(
+        "--session-view",
+        choices=CAMERA_VIEWS,
+        default=None,
+        help="--log-sequence 세션의 카메라 시점: side(측면), oblique(사선), front(정면).",
+    )
+    parser.add_argument(
+        "--session-note",
+        default=None,
+        help="--log-sequence 세션에 남길 자유 메모.",
+    )
+    parser.add_argument(
+        "--log-face-landmarks",
+        action="store_true",
+        default=SEQUENCE_LOG_FACE_LANDMARKS,
+        help="--log-sequence에서 얼굴 landmark(0~10번)의 좌표까지 저장합니다. 기본은 저장하지 않으며(코의 visibility만 남김) 꺼져 있습니다.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.benchmark_seconds is not None and arguments.benchmark_seconds <= 0:
         parser.error("--benchmark-seconds must be greater than 0")
+    session_options = (arguments.session_posture, arguments.session_view, arguments.session_note)
+    if not arguments.log_sequence and (
+        any(option is not None for option in session_options) or arguments.log_face_landmarks
+    ):
+        parser.error(
+            "--session-posture, --session-view, --session-note and --log-face-landmarks "
+            "require --log-sequence"
+        )
     return arguments
+
+
+def start_sequence_recording(
+    arguments: argparse.Namespace,
+    detector: PersonDetector,
+    pose_classifier: PoseClassifier,
+    geometry_tracker: GeometryTracker | None = None,
+) -> SequenceRecorder:
+    """--log-sequence가 켜졌을 때만 호출한다. 기록 파일을 만들고 헤더(메타데이터, 임계값)를 남긴다.
+
+    geometry_tracker는 RepTracker와 공유하는 추적기다. 없으면 기록기가 자기 것을 만든다.
+    """
+    logger = SequenceLogger(
+        LANDMARK_SEQUENCE_DIR,
+        metadata=session_metadata(
+            arguments.session_posture,
+            arguments.session_view,
+            arguments.session_note,
+        ),
+        runtime={
+            "detector_backend": detector.backend,
+            "pose_classes": list(pose_classifier.classes),
+            "exercise_mode": arguments.exercise,
+        },
+        options={"face_landmarks": arguments.log_face_landmarks},
+    )
+    path = logger.start()
+    face_note = "face landmark coordinates INCLUDED" if arguments.log_face_landmarks else "face landmark coordinates not stored"
+    print(f"[Sequence] Recording landmark sequence (no video, {face_note}): {path}")
+    return SequenceRecorder(
+        logger,
+        geometry_tracker if geometry_tracker is not None else GeometryTracker(),
+        include_face_landmarks=arguments.log_face_landmarks,
+    )
+
+
+def finish_sequence_log(
+    sequence_recorder: SequenceRecorder | None,
+    exercise_counter: ExerciseCounter,
+    *,
+    ask_actual_reps: bool,
+    input_fn=input,
+    interactive: bool | None = None,
+) -> None:
+    """로깅을 끝낸다. 대화형으로 Q/ESC 종료한 --log-sequence 실행이면 먼저 실제 반복 횟수를 묻고 footer로 남긴다.
+
+    로깅을 켜지 않았으면(recorder가 None) 아무것도 묻지 않는다. 패키징 빌드·비대화형 입력에서는 묻지 않는다(미입력으로 기록).
+    """
+    if sequence_recorder is None:
+        return
+    try:
+        if ask_actual_reps:
+            footer = collect_session_footer(
+                exercise_counter.squat_count, mode=exercise_counter.exercise_mode, input_fn=input_fn, interactive=interactive
+            )
+            if footer["prompt"] != "unavailable" or not getattr(sys, "frozen", False):
+                sequence_recorder.logger.log_footer(footer)
+    finally:
+        sequence_recorder.close()
+        print(
+            f"[Sequence] Saved: {sequence_recorder.logger.path} "
+            f"(dropped frames: {sequence_recorder.logger.frames_dropped})"
+        )
+
+
+def update_framing(
+    framing_guide: FramingGuide,
+    exercise_counter: ExerciseCounter,
+    exercise_status: dict[str, Any],
+    primary_person: dict[str, Any] | None,
+    frame_size: tuple[int, int],
+    current_time: float,
+) -> str | None:
+    """구도 안내(YOLO bbox만 사용, 랜드마크 유무와 무관). RepTracker로 스쿼트를 세는 중에만 쓰고(그 밖에는 상태를 비운다), 반복 중에는 보이지 않는다."""
+    if not (exercise_counter.uses_rep_tracker and exercise_counter.exercise_mode == SQUAT_MODE):
+        framing_guide.reset()
+        return None
+    return framing_guide.update(
+        primary_person["bbox"] if primary_person is not None else None,
+        frame_size,
+        current_time,
+        in_rep=exercise_status["rep_guidance"] == "in_rep",
+    )
+
+
+def pick_notice(framing_notice: str | None, lock_notice: str | None) -> str | None:
+    """화면에 보일 안내 한 줄의 우선순위: 구도 안내 > 잠금 안내(전신 무효·비측면). 구도(너무 가깝거나 가장자리)가 풀려야 나머지 판정이 가능하고,
+    전신 무효의 흔한 원인이기도 하다."""
+    return framing_notice or lock_notice
+
+
+def with_framing(diagnostics: dict[str, Any] | None, framing_notice: str | None) -> dict[str, Any] | None:
+    """로그의 rep 진단에 이 프레임의 구도 안내 코드를 붙인다(RepTracker를 안 쓰면 진단이 없으므로 None 그대로)."""
+    if diagnostics is not None:
+        diagnostics["framing"] = framing_notice
+    return diagnostics
+
+
+def create_exercise_counter() -> ExerciseCounter:
+    """settings.USE_REP_TRACKER가 True면 RepTracker로 스쿼트를 세고, False면 v0.1.x(stable 라벨 전이)로 센다."""
+    import config.settings as settings
+
+    return ExerciseCounter(rep_tracker=RepTracker() if settings.USE_REP_TRACKER else None)
+
+
+def run_geometry(
+    exercise_counter: ExerciseCounter,
+    geometry_tracker: GeometryTracker,
+    primary_person: dict[str, Any] | None,
+    frame_size: tuple[int, int],
+    timestamp: float,
+    *,
+    recording: bool,
+    was_active: bool,
+):
+    """한 프레임의 기하 분석(무릎각·BodyLock)을 필요할 때만 한다. 반환: (이번에 켜져 있었나, (TrackedFrame|None, LockState)|None, RepFrame|None).
+
+    RepTracker로 스쿼트를 세는 중(settings.USE_REP_TRACKER가 True이고 squat 모드)이거나 로깅 중일 때만 돌린다.
+    꺼져 있다 켜질 때는 오래된 잠금과 평활화를 버린다(reset). USE_REP_TRACKER가 False면 로깅이 아닐 때 분석하지 않는다(v0.1.x와 같음).
+    """
+    active = (
+        exercise_counter.uses_rep_tracker and exercise_counter.exercise_mode == SQUAT_MODE
+    ) or recording
+    if active and not was_active:
+        geometry_tracker.reset()
+    if not active:
+        return False, None, None
+    tracked, lock_state, rep_frame = track_primary_person(geometry_tracker, primary_person, frame_size, timestamp)
+    return True, (tracked, lock_state), rep_frame
 
 
 def main() -> int:
@@ -588,7 +921,8 @@ def main() -> int:
     pose_classifier = PoseClassifier()
     pose_estimator = PoseEstimator()
     prediction_smoother = PredictionSmoother()
-    exercise_counter = ExerciseCounter()
+    geometry_tracker = GeometryTracker()
+    exercise_counter = create_exercise_counter()
     exercise_counter.set_mode(arguments.exercise, time.perf_counter())
     workout_session = WorkoutSession()
     workout_uploader = WorkoutUploader(create_api_client_from_environment())
@@ -599,11 +933,22 @@ def main() -> int:
     else:
         print("[Cloud] Workout upload is ready.")
 
+    sequence_recorder = (
+        start_sequence_recording(arguments, detector, pose_classifier, geometry_tracker)
+        if arguments.log_sequence
+        else None
+    )
+
+    rep_feedback = RepFeedback()
+    framing_guide = FramingGuide()
+    session_was_active = False
     frame_count = 0
+    quit_requested = False  # Q/ESC로 직접 종료했는가(벤치마크 시간 종료·예외 종료와 구분)
     measurement_started: float | None = None
     display_pose = "ANALYZING"
     display_confidence = 0.0
     auto_start_completed = False
+    geometry_was_active = False
     benchmark: dict[str, Any] = {
         "yolo": [],
         "mediapipe": [],
@@ -611,6 +956,7 @@ def main() -> int:
         "smoothing": [],
         "exercise": [],
         "draw": [],
+        "sequence": [],
         "total": [],
         "elapsed": 0.0,
     }
@@ -643,7 +989,16 @@ def main() -> int:
             exercise_started = time.perf_counter()
             current_time = time.perf_counter()
             stable_pose = smoothing_state["stable_label"]
-            exercise_counter.update(stable_pose, current_time)
+            geometry_was_active, geometry, rep_frame = run_geometry(
+                exercise_counter,
+                geometry_tracker,
+                primary_person,
+                (frame.shape[1], frame.shape[0]),
+                pipeline_started,
+                recording=sequence_recorder is not None,
+                was_active=geometry_was_active,
+            )
+            exercise_counter.update(stable_pose, current_time, rep_frame)
             display_pose, display_confidence = update_display_pose(
                 stable_pose,
                 smoothing_state["stable_confidence"],
@@ -660,6 +1015,15 @@ def main() -> int:
             exercise_status = exercise_counter.get_status(current_time)
             workout_session.update(current_time)
             session_status = workout_session.get_status(current_time)
+            if workout_session.is_active and not session_was_active:
+                rep_feedback.reset()  # 새 세션: 표시 중인 문구를 지우고 점수 범위 안내를 다시 한 번 보인다
+            session_was_active = workout_session.is_active
+            feedback_line = rep_feedback.update(exercise_status, current_time)
+            # 구도 안내(YOLO bbox만 사용, 랜드마크 유무와 무관): 너무 가깝거나 가장자리에 걸렸을 때. 다른 안내(전신 무효, 비측면)보다 우선하고, 반복 중에는 보이지 않는다.
+            framing_notice = update_framing(
+                framing_guide, exercise_counter, exercise_status, primary_person, (frame.shape[1], frame.shape[0]), current_time
+            )
+            screen_notice = pick_notice(framing_notice, exercise_status["rep_notice"])
             exercise_seconds = time.perf_counter() - exercise_started
 
             draw_started = time.perf_counter()
@@ -672,8 +1036,26 @@ def main() -> int:
                 display_pose,
                 display_confidence,
                 primary_person is not None and primary_person["landmarks"] is not None,
+                screen_notice,
+                feedback_line,
             )
             draw_seconds = time.perf_counter() - draw_started
+
+            # 진단 로깅(기본 꺼짐). 원래 stable 라벨(표시 필터 전)과 표시 라벨을 함께 남긴다.
+            sequence_started = time.perf_counter()
+            if sequence_recorder is not None:
+                sequence_recorder.record(
+                    frame_size=(frame.shape[1], frame.shape[0]),
+                    primary_person=primary_person,
+                    smoothing_state=smoothing_state,
+                    display_pose=display_pose,
+                    display_confidence=display_confidence,
+                    capture_time=pipeline_started,
+                    logic_time=current_time,
+                    geometry=geometry,
+                    rep=with_framing(exercise_counter.rep_diagnostics(), framing_notice),
+                )
+            sequence_seconds = time.perf_counter() - sequence_started
             total_seconds = time.perf_counter() - pipeline_started
 
             frame_count += 1
@@ -686,6 +1068,7 @@ def main() -> int:
                 benchmark["smoothing"].append(smoothing_seconds)
                 benchmark["exercise"].append(exercise_seconds)
                 benchmark["draw"].append(draw_seconds)
+                benchmark["sequence"].append(sequence_seconds)
                 benchmark["total"].append(total_seconds)
 
             cv2.imshow(WINDOW_NAME, display_frame)
@@ -696,8 +1079,10 @@ def main() -> int:
                 workout_session,
                 workout_uploader,
                 time.perf_counter(),
+                key_logger=sequence_recorder.log_key if sequence_recorder is not None else None,
             )
             if should_quit:
+                quit_requested = True
                 break
 
             if (
@@ -716,6 +1101,14 @@ def main() -> int:
                 workout_uploader,
                 time.perf_counter(),
             )
+        if sequence_recorder is not None and quit_requested:
+            camera.release()
+            cv2.destroyAllWindows()  # 터미널 입력을 받는 동안 멈춘 영상 창이 남지 않게 한다
+        finish_sequence_log(
+            sequence_recorder,
+            exercise_counter,
+            ask_actual_reps=quit_requested,
+        )
         pose_estimator.close()
         camera.release()
         cv2.destroyAllWindows()

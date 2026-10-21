@@ -36,3 +36,124 @@ POSE_STABLE_FRAMES = {
 }
 MISSING_POSE_TOLERANCE_FRAMES = 3
 SHOW_SMOOTHING_DEBUG = True
+
+# Pose geometry (v0.2.0): 아래 값은 모두 임시 초기값이며 Phase 4 실측 후 확정한다.
+# 전신 가시성 검사: 사용하는 다리 관절의 visibility 하한과 bbox-프레임 경계 허용 오차.
+MIN_LANDMARK_VISIBILITY = 0.5
+FRAME_BORDER_TOLERANCE_PX = 1
+
+# 측면 판별 (a)+(c): 어깨 간격/몸통 길이 비율 상한, 코 visibility 하한(뒷모습 배제).
+SIDE_VIEW_MAX_SHOULDER_RATIO = 0.35
+SIDE_VIEW_MIN_NOSE_VISIBILITY = 0.5
+
+# One Euro filter(연속 각도 신호 평활화). 단위: min_cutoff/d_cutoff는 Hz, beta는 초/도.
+ONE_EURO_MIN_CUTOFF = 1.0
+ONE_EURO_BETA = 0.02
+ONE_EURO_D_CUTOFF = 1.0
+
+# 서 있는 상태로 보는 무릎각 하한. POLAR 측면+전신유효 stand의 p25(163.4도)를 근거로 한 초기값.
+STANDING_KNEE_ANGLE = 160.0
+# BodyLock 정책(field_test_1 실측 기반 초기값, 2차 실측 전까지 확정 아님).
+# 획득: STANDING이고 측면 판정이 이 시간 연속 유지될 때만 잠근다(측면이 아니면 잠그지 않는다).
+BODY_LOCK_ACQUIRE_SIDE_SECONDS = 0.5
+# 해제: 잠긴 채 STANDING일 때 비측면 판정이 이 시간 연속되면 푼다. 반복 중에는 시점이 바뀌어도 고정한다.
+BODY_LOCK_RELEASE_NONSIDE_SECONDS = 0.4
+# Pose를 이 시간 넘게 놓치면 다리/방향 잠금을 푼다.
+BODY_LOCK_MISSING_RELEASE_SECONDS = 2.0
+# 잠금 다리 선택의 히스테리시스: 좌우 다리의 가시성 합(hip+knee+ankle, 0~3)이 이 값보다 더 차이 나야 잠금/선호 다리를 바꾼다.
+# 두 다리가 겹치는 측면 서 있기에서는 가시성이 비슷해 다리가 프레임마다 뒤집힌다(2026-10-19 세션 2에서 1.4초 동안 6번). 현재 다리가 전신 무효이고
+# 반대 다리가 유효하면 이 값과 상관없이 바꾼다.
+LEG_SWITCH_VISIBILITY_MARGIN = 0.3
+
+# 스쿼트 카운트 방식 스위치. True(기본)면 RepTracker(무릎각 반복 구간, 측면 전용), False면 v0.1.x(stable 라벨 stand → squat → stand).
+USE_REP_TRACKER = True
+# squat 모드에서 BodyLock이 이 시간(초) 넘게 잡히지 않으면 사유별 한 줄 안내를 화면에 보인다. 잠금이 잡히면 지운다.
+LOCK_GUIDANCE_DELAY_SECONDS = 2.0
+
+# RepTracker(v0.2.0 Phase 2). 모두 field_test_1(한 사람, 하루, 세션당 5~10회)로 정한 초기값이다.
+# 반복: 평활 무릎각이 STANDING_KNEE_ANGLE 이상이던 뒤 REP_DESCENT_KNEE_ANGLE 미만으로 내려갔다가 다시 STANDING_KNEE_ANGLE 이상.
+REP_DESCENT_KNEE_ANGLE = 150.0
+# 반복 중 전신 무효 등으로 평활 무릎각이 이 시간보다 오래 비면 그 반복을 버린다.
+REP_MAX_GAP_SECONDS = 1.5
+# 서 있는 중(STANDING, 잠금 유지)에 사람이나 Pose를 놓친 시간이 이 값 이하이면 STANDING 상태와 서 있던 기준값을 지우지 않는다. 다시 보인 첫 프레임이 이미
+# 내려가는 중(160도 미만)이어도 직전이 STANDING이었으므로 반복을 시작한다. 이 값을 넘으면 기존처럼 WAITING_LOCK으로 초기화한다. 초기값 1.5초 근거:
+# IN_REP 중 놓침 허용(REP_MAX_GAP_SECONDS)과 같게 둬 일관되고, 실측(field_test_1 세션 1~5와 2026-10-19 두 세션)의 사람 없음 연속 구간 344개 중
+# 343개가 1.5초 이하였으며(최대 1.65초), 잠금 자체는 BODY_LOCK_MISSING_RELEASE_SECONDS(2.0초) 놓치면 풀리므로 그보다 짧게 둔다.
+REP_STANDING_MAX_GAP_SECONDS = 1.5
+# 반복 확정 조건(기하): 반복 길이 하한, 엉덩이 하강량 하한(서 있을 때 대비, 다리 길이 비), 서 있을 때 양발 간격 상한(다리 길이 비, 측면 전용).
+# 엉덩이 하강 하한 0.20: 정상 반복 최소 0.331(세션 3, 무릎 약 100°)과 걷기 최대 0.085의 중앙(0.208)에 가깝게 잡았다.
+# 이전 0.25는 정상 쪽 여유가 0.09뿐이라 하프보다 얕은 반복이 "얕음" 판정 없이 아예 안 세어질 위험이 있었다. 쿼터 스쿼트 데이터는 없다.
+REP_MIN_SECONDS = 1.0
+REP_MIN_HIP_DROP = 0.20
+REP_MAX_ANKLE_GAP = 0.25
+# 반복 확정 조건(기하, P01 2차 실측 뒤 추가, 2026-10-19). 아래 두 값은 P01 2차 로그와 c10 로그를 보고 정했으므로 그 로그에서의 합격은 검증이 아니며 3차 확인 대상이다.
+# 최저점 양발 간격 상한: 최저점 앞뒤 REP_BOTTOM_WINDOW_SECONDS의 양발 간격(중앙값) / 서 있을 때 다리 길이. 서 있을 때 간격(위)은 발을 먼저 내딛는 런지에서 기준 창에
+# 내딛는 프레임이 섞여 0.24로 통과했다(최저점 간격은 1.11배). 스쿼트 후보 101개(본인 75, P01 26)의 최저점 비율은 최대 0.16(본인)·0.10(P01), 런지 후보(기하 통과분)는
+# 0.84~1.11이라 0.40은 스쿼트 최대의 2.5배이고 런지 최소가 상한의 2.1배다. 표본: 런지는 P01 한 세션(실제 런지 3회)과 1차 스트레치 런지 한 세션뿐이다.
+REP_MAX_ANKLE_GAP_BOTTOM = 0.40
+REP_BOTTOM_WINDOW_SECONDS = 0.25
+# 엉덩이 가로 이동 상한: 반복 중 잠근 다리 엉덩이 x(프레임 픽셀)의 (최대 - 최소) / **반복 중 다리 길이(L)의 중앙값**. 세트가 끝난 뒤 자리를 뜨는 동작이 ML 조건 없이 스쿼트로
+# 세어지는 것을 거르려고 넣었다. 구현 값의 분포(2026-10-19, 원본 로그 26개 재생): 스쿼트 후보 121개 최대 0.46(너무 가까이 선 세션 16의 추적이 거의 안 되는 반복, 그 밖은 최대 0.36),
+# 자리를 뜨는 동작 2.6(**표본 1건**), 런지 후보 등 비스쿼트 0.48~0.62. 0.70은 스쿼트 최대(0.46)의 1.5배(세션 16 제외 시 1.9배), 그 동작이 상한의 3.7배다.
+# 서 있을 때 L로 나누면 그 동작이 0.74로 줄어(카메라로 다가오며 일어나 기준 창의 L이 부풀었다: 309 대 194 px) 상한과의 여유가 6%뿐이라 반복 중 L을 쓴다.
+# 걸어서 이동하는 다른 동작이나 카메라 쪽으로 다가오는 동작은 검증되지 않았다. 반복 중 잠금은 그대로 고정하고 이 값은 반복이 끝날 때 판정에만 쓴다.
+REP_MAX_HIP_SHIFT = 0.70
+# 반복 확정 조건(ML): **조건이 아니다(None). 비율은 rep_end에 기록만 한다.** 비율 = 반복 구간의 stable 라벨 시간 중 REP_OTHER_EXERCISE_LABELS의 비율.
+# 숫자를 주면 그 값 초과일 때 탈락시키는 조건이 된다(이전 기본 0.40). 제거 근거(P01 2차 실측, 2026-10-19): 측면 스쿼트 후보 26개가 모두 기하 조건을 통과했는데
+# 10개가 이 조건으로만 탈락했고(비율 0.45~1.00, 라벨 대부분 run), 후보 비율 중앙값은 본인 0.00, P01 0.42였다. 상한을 0.7로 완화하는 안은 비율 1.00 반복을 계속 버리고
+# 사람마다 다른 상한이 필요해 채택하지 않았다. 이 조건은 P01 런지 한 건과 세트 후 동작 한 건을 막고 있었으므로(재생 확인) 위 두 기하 조건과 함께 뺐다.
+REP_OTHER_EXERCISE_LABELS = ("walk", "run", "lying")
+REP_OTHER_EXERCISE_MAX_RATIO = None
+# 서 있을 때 기준값(엉덩이·뒤꿈치 y, 다리 길이, 양발 간격)을 내려가기 직전 이 시간의 중앙값으로 정한다.
+REP_BASELINE_SECONDS = 1.0
+# 최저점 체류: 평활 무릎각이 (최저 + 이 값) 이하인 시간(진단용 원자료, 판정에 쓰지 않음).
+REP_BOTTOM_PLATEAU_DEGREES = 10.0
+# 반복 합쳐짐 의심(진단 전용, 카운트에 영향 없음): 반복 중 무릎각이 직전 최저점보다 REP_MERGE_RISE_DEGREES 이상 올라온 뒤
+# 최고점보다 REP_MERGE_DROP_DEGREES 이상 다시 내려가면(STANDING 복귀 각도에 닿지 못한 채) 이벤트로 남긴다.
+REP_MERGE_RISE_DEGREES = 20.0
+REP_MERGE_DROP_DEGREES = 10.0
+
+# (2026-10-20 제거) 세트 중간 누락 진단용으로 두었던 기본 꺼짐 대응안 후보 4개 — 세트 단위 서 있는 기준 높이, 복귀 각도, 반복 경계 신호(light/raw),
+# 잠금 해제 유예 — 를 지웠다. 버그 수정(짧은 놓침 유지, 잠금 다리 이어받기) 뒤 연속 세트 5개가 플래그 없이 모두 정확했고, 세트 단위 기준과 복귀 각도는
+# 켜면 런지 오카운트가 생겼다. 근거와 재생 결과는 docs/versions/v0.2.0/DEVLOG.md.
+
+# 자세 점수(v0.2.0 Phase 3, 표시용): 판정 항목은 depth(최저점 무릎각)와 torso_shin(최저점의 |몸통각 - 정강이각|) 두 개뿐이다.
+# 정상 경계 이내 = 100점, 교정 경계 = 50점(depth), 사이는 선형. torso_shin은 교정 경계 = 0점. depth는 교정 경계 이후 POSTURE_DEPTH_ZERO_AT에서 0점이 되는 2단 선형이다. 뒤꿈치(heel)와 템포는 판정·점수에 쓰지 않는다(원자료만 기록).
+# 교정선은 가정이고 정상선은 field_test_1 분포(depth AUC 1.00, torso_shin AUC 0.997)로 잡았다. 2차 실측으로 검증한 뒤 확정한다.
+POSTURE_DEPTH_NORMAL_MAX = 80.0
+POSTURE_DEPTH_CORRECT_MIN = 95.0
+# depth 0점 지점(임시값, 외삽): 반복으로 세어지는 가장 얕은 지점으로 본다. 엉덩이 하강 0.20(REP_MIN_HIP_DROP)에 해당하는 최저 무릎각 약 120도를
+# 쿼터 스쿼트 데이터 없이 외삽한 값이다. 2차 실측의 쿼터 스쿼트 분포로 확정한다.
+POSTURE_DEPTH_ZERO_AT = 120.0
+POSTURE_TORSO_SHIN_NORMAL_MAX = 25.0
+POSTURE_TORSO_SHIN_CORRECT_MIN = 35.0
+# 총점 = 판정된 항목 점수의 가중 평균. 두 항목 모두 분리도가 거의 1.0이라 우열을 가릴 근거가 없어 같은 가중치로 시작한다.
+POSTURE_WEIGHT_DEPTH = 0.5
+POSTURE_WEIGHT_TORSO_SHIN = 0.5
+# 교정 항목이 하나라도 있으면 총점이 이 값을 넘지 못한다. (가중치가 같으면 교정 항목이 0점이라 자연 최댓값과 같고, 가중치를 바꿔도 지켜지게 하는 안전장치다.)
+POSTURE_SCORE_CAP_WITH_CORRECTION = 50.0
+
+# 구도 안내(v0.2.0): YOLO bbox만으로 판단한다. 근거는 analysis/landmark_gaps/report.md(공백 분석): bbox 높이 95% 이상 공백률 64.9%, 발 아래 여유 20px(프레임 높이 480의 약 4%)
+# 이하 59~73%, crop이 좌우로 잘리면 76%, 안 잘리면 0.1%. 위쪽(머리) 경계 접촉은 조건이 아니다. 지속 시간 초기값은 analysis/framing_guide/report.md의 로그 재생으로 정했다.
+FRAMING_EDGE_TOUCH_PX = 2  # bbox가 프레임 경계에 닿은 것으로 보는 거리(px)
+FRAMING_FEET_MARGIN_RATIO = 0.04  # 발 아래 여유가 프레임 높이의 이 비율 이하이면 너무 가깝다
+FRAMING_MAX_HEIGHT_RATIO = 0.95  # bbox 높이가 프레임 높이의 이 비율 이상이면 너무 가깝다
+# 좌우: 판정용 crop(bbox 양옆 BBOX_PADDING 여유)이 왼쪽·오른쪽 경계에서 잘린 정도(여유 중 프레임 밖으로 나간 비율, 0~1)가 이 값 이상이면 "화면 가운데로 이동".
+# 값은 analysis/framing_guide/side_report.md(공백 분석 데이터 재집계)로 정했다. 1.0은 bbox가 경계에 닿는 것과 같다(이전 기준 2px).
+FRAMING_SIDE_CROP_CUT_RATIO = 0.5
+FRAMING_NOTICE_DELAY_SECONDS = 1.5  # 이 시간 이상 이어질 때만 안내
+FRAMING_NOTICE_CLEAR_SECONDS = 0.5  # 조건이 풀려도 이 시간 이어져야 해제(깜빡임 방지)
+FRAMING_ABSENT_RESET_SECONDS = 2.0  # 사람이 이 시간 넘게 안 보이면 상태를 처음부터
+
+# 화면 표시 시간(초, v0.2.0 Phase 3): 확정된 반복의 "N점 · 피드백" 한 줄, 엉덩이 하강 부족으로 탈락했을 때의 안내, 세션당 한 번 보이는 점수 범위 안내.
+REP_SCORE_DISPLAY_SECONDS = 3.0
+REP_SHALLOW_HINT_DISPLAY_SECONDS = 3.0
+POSTURE_SCORE_INTRO_DISPLAY_SECONDS = 5.0
+
+# Landmark 시퀀스 로깅(진단용): 기본은 꺼져 있고 CLI --log-sequence로만 켠다. 영상은 저장하지 않는다.
+SEQUENCE_LOGGING_ENABLED = False
+# 얼굴 landmark(0~10번)의 좌표는 기본으로 저장하지 않는다. 코(0번)의 visibility만 시점 신호용으로 남긴다.
+SEQUENCE_LOG_FACE_LANDMARKS = False
+LANDMARK_SEQUENCE_DIR = PROJECT_ROOT / "data" / "landmark_sequences"
+SEQUENCE_LOG_FLUSH_INTERVAL_SECONDS = 1.0
+SEQUENCE_LOG_QUEUE_SIZE = 4096

@@ -240,7 +240,8 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 
 ### 자동화 테스트
 
-- Python test suite **122 tests passed**
+- Python test suite (v0.1.1 릴리스 시점) **122 tests passed**
+- v0.2.0 준비 시점(2026-10-20) 재측정: AI Client `tests/` **552 passed**, Backend `backend/tests` **37 passed**
 
 ### 배포 검증
 

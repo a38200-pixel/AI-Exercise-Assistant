@@ -1,0 +1,10 @@
+﻿session,release_t,reason,nonside_or_missing_seconds,reacquired_after_s,inside_set,set_window
+1,58.3737,non_side,0.4227,0.8918000000000035,False,16.7-56.3
+1,66.7782,non_side,0.4212,,False,16.7-56.3
+2,72.8632,non_side,0.4226,,False,24.1-63.0
+3,64.8017,non_side,0.7141,,False,17.8-53.8
+4,68.7209,non_side,0.4734,,False,16.7-59.6
+5,65.6156,non_side,0.4272,2.0494999999999948,False,14.7-63.7
+5,73.8683,non_side,0.4119,,False,14.7-63.7
+9,44.8907,non_side,0.4156,0.997799999999998,False,17.2-43.5
+9,54.8305,non_side,0.4197,,False,17.2-43.5

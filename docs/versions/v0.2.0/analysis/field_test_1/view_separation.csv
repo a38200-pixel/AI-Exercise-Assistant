@@ -1,0 +1,13 @@
+﻿signal,auc_side_vs_nonside,best_cut,side_tpr_at_best,nonside_tnr_at_best
+(a) shoulder_ratio,1.0,0.397,1.0,0.9976525821596244
+(b) hip_yaw_deg,0.9996916767864776,36.47,0.9991941982272361,0.9953051643192489
+(c) nose_visibility,0.1444371304377433,1.0,0.0,1.0
+(a)+(c) current: a<=0.35 & c>=0.5,,,0.9991941982272361,1.0
+(b) yaw >= 30,,30.0,0.9991941982272361,0.8051643192488263
+(b) yaw >= 40,,40.0,0.9983883964544722,1.0
+(b) yaw >= 50,,50.0,0.9975825946817083,1.0
+(b) yaw >= 60,,60.0,0.9975825946817083,1.0
+[oblique] (a)+(c) judged non-side,,,,1.0
+[oblique] (b>=50) judged non-side,,50.0,,1.0
+[front] (a)+(c) judged non-side,,,,1.0
+[front] (b>=50) judged non-side,,50.0,,1.0

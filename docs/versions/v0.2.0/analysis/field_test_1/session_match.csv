@@ -1,0 +1,14 @@
+﻿session,file,started_at,delta_vs_plan_s,metadata_note,posture,view,used_for_analysis,frames
+0,session_20261018_135535_normal_side.jsonl,2026-10-18T13:55:35+09:00,35.548,trial,normal,side,False,1445
+1(무효),session_20261018_140223_normal_side.jsonl,2026-10-18T14:02:23+09:00,-36.761,parallel,normal,side,False,1795
+1,session_20261018_140455_normal_side.jsonl,2026-10-18T14:04:55+09:00,-4.041,parallel,normal,side,True,1225
+2,session_20261018_140800_normal_side.jsonl,2026-10-18T14:08:00+09:00,0.343,deep,normal,side,True,1368
+3,session_20261018_141022_shallow_side.jsonl,2026-10-18T14:10:22+09:00,22.976,,shallow,side,True,1166
+4,session_20261018_141226_torso_lean_side.jsonl,2026-10-18T14:12:26+09:00,26.902,,torso_lean,side,True,1364
+5,session_20261018_141429_heel_lift_side.jsonl,2026-10-18T14:14:29+09:00,29.795,,heel_lift,side,True,1365
+6,session_20261018_141703_normal_oblique.jsonl,2026-10-18T14:17:03+09:00,3.842,,normal,oblique,True,965
+7,session_20261018_141920_normal_front.jsonl,2026-10-18T14:19:20+09:00,20.689,,normal,front,True,1023
+8a,session_20261018_142126_normal_side.jsonl,2026-10-18T14:21:26+09:00,26.164,nonsquat_walk,normal,side,True,853
+8b,session_20261018_142331_normal_side.jsonl,2026-10-18T14:23:31+09:00,31.238,nonsquat_chair,normal,side,True,713
+8c,session_20261018_142526_normal_side.jsonl,2026-10-18T14:25:26+09:00,26.462,nonsquat_lunge_stretch,normal,side,True,754
+9,session_20261018_142718_normal_side.jsonl,2026-10-18T14:27:18+09:00,18.584,facing_reversed,normal,side,True,987

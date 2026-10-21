@@ -15,7 +15,7 @@ AI-Exercise-Assistant/
 ├─ scripts/                  # 환경 설정 및 Windows Release 자동화 스크립트
 ├─ tests/                    # AI Client 및 Launcher 테스트
 ├─ releases/windows/         # Windows 버전별 Release metadata 및 Production 상태
-├─ data/workout_logs/        # 로컬 운동 기록 저장용 디렉터리
+├─ data/workout_logs/        # 개발 실행 시 세션 종료마다 workout_<시작시각>.json(반복별 결과 포함)이 저장되는 로컬 기록 디렉터리. 설치판은 %LOCALAPPDATA%\FitRoute\workout_logs
 ├─ docs/                     # 아키텍처, 배포 및 기술 문서
 ├─ requirements.txt          # AI 개발 환경 의존성
 ├─ .vercelignore             # Vercel 배포 대상 제외·제한 설정
