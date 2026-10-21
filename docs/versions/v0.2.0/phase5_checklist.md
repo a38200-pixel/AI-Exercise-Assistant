@@ -34,7 +34,19 @@
 - [x] 설치판 스모크(진행표 `install_check_runsheet.md`, 사용자 직접, 카메라 사용): 앱 시작, 측면 스쿼트 몇 회가 세어지는지, 점수 문구가 나오는지, 구도 안내가 한글인지, 종료 후 로컬 기록이 생기는지. → **확인 완료(사용자)**: 측면 스쿼트 5회 정상, 점수 줄·범위 안내·구도 안내 정상.
 - [x] **설치판 서버 업로드 경로 확인(D단계 추가, 사용자 직접)**: 9월 15일 이후 실제 업로드 경로가 한 번도 실행되지 않았다(Supabase `workout_sessions` 마지막 기록 2026-09-15). 설치판에서 **런처로 로그인 → 짧은 세션 1회 실행·종료(업로드) → `workout_sessions`와 `daily_workout_summary`에 행이 생겼는지 확인 → 테스트 행 삭제**. 실패하면 클라이언트(`api_client`, 토큰 전달)와 서버 중 어디인지 구분해 기록한다. → **확인 완료(사용자)**: 런처 로그인 후 2026-10-20 12:05:54 UTC 세션(squat_count 5)이 올라갔고 첫 세션 저장 실패 현상은 없었다. 테스트 행은 일별 요약 수동 되돌림 위험 때문에 삭제하지 않았다.
 
-## E. 백업·저장소·병합
-- [ ] 로그 원본(`data/landmark_sequences/`)은 별도 백업(`D:\FitRoute_backup\`)에 있는지, 저장소에는 올라가지 않았는지. (2026-10-20 기준 백업 40개 파일, manifest 40행 해시 일치.)
-- [ ] 큰 추적 파일(pptx 26MB 등)은 Git LFS·릴리스 첨부 후보로 별도 검토.
-- [ ] **병합·push·태그는 사용자 지시가 있을 때만 한다**(feature 브랜치 `feature/v0.2.0-squat-quality`가 main보다 앞서 있고 push·병합된 적이 없다).
+## E. 백업·저장소·병합·릴리스 (되돌리기 어려운 단계는 하나씩 사용자 승인 뒤 진행)
+**결정(2026-10-21)**: R2 업로드본(Prepare 결과물)이 D단계에서 테스트한 설치 파일과 다를 수 있어 **업로드본으로 설치 테스트를 다시 한다**(별도 PC가 없으면 이 PC에서 0.2.0 제거 후 웹에서 내려받아 설치, 해시가 `v0.2.0.json`과 같은지 확인). 0.2.0 번들은 메인 저장소의 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관한다. 릴리스는 병합된 main에서 실행한다. 병합은 squash가 아니라 `--no-ff` 병합 커밋이다(DEVLOG·보고서가 커밋 해시를 근거로 인용). 큰 파일(pptx) Git LFS 검토는 릴리스 이후로 미룬다. 릴리스 날짜는 Promote하는 날이다.
+
+- [x] 사전 확인(2026-10-21): 원격 `origin/feature/v0.2.0-squat-quality`는 로컬과 같은 a8a238c(앞섬·뒤처짐 0, 원격에만 있는 커밋 없음), 원격 범위에 비밀 키·`.jsonl`·POLAR 원본·샘플 단위 CSV·P01/P02 원본 없음, `tests/` 552·`backend/tests` 37 통과.
+- [x] 로그 원본(`data/landmark_sequences/`)이 별도 백업(`D:\FitRoute_backup\`)에 있고 저장소에는 올라가지 않았다. (2026-10-20 기준 백업 **42개** 파일, manifest 42행 해시 일치.)
+- [ ] 1. **병합(`--no-ff`)·push**: main에 병합 커밋을 만들고 push. 사용자 승인 뒤.
+- [ ] 2. **0.2.0 번들 이동**: `C:r_wt\dist_candidate_protoc`를 메인 저장소 `dist_candidate_protoc`로 옮기고 기존 0.1.1 번들은 이름을 바꿔 보관. 검증 스크립트의 크기·SHA 고정값으로 확인.
+- [ ] 3. **Prepare**: `release_windows.ps1 -Version 0.2.0 -DryRun` → 실제 실행(R2에 올라가며 같은 버전으로 다시 올릴 수 없다). 사용자 승인 뒤.
+- [ ] 4. **`releases/windows/v0.2.0.json` 커밋**(Promote가 깨끗한 working tree를 요구한다).
+- [ ] 5. **R2 업로드본 설치 테스트**(사용자): 웹에서 내려받아 설치, SHA-256이 `v0.2.0.json`과 같은지, 설치·실행·로그인·운동·저장·대시보드 확인.
+- [ ] 6. **CHANGELOG 날짜**(`[Unreleased]` → `[0.2.0] - <Promote 날짜>`)와 **README Version History**(`v0.2.0` 행과 릴리스 절, 최종 SHA-256) 커밋.
+- [ ] 7. **Promote**: `promote_windows_release.ps1 -Version 0.2.0 -DryRun` → `-ApproveProductionChange`로 실제 실행. 사용자 승인 뒤. 이후 프런트 프로덕션 HTTP 확인.
+- [ ] 8. **`releases/windows/production.json` 커밋.**
+- [ ] 9. **태그** `v0.2.0` 생성 → **태그 push**(사용자 승인 뒤).
+- [ ] 10. **`C:r_wt` 워크트리 정리**(`git worktree remove`; 번들 이동 이후).
+- [ ] (릴리스 이후로 미룸) 큰 추적 파일(pptx 26MB 등) Git LFS·릴리스 첨부 검토.
