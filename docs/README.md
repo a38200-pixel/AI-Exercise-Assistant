@@ -339,6 +339,7 @@ Production HTTP Verification
 | --- | --- |
 | `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포 |
 | `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
+| `v0.2.0` | 스쿼트 반복 추적 기반 카운트(측면 전용), 자세 점수, 구도 안내, 로컬 운동 기록 |
 
 ### v0.1.1 Release
 
