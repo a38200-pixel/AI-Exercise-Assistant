@@ -1899,3 +1899,10 @@
 
 ### 원칙
 **R2 객체의 변경은 릴리스 스크립트(`release_windows.ps1`)로만 하고, 삭제하지 않는다.** R2 객체는 한 번 올리면 같은 버전으로 다시 올릴 수 없고(`--immutable`) 롤백은 이전 버전 객체에 의존하므로, 지운 객체는 복구되지 않는다. 불필요해 보이는 이전 버전도 롤백 후보로 남긴다.
+
+## 2026-10-21 — Phase 5 E단계: main push, 번들 이동, Prepare DryRun
+
+- **main push**: f26902f..b05f7c5. 확인(읽기만): 프론트엔드 프로덕션 HTTP 200, 백엔드 `/health` HTTP 200(응답 22.9초, 재시작 또는 cold start로 보임), 배포된 프론트엔드의 다운로드 링크와 `production.json` 모두 0.1.1, 0.1.1 R2 객체 HTTP 200(2,379,641,099바이트). 이번 push로 바뀐 것은 확인되지 않았다.
+- **번들 이동**: 메인 저장소의 0.1.1 번들(4,708개 파일, 5,228,402,855바이트, exe SHA 09799FF2…)을 `dist_candidate_protoc_0.1.1`로 이름을 바꿔 보관하고(`.git/info/exclude`로 git에서 제외, 커밋 안 됨), `C:\fr_wt`의 0.2.0 번들을 `dist_candidate_protoc`로 복사했다. 복사본은 3,653개 / 5,204,054,133바이트 / exe SHA-256 `7E3C9D33…FB9CE`로 고정값과 같고 main(b05f7c5)에서 `validate_installer_inputs.py --version 0.2.0`이 PASS였다.
+- **설치판 확인에 사용한 사전 빌드본**: 설치 파일 `FitRoute-AI-Client-Setup-0.2.0.exe`(커밋 c63b5ee에서 빌드, 2,379,730,431바이트, SHA-256 `4B5A4C467C562CB8C340723E846CCD88B549F07AB51AD257986753B61342A174`)를 저장소 밖 `D:\FitRoute_backup\installer_prerelease\FitRoute-AI-Client-Setup-0.2.0_c63b5ee.exe`로 옮겨 보관했다(옮긴 뒤 해시 동일). 실제 Prepare가 같은 이름의 설치 파일을 `installer_output\`에 새로 만들기 때문이다. 이 파일은 R2에 올라가지 않았고 업로드본과 다를 수 있다.
+- **Prepare DryRun**: `-DryRun -R2PublicBaseUrl <v0.1.1.json의 다운로드 URL에서 읽은 공개 호스트> -PythonExecutable <fitroute_build>`. 경고·오류 없음, git 변경 0건, R2 접근 없음(DryRun은 rclone 실행 이전에 반환). 실제 Prepare는 아직 실행하지 않았다.
