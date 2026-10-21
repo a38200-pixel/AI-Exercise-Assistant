@@ -214,6 +214,7 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `v0.1.0` | Windows Launcher + AI Client 초기 Production 배포                                                                             |
 | `v0.1.1` | Prepare / Promote / Rollback 기반 Windows Release workflow 정식화, R2 versioned distribution 및 Vercel Production 배포 안정화 |
+| `v0.2.0` | 스쿼트 반복 추적 기반 카운트(측면 전용), 자세 점수, 구도 안내, 로컬 운동 기록 |
 
 ### v0.1.1 Release
 
@@ -225,6 +226,20 @@ AI Client는 PyInstaller `onedir` 방식으로 패키징했으며, 실제 infere
 ```text
 748E721160116539DA8ABADCA329C43BFAAE8A52E06AFB3FEB458554D6E2D0DD
 ```
+
+### v0.2.0 Release
+
+- Release date: **2026-10-21**
+- Installer: `FitRoute-AI-Client-Setup-0.2.0.exe`
+- Size: **2,379,765,928 bytes (2.216330 GiB)**
+- Download: `https://pub-08036d191fd84004a7a3d27bf8521aaf.r2.dev/releases/v0.2.0/FitRoute-AI-Client-Setup-0.2.0.exe`
+- SHA-256:
+
+```text
+5D243B3BF6B07CAF49309CCB7E19606FE450FF9B160AED97E314130F59904EA9
+```
+
+- R2 업로드본 설치 테스트(2026-10-21): 받은 파일의 SHA-256 일치, 설치·런처 실행·스쿼트 카운트·로컬 기록 정상. 첫 세션 서버 업로드는 실패했고(`Known Issues` 참고) 같은 설치 상태의 두 번째 세션은 업로드에 성공했습니다.
 
 ---
 
